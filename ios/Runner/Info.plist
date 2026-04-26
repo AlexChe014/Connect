@@ -66,5 +66,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Приложению нужен доступ к камере, чтобы сделать фото для чата.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Приложению нужен доступ к фото, чтобы прикреплять изображения в чате.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон используется при записи видео в чате.</string>
 </dict>
 </plist>

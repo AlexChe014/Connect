@@ -44,6 +44,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Две буквы (фамилия + имя) или первая буква e-mail, без RangeError на пустых полях.
+  String get _initials {
+    final p = _profile;
+    if (p == null) return '?';
+    final parts = <String>[];
+    for (final key in ['surname', 'name']) {
+      final t = (p[key] ?? '').toString().trim();
+      if (t.isNotEmpty) parts.add(t.substring(0, 1));
+    }
+    if (parts.isEmpty) {
+      final e = (p['email'] ?? '').toString().trim();
+      if (e.isNotEmpty) return e[0].toUpperCase();
+      return '?';
+    }
+    return parts.take(2).join().toUpperCase();
+  }
+
+  String get _displayName {
+    final p = _profile;
+    if (p == null) return 'Пользователь';
+    final s = (p['surname'] ?? '').toString().trim();
+    final n = (p['name'] ?? '').toString().trim();
+    if (s.isNotEmpty && n.isNotEmpty) return '$s $n';
+    if (n.isNotEmpty) return n;
+    if (s.isNotEmpty) return s;
+    final e = (p['email'] ?? '').toString().trim();
+    if (e.isNotEmpty) return e;
+    return 'Пользователь';
+  }
+
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -72,8 +102,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    var nameSymbols = ((_profile?['surname'] ?? '').toString().substring(0, 1) + (_profile?['name'] ?? '').toString().substring(0, 1)).toUpperCase();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Профиль'),
@@ -92,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           radius: 48,
                           backgroundColor: Theme.of(context).colorScheme.primaryContainer,
                           child: Text(
-                            nameSymbols,
+                            _initials,
                             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                                   color: Theme.of(context).colorScheme.onPrimaryContainer,
                                 ),
@@ -100,7 +128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                                               const SizedBox(height: 20),
                         Text(
-                          "${_profile!['surname'].toString()} ${_profile!['name'].toString()}",
+                          _displayName,
                           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),

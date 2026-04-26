@@ -25,6 +25,9 @@ class ApiConfig {
   /// Endpoint для получения профиля пользователя
   static const String profilePath = '/profile';
 
+  /// База URL для API чатов (создание, сообщения) — при `useMockApi` не используется
+  static const String chatsPath = '/chats';
+
   /// Таймаут запросов в секундах
   static const int timeoutSeconds = 30;
 
@@ -33,4 +36,5 @@ class ApiConfig {
   static String get roomsUrl => '$baseUrl$roomsPath';
   static String get bookingsUrl => '$baseUrl$bookingsPath';
   static String get profileUrl => '$baseUrl$profilePath';
+  static String get chatsBaseUrl => '$baseUrl$chatsPath';
 }
