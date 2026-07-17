@@ -95,7 +95,7 @@ BEGIN
             VALUE "InternalName", "connect" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "connect.exe" "\0"
-            VALUE "ProductName", "connect" "\0"
+            VALUE "ProductName", "Сonnect" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

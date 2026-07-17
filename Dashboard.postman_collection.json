@@ -1,0 +1,1045 @@
+{
+	"info": {
+		"_postman_id": "79e54915-6cd7-4960-a8a4-b89314d012fa",
+		"name": "Dashboard",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "28885021"
+	},
+	"item": [
+		{
+			"name": "News",
+			"item": [
+				{
+					"name": "Get",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/news/get/2",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"get",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/news/all",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "title",
+									"value": "Новость 9",
+									"type": "text"
+								},
+								{
+									"key": "text",
+									"value": "Новость с текстом и картинкой",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "pictures[]",
+									"type": "file",
+									"src": [
+										"postman-cloud:///1efc1e83-c5fc-4ee0-bef5-f51e10fd9d7f",
+										"postman-cloud:///1f019bce-f689-4540-8f0d-44d644fa9a1a"
+									]
+								},
+								{
+									"key": "documents[]",
+									"type": "file",
+									"src": [
+										"/C:/Users/am.chervonenko/Desktop/Документы/1. приказы/приказ о назначении комиссии по определению УЗ+.docx",
+										"/C:/Users/am.chervonenko/Desktop/Документы/1. приказы/Приказ о назначении ответственных лиц-.docx"
+									],
+									"disabled": true
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/news/create",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "title",
+									"value": "Измененный заголовок",
+									"type": "text"
+								},
+								{
+									"key": "views",
+									"value": "1",
+									"type": "text"
+								},
+								{
+									"key": "likes",
+									"value": "1",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/news/update/2",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"update",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/news/delete/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"delete",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add like",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "name",
+									"value": "Не в офисе",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/news/add-like/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"add-like",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Add view",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "name",
+									"value": "Не в офисе",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/news/add-view/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"add-view",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete like",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "name",
+									"value": "Не в офисе",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/news/remove-like/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"news",
+								"remove-like",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Cooments",
+			"item": [
+				{
+					"name": "Get by News",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/comments/get/1/news",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"comments",
+								"get",
+								"1",
+								"news"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get by User",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/comments/get/8/user",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"comments",
+								"get",
+								"8",
+								"user"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "text",
+									"value": "И еще один комментарий",
+									"type": "text"
+								},
+								{
+									"key": "user_id",
+									"value": "10",
+									"type": "text",
+									"disabled": true
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/comments/create/10",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"comments",
+								"create",
+								"10"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "text",
+									"value": "Измененный текст",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/comments/update/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"comments",
+								"update",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/comments/delete/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"comments",
+								"delete",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Vacancies",
+			"item": [
+				{
+					"name": "Get",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/vacancies/get/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"vacancies",
+								"get",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/vacancies/all",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"vacancies",
+								"all"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "title",
+									"value": "Гражданская оборона",
+									"type": "text"
+								},
+								{
+									"key": "company",
+									"value": "ООО \"Моя оборона\"",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "Пластмассовый мир победил, макет оказался сильней",
+									"type": "text"
+								},
+								{
+									"key": "requirements",
+									"value": "- Последним корабликом уплыть\n- Последним фонариком устать",
+									"type": "text"
+								},
+								{
+									"key": "format",
+									"value": "Крепостничество",
+									"type": "text"
+								},
+								{
+									"key": "schedule",
+									"value": "24/7",
+									"type": "text"
+								},
+								{
+									"key": "salary_from",
+									"value": "Спасибо",
+									"type": "text"
+								},
+								{
+									"key": "salary_to",
+									"value": "До свидания",
+									"type": "text"
+								},
+								{
+									"key": "sort",
+									"value": "69",
+									"type": "text"
+								},
+								{
+									"key": "status",
+									"value": "Всё сложно",
+									"type": "text"
+								},
+								{
+									"key": "contact_id",
+									"value": "8",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/vacancies/create",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"vacancies",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "title",
+									"value": "Гражданская оборона",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "company",
+									"value": "ООО \"Моя оборона\"",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "description",
+									"value": "Пластмассовый мир победил, макет оказался сильней",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "requirements",
+									"value": "- Последним корабликом уплыть\n- Последним фонариком устать",
+									"type": "text"
+								},
+								{
+									"key": "format",
+									"value": "Крепостничество",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "schedule",
+									"value": "24/7",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "salary_from",
+									"value": "Спасибо",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "salary_to",
+									"value": "До свидания",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "69",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "Всё сложно",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "contact_id",
+									"value": "8",
+									"type": "text",
+									"disabled": true
+								}
+							]
+						},
+						"url": {
+							"raw": "{{domen}}/dashboard/vacancies/update/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"vacancies",
+								"update",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete",
+					"protocolProfileBehavior": {
+						"disabledSystemHeaders": {
+							"accept": true
+						}
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{domen}}/dashboard/vacancies/delete/1",
+							"host": [
+								"{{domen}}"
+							],
+							"path": [
+								"dashboard",
+								"vacancies",
+								"delete",
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Get birthdays",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{access_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{domen}}/dashboard/birthdays?datetime_start=1748004420",
+					"host": [
+						"{{domen}}"
+					],
+					"path": [
+						"dashboard",
+						"birthdays"
+					],
+					"query": [
+						{
+							"key": "datetime_start",
+							"value": "1748004420"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

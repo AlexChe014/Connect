@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_icons.dart';
 import 'bookings_screen.dart';
 import 'news_feed_screen.dart';
 
@@ -18,8 +19,8 @@ class GeneralScreen extends StatelessWidget {
           elevation: 0,
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Новости', icon: Icon(Icons.newspaper)),
-              Tab(text: 'Бронирование', icon: Icon(Icons.meeting_room)),
+              Tab(text: 'Новости', icon: AppIcon(AppIcons.news)),
+              Tab(text: 'Бронирование', icon: AppIcon(AppIcons.bookings)),
             ],
           ),
         ),

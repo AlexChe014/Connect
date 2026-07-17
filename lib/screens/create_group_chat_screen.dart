@@ -2,16 +2,6 @@ import 'package:connect/models/chat.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:flutter/material.dart';
 
-/// Мок-список сотрудников для добавления в группу.
-const _mockContacts = <String>[
-  'Анна Смирнова',
-  'Пётр Волков',
-  'Мария Орлова',
-  'IT-поддержка',
-  'Ольга Новикова',
-  'Сергей Лебедев',
-];
-
 class CreateGroupChatScreen extends StatefulWidget {
   const CreateGroupChatScreen({super.key});
 
@@ -21,11 +11,20 @@ class CreateGroupChatScreen extends StatefulWidget {
 
 class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
   final _nameCtrl = TextEditingController();
-  final _selected = <String>{};
+  final _descCtrl = TextEditingController();
+  final _selected = <int>{};
+  bool _creating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ChatService.instance.loadContacts();
+  }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _descCtrl.dispose();
     super.dispose();
   }
 
@@ -43,22 +42,41 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
       );
       return;
     }
+
+    setState(() => _creating = true);
     final c = await ChatService.instance.createGroup(
       title: name,
-      otherMemberNames: _selected.toList(),
+      description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+      userIds: _selected.toList(),
     );
-    if (mounted) Navigator.of(context).pop<Chat>(c);
+    if (!mounted) return;
+    setState(() => _creating = false);
+
+    if (c == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось создать группу')),
+      );
+      return;
+    }
+    Navigator.of(context).pop<Chat>(c);
   }
 
   @override
   Widget build(BuildContext context) {
+    final contacts = ChatService.instance.contacts;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Новая группа'),
         actions: [
           TextButton(
-            onPressed: _create,
-            child: const Text('Создать'),
+            onPressed: _creating ? null : _create,
+            child: _creating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Создать'),
           ),
         ],
       ),
@@ -74,25 +92,35 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
             textInputAction: TextInputAction.next,
             autofocus: true,
           ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Описание (необязательно)',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 2,
+          ),
           const SizedBox(height: 24),
           Text(
             'Участники',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
-          ..._mockContacts.map((n) {
+          ...contacts.map((c) {
+            if (c.userId <= 0) return const SizedBox.shrink();
             return CheckboxListTile(
-              value: _selected.contains(n),
+              value: _selected.contains(c.userId),
               onChanged: (v) {
                 setState(() {
                   if (v == true) {
-                    _selected.add(n);
+                    _selected.add(c.userId);
                   } else {
-                    _selected.remove(n);
+                    _selected.remove(c.userId);
                   }
                 });
               },
-              title: Text(n),
+              title: Text(c.fullName),
               contentPadding: EdgeInsets.zero,
             );
           }),

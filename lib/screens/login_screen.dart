@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../config/api_config.dart';
+import '../config/app_icons.dart';
+import '../config/branding.dart';
 import '../services/auth_service.dart';
+import '../services/push_notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -36,8 +38,12 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailController.text.trim(),
         _passwordController.text,
       );
+      await PushNotificationService.instance.registerCurrentDevice();
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        Navigator.of(context).pushReplacementNamed(
+          '/home',
+          arguments: {'initialIndex': 3},
+        );
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -69,11 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.meeting_room,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                  BrandingLoginLogo(height: 96),
                   const SizedBox(height: 24),
                   Text(
                     'Connect',
@@ -87,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Сервис бронирований',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                   const SizedBox(height: 48),
@@ -98,8 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Email',
                       hintText: 'user@example.com',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+                      prefixIcon: AppIcon(AppIcons.profileMail),
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) return 'Введите email';
@@ -114,7 +115,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: InputDecoration(
                       labelText: 'Пароль',
                       prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword ? Icons.visibility : Icons.visibility_off,
@@ -175,16 +175,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           )
                         : const Text('Войти'),
                   ),
-                  if (ApiConfig.useMockApi) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Демо-режим: любой email и пароль',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                    ),
-                  ],
                 ],
               ),
             ),

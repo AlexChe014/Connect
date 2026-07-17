@@ -30,9 +30,14 @@ class ChatMessage {
     this.text,
     this.attachmentKind = ChatAttachmentKind.none,
     this.localMediaPath,
+    this.remoteMediaUrl,
     this.fileName,
     this.replyTo,
     this.forwardOf,
+    this.isSystem = false,
+    this.repliedMessageId,
+    this.isRead = true,
+    this.authorAvatarUrl,
   });
 
   final String id;
@@ -43,12 +48,17 @@ class ChatMessage {
   final String? text;
   final ChatAttachmentKind attachmentKind;
   final String? localMediaPath;
+  final String? remoteMediaUrl;
   final String? fileName;
   final MessageReference? replyTo;
   final MessageReference? forwardOf;
+  final bool isSystem;
+  final String? repliedMessageId;
+  final bool isRead;
+  final String? authorAvatarUrl;
 
   bool get hasMedia =>
-      localMediaPath != null &&
-      localMediaPath!.isNotEmpty &&
-      attachmentKind != ChatAttachmentKind.none;
+      attachmentKind != ChatAttachmentKind.none &&
+      ((localMediaPath != null && localMediaPath!.isNotEmpty) ||
+          (remoteMediaUrl != null && remoteMediaUrl!.isNotEmpty));
 }

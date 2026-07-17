@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Локальные секреты (ключ шифрования чата и др.)
+dart_defines.json

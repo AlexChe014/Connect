@@ -1,13 +1,17 @@
+import 'package:connect/config/app_icons.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/material.dart';
 
 String _formatTime(DateTime d) {
   final l = d.toLocal();
   return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
 }
+
+Widget _chatAvatar(BuildContext context, Chat c) => ChatAvatar(chat: c, radius: 22);
 
 class ChatsListScreen extends StatefulWidget {
   const ChatsListScreen({super.key});
@@ -23,7 +27,11 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   void initState() {
     super.initState();
     _chat.addListener(_onChats);
-    _chat.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _chat.init();
+      _chat.loadContacts();
+    });
   }
 
   @override
@@ -33,7 +41,75 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   }
 
   void _onChats() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_chat.isLoading && _chat.chats.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_chat.error != null && _chat.chats.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 120),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              children: [
+                Text(
+                  _chat.error!,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _chat.refreshChats,
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_chat.chats.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 120),
+          Center(child: Text('Нет чатов')),
+        ],
+      );
+    }
+
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: _chat.chats.length,
+      separatorBuilder: (context, index) => Divider(
+        height: 1,
+        thickness: 1,
+        color: Theme.of(context).colorScheme.outline,
+      ),
+      itemBuilder: (context, index) {
+        final c = _chat.chats[index];
+        return _ChatRow(
+          chat: c,
+          time: c.lastMessageAt != null ? _formatTime(c.lastMessageAt!) : '',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (context) => ChatConversationScreen(chat: c),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -41,31 +117,106 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Чаты'),
-        centerTitle: true,
-        elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Новый диалог',
+            icon: const AppIcon(AppIcons.compose),
+            onPressed: _openNewDirect,
+          ),
+        ],
       ),
-      body: ListView.separated(
-        itemCount: _chat.chats.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final c = _chat.chats[index];
-          return _ChatRow(
-            chat: c,
-            time: c.lastMessageAt != null ? _formatTime(c.lastMessageAt!) : '',
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => ChatConversationScreen(chat: c),
-                ),
-              );
-            },
-          );
-        },
+      body: RefreshIndicator(
+        onRefresh: _chat.refreshChats,
+        child: _buildBody(context),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openNewGroup,
-        icon: const Icon(Icons.group_add),
+        icon: const AppIcon(AppIcons.users),
         label: const Text('Группа'),
+      ),
+    );
+  }
+
+  Future<void> _openNewDirect() async {
+    final selected = await showModalBottomSheet<ChatContactChoice>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final contacts = _chat.contacts;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Начать диалог',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.55),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: contacts.length,
+                  separatorBuilder: (context, i) => Divider(
+                    height: 1,
+                    thickness: 0.6,
+                    indent: 76,
+                    endIndent: 12,
+                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.20),
+                  ),
+                  itemBuilder: (context, i) {
+                    final ct = contacts[i];
+                    final fakeChat = Chat(
+                      id: 'tmp',
+                      title: ct.fullName,
+                      isGroup: false,
+                      peerAvatarPath: ct.avatarPath,
+                      peerAvatarUrl: ct.avatarUrl,
+                    );
+                    return ListTile(
+                      leading: _chatAvatar(context, fakeChat),
+                      title: Text(ct.fullName),
+                      onTap: () => Navigator.pop(
+                        context,
+                        ChatContactChoice(
+                          userId: ct.userId,
+                          fullName: ct.fullName,
+                          avatarPath: ct.avatarPath,
+                          avatarUrl: ct.avatarUrl,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+    final c = await _chat.createDirect(
+      fullName: selected.fullName,
+      peerAvatarPath: selected.avatarPath,
+      peerUserId: selected.userId,
+      peerAvatarUrl: selected.avatarUrl,
+    );
+    if (!mounted) return;
+    if (c == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось создать диалог')),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ChatConversationScreen(chat: c),
       ),
     );
   }
@@ -86,6 +237,20 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   }
 }
 
+@immutable
+class ChatContactChoice {
+  const ChatContactChoice({
+    required this.userId,
+    required this.fullName,
+    this.avatarPath,
+    this.avatarUrl,
+  });
+  final int userId;
+  final String fullName;
+  final String? avatarPath;
+  final String? avatarUrl;
+}
+
 class _ChatRow extends StatelessWidget {
   const _ChatRow({
     required this.chat,
@@ -102,13 +267,9 @@ class _ChatRow extends StatelessWidget {
     final theme = Theme.of(context);
     return ListTile(
       onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: theme.colorScheme.primaryContainer,
-        child: Icon(
-          chat.isGroup ? Icons.groups : Icons.person,
-          color: theme.colorScheme.onPrimaryContainer,
-        ),
-      ),
+      visualDensity: const VisualDensity(horizontal: 0, vertical: -1),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      leading: ChatAvatar(chat: chat, radius: 22),
       title: Text(
         chat.title,
         maxLines: 1,
@@ -131,8 +292,9 @@ class _ChatRow extends StatelessWidget {
           ? Text(
               time,
               style: TextStyle(
-                color: theme.colorScheme.outline,
+                color: theme.colorScheme.onSurfaceVariant,
                 fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
             )
           : null,

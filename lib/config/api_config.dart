@@ -1,40 +1,46 @@
 /// Конфигурация подключения к REST API.
 ///
-/// Для production замените значения на реальные параметры сервера.
 class ApiConfig {
   ApiConfig._();
 
   /// Базовый URL API (без завершающего слеша)
-  static const String baseUrl = 'https://api.example.com/v1';
+  static const String baseUrl = 'https://data.xondev.ru/api';
 
-  /// Использовать mock-данные вместо реального API (для разработки без backend)
-  static const bool useMockApi = true;
-
-  /// Endpoint для авторизации
-  static const String authLoginPath = '/auth/login';
-
-  /// Endpoint для получения новостей
-  static const String newsPath = '/news';
-
-  /// Endpoint для получения переговорных комнат
-  static const String roomsPath = '/rooms';
-
-  /// Endpoint для получения бронирований
-  static const String bookingsPath = '/bookings';
-
-  /// Endpoint для получения профиля пользователя
-  static const String profilePath = '/profile';
-
-  /// База URL для API чатов (создание, сообщения) — при `useMockApi` не используется
-  static const String chatsPath = '/chats';
+  /// Публичный хост для файлов/картинок (без завершающего слеша).
+  /// Бэкенд иногда отдаёт ссылки вида `http://localhost/...` — приводим к этому домену.
+  static const String publicHost = 'https://data.xondev.ru';
 
   /// Таймаут запросов в секундах
   static const int timeoutSeconds = 30;
 
-  static String get authLoginUrl => '$baseUrl$authLoginPath';
-  static String get newsUrl => '$baseUrl$newsPath';
-  static String get roomsUrl => '$baseUrl$roomsPath';
-  static String get bookingsUrl => '$baseUrl$bookingsPath';
-  static String get profileUrl => '$baseUrl$profilePath';
-  static String get chatsBaseUrl => '$baseUrl$chatsPath';
+  /// Нормализация URL файлов от бэкенда.
+  ///
+  /// Требование: `http://localhost` заменяем на `https://data.xondev.ru`.
+  static String? normalizeFileUrl(String? url) {
+    if (url == null) return null;
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.host == 'localhost') {
+      final publicUri = Uri.parse(publicHost);
+      return uri
+          .replace(
+            scheme: publicUri.scheme,
+            host: publicUri.host,
+            port: null,
+          )
+          .toString();
+    }
+
+    // Фоллбэк для “кривых” строк, которые `Uri` не парсит.
+    const localhostPrefix = 'http://localhost';
+    if (trimmed.startsWith(localhostPrefix)) {
+      final rest = trimmed.substring(localhostPrefix.length);
+      final restWithoutPort = rest.replaceFirst(RegExp(r'^:\d+'), '');
+      return '$publicHost$restWithoutPort';
+    }
+
+    return trimmed;
+  }
 }
