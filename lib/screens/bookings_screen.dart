@@ -404,7 +404,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
             duration: const Duration(milliseconds: 220),
             sizeCurve: Curves.easeOutCubic,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           if (_resultsError != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -416,7 +416,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
               ),
             ),
           if (_isResultsLoading) const LinearProgressIndicator(),
-          const SizedBox(height: 6),
+          if (_results.isNotEmpty) const SizedBox(height: 2),
           if (!_isResultsLoading && _resultsError == null && _results.isEmpty)
             _EmptyState(message: 'Нет доступных объектов по выбранным параметрам'),
           if (_results.isNotEmpty)

@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:connect/config/api_config.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/network_errors.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:http/http.dart' as http;
+
+export 'network_errors.dart';
 
 class ApiException implements Exception {
   final int statusCode;
@@ -25,7 +29,7 @@ class ApiClient {
       'Accept': 'application/json',
     };
     final token = AuthService.instance.token;
-    
+
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
@@ -52,8 +56,7 @@ class ApiClient {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(response, uri: uri, method: 'GET');
     } catch (e, st) {
-      AppLogger.e('HTTP GET failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP GET failed: $uri', e, st);
     }
   }
 
@@ -83,8 +86,7 @@ class ApiClient {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(response, uri: uri, method: 'POST');
     } catch (e, st) {
-      AppLogger.e('HTTP POST form failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP POST form failed: $uri', e, st);
     }
   }
 
@@ -100,8 +102,7 @@ class ApiClient {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(response, uri: uri, method: 'POST');
     } catch (e, st) {
-      AppLogger.e('HTTP POST failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP POST failed: $uri', e, st);
     }
   }
 
@@ -117,8 +118,7 @@ class ApiClient {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(response, uri: uri, method: 'PATCH');
     } catch (e, st) {
-      AppLogger.e('HTTP PATCH failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP PATCH failed: $uri', e, st);
     }
   }
 
@@ -134,8 +134,7 @@ class ApiClient {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(response, uri: uri, method: 'PUT');
     } catch (e, st) {
-      AppLogger.e('HTTP PUT failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP PUT failed: $uri', e, st);
     }
   }
 
@@ -147,8 +146,7 @@ class ApiClient {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(response, uri: uri, method: 'DELETE');
     } catch (e, st) {
-      AppLogger.e('HTTP DELETE failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP DELETE failed: $uri', e, st);
     }
   }
 
@@ -173,13 +171,7 @@ class ApiClient {
       final response = await http.Response.fromStream(streamed);
       return _handleResponse(response, uri: uri, method: 'POST multipart');
     } catch (e, st) {
-      AppLogger.e(
-        'HTTP POST multipart failed: $uri',
-        name: 'network.http',
-        error: e,
-        stackTrace: st,
-      );
-      rethrow;
+      throw _mapAndLog('HTTP POST multipart failed: $uri', e, st);
     }
   }
 
@@ -194,9 +186,14 @@ class ApiClient {
       }
       throw ApiException(response.statusCode, 'Не удалось скачать файл');
     } catch (e, st) {
-      AppLogger.e('HTTP download failed: $uri', name: 'network.http', error: e, stackTrace: st);
-      rethrow;
+      throw _mapAndLog('HTTP download failed: $uri', e, st);
     }
+  }
+
+  Never _mapAndLog(String label, Object e, StackTrace st) {
+    AppLogger.e(label, name: 'network.http', error: e, stackTrace: st);
+    if (e is ApiException) throw e;
+    throw mapNetworkError(e);
   }
 
   Map<String, dynamic> _handleResponse(
@@ -237,6 +234,16 @@ class ApiClient {
           (decoded['errors'] as List?)?.join(', ') ??
           message;
     }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw ApiException(
+        response.statusCode,
+        message.isNotEmpty && message != 'Ошибка запроса (${response.statusCode})'
+            ? message
+            : 'Ошибка авторизации. Войдите в аккаунт снова.',
+      );
+    }
+
     throw ApiException(response.statusCode, message);
   }
 }

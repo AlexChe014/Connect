@@ -5,10 +5,37 @@ import 'package:connect/screens/create_group_chat_screen.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-String _formatTime(DateTime d) {
-  final l = d.toLocal();
-  return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+const _weekdayShort = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+
+DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+DateTime _weekStart(DateTime d) {
+  final day = _dateOnly(d);
+  return day.subtract(Duration(days: day.weekday - 1));
+}
+
+bool _isSameWeek(DateTime a, DateTime b) => _weekStart(a) == _weekStart(b);
+
+String _formatLastMessageTime(DateTime d) {
+  final local = d.toLocal();
+  final now = DateTime.now();
+  final today = _dateOnly(now);
+  final messageDay = _dateOnly(local);
+  final dayDiff = today.difference(messageDay).inDays;
+
+  if (dayDiff == 0) {
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
+  if (dayDiff == 1) {
+    return 'вчера';
+  }
+  if (_isSameWeek(local, now)) {
+    return _weekdayShort[local.weekday - 1];
+  }
+  final formatted = DateFormat('d MMM', 'ru_RU').format(local);
+  return formatted.endsWith('.') ? formatted.substring(0, formatted.length - 1) : formatted;
 }
 
 Widget _chatAvatar(BuildContext context, Chat c) => ChatAvatar(chat: c, radius: 22);
@@ -99,7 +126,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         final c = _chat.chats[index];
         return _ChatRow(
           chat: c,
-          time: c.lastMessageAt != null ? _formatTime(c.lastMessageAt!) : '',
+          time: c.lastMessageAt != null ? _formatLastMessageTime(c.lastMessageAt!) : '',
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(

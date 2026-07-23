@@ -193,6 +193,49 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     );
   }
 
+  Future<void> _showServiceActions(DocumentService service) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  service.displayName,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              ListTile(
+                dense: true,
+                title: const Text('Авторизоваться'),
+                onTap: () => Navigator.pop(context, 'auth'),
+              ),
+              ListTile(
+                dense: true,
+                title: const Text('Выйти'),
+                onTap: () => Navigator.pop(context, 'logout'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'auth':
+        await _authorizeService(service);
+      case 'logout':
+        await _logoutService(service);
+    }
+  }
+
   void _openDocuments(DocumentService service) {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -206,85 +249,94 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final headerCount = showInlineTitle ? 1 : 0;
-    final itemCount = headerCount + (_services.isEmpty ? 1 : _services.length);
-
     return RefreshIndicator(
       onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
-      child: ListView.builder(
-        padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
-        itemCount: itemCount,
-        itemBuilder: (context, index) {
-          if (showInlineTitle && index == 0) {
-            final theme = Theme.of(context);
-            final cs = theme.colorScheme;
-            final appBarTheme = theme.appBarTheme;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: appBarTheme.backgroundColor ?? cs.surface,
-              child: SafeArea(
-                bottom: false,
-                child: SizedBox(
-                  height: kToolbarHeight,
-                  child: Center(
-                    child: Text(
-                      'Подписание',
-                      style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-                    ),
+      child: _services.isEmpty
+          ? ListView(
+              padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
+              children: [
+                if (showInlineTitle) _buildInlineTitle(context),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.vpn_key_outlined,
+                        size: 48,
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Нет доступных сервисов',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Введите личный код доступа, чтобы получить список сервисов 1С',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _requestPersonalAccessCode,
+                        icon: const Icon(Icons.vpn_key_outlined),
+                        label: const Text('Ввести код доступа'),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            );
-          }
+              ],
+            )
+          : ListView.separated(
+              padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
+              itemCount: (showInlineTitle ? 1 : 0) + _services.length,
+              separatorBuilder: (context, index) {
+                if (showInlineTitle && index == 0) {
+                  return const SizedBox.shrink();
+                }
+                return Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Theme.of(context).colorScheme.outline,
+                );
+              },
+              itemBuilder: (context, index) {
+                if (showInlineTitle && index == 0) {
+                  return _buildInlineTitle(context);
+                }
+                final serviceIndex = index - (showInlineTitle ? 1 : 0);
+                final service = _services[serviceIndex];
+                return _ServiceTile(
+                  service: service,
+                  onTap: () => _openDocuments(service),
+                  onEdit: () => _showServiceActions(service),
+                );
+              },
+            ),
+    );
+  }
 
-          final base = showInlineTitle ? 1 : 0;
-          final afterHeader = index - base;
-
-          if (_services.isEmpty) {
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.vpn_key_outlined,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Нет доступных сервисов',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Введите личный код доступа, чтобы получить список сервисов 1С',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _requestPersonalAccessCode,
-                      icon: const Icon(Icons.vpn_key_outlined),
-                      label: const Text('Ввести код доступа'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final service = _services[afterHeader];
-          return _ServiceTile(
-            service: service,
-            onTap: () => _openDocuments(service),
-            onAuthorize: () => _authorizeService(service),
-            onLogout: () => _logoutService(service),
-          );
-        },
+  Widget _buildInlineTitle(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final appBarTheme = theme.appBarTheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: appBarTheme.backgroundColor ?? cs.surface,
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: kToolbarHeight,
+          child: Center(
+            child: Text(
+              'Согласование',
+              style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -296,7 +348,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Подписание'),
+        title: const Text('Согласование'),
         centerTitle: true,
         elevation: 0,
       ),
@@ -309,61 +361,40 @@ class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
     required this.service,
     required this.onTap,
-    required this.onAuthorize,
-    required this.onLogout,
+    required this.onEdit,
   });
 
   final DocumentService service;
   final VoidCallback onTap;
-  final VoidCallback onAuthorize;
-  final VoidCallback onLogout;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  service.displayName,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                service.displayName,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'auth':
-                      onAuthorize();
-                    case 'logout':
-                      onLogout();
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'auth',
-                    child: Text('Авторизоваться'),
-                  ),
-                  PopupMenuItem(
-                    value: 'logout',
-                    child: Text('Выйти'),
-                  ),
-                ],
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: theme.colorScheme.outline,
-              ),
-            ],
-          ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.more_horiz),
+              tooltip: 'Действия',
+              onPressed: onEdit,
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: theme.colorScheme.outline,
+            ),
+          ],
         ),
       ),
     );

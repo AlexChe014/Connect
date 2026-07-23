@@ -16,7 +16,9 @@ import 'config/app_theme.dart';
 import 'config/branding.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
+import 'services/location_gate_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/tracking_transparency_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,14 +28,31 @@ void main() async {
   runApp(const ConnectApp());
 }
 
-class ConnectApp extends StatelessWidget {
+class ConnectApp extends StatefulWidget {
   const ConnectApp({super.key});
+
+  @override
+  State<ConnectApp> createState() => _ConnectAppState();
+}
+
+class _ConnectAppState extends State<ConnectApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await TrackingTransparencyService.instance.requestIfNeeded();
+      if (AuthService.instance.isAuthenticated) {
+        await PushNotificationService.instance.requestPermissions();
+        await LocationGateService.instance.verifyForCurrentUser();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: AppNavigationService.navigatorKey,
-      title: 'Connect — Бронирования',
+      title: 'Connect — Корпоративный сервис',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       localizationsDelegates: const [
@@ -150,11 +169,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Column(
                   children: [
                     BrandingLoginLogo(height: 56),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Меню',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                    ),
                   ],
                 ),
               ),
@@ -166,8 +180,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Column(
                   children: [
                     ListTile(
-                      leading: const AppIcon(AppIcons.news),
-                      title: const Text('Новости'),
+                      leading: const AppIcon(AppIcons.dashboard),
+                      title: const Text('Лента'),
                       selected: _homeSection == _HomeSection.news,
                       onTap: () {
                         setState(() {
@@ -190,7 +204,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const AppIcon(AppIcons.users),
+                      leading: const AppIcon(AppIcons.user),
                       title: const Text('Сотрудники'),
                       selected: _homeSection == _HomeSection.employees,
                       onTap: () {
@@ -215,7 +229,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     ),
                     ListTile(
                       leading: const AppIcon(AppIcons.documents),
-                      title: const Text('Подписание'),
+                      title: const Text('Согласование'),
                       selected: _homeSection == _HomeSection.documents,
                       onTap: () {
                         setState(() {
@@ -234,7 +248,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: body,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final content = body;
+            if (constraints.maxWidth < 900) return content;
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: content,
+              ),
+            );
+          },
+        ),
       ),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(

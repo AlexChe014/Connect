@@ -58,9 +58,7 @@ class PushNotificationService {
         sound: true,
       );
 
-      if (Platform.isIOS) {
-        await messaging.requestPermission();
-      }
+      await requestPermissions();
 
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageNavigation);
@@ -83,6 +81,44 @@ class PushNotificationService {
         error: e,
         stackTrace: st,
       );
+    }
+  }
+
+  /// Программный запрос разрешения на push-уведомления (iOS / Android 13+).
+  Future<NotificationSettings?> requestPermissions() async {
+    if (kIsWeb) return null;
+    if (!DefaultFirebaseOptions.isConfigured && !_initialized) return null;
+
+    try {
+      if (Platform.isAndroid) {
+        final androidPlugin =
+            _localNotifications.resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
+        await androidPlugin?.requestNotificationsPermission();
+      }
+
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        announcement: false,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      );
+      AppLogger.d(
+        'Notification permission: ${settings.authorizationStatus}',
+        name: 'push',
+      );
+      return settings;
+    } catch (e, st) {
+      AppLogger.e(
+        'Notification permission request failed',
+        name: 'push',
+        error: e,
+        stackTrace: st,
+      );
+      return null;
     }
   }
 

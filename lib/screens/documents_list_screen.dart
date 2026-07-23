@@ -20,6 +20,13 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
   bool _isLoading = true;
   String? _errorMessage;
   bool _isVerifying = false;
+  bool _isSubmitting = false;
+  final Set<String> _selectedGuids = <String>{};
+
+  bool get _selectionMode => _selectedGuids.isNotEmpty;
+
+  String get _acceptActionLabel =>
+      widget.service.isSigningService ? 'Подписать' : 'Согласовать';
 
   @override
   void initState() {
@@ -56,6 +63,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         setState(() {
           _documents = items;
           _isLoading = false;
+          _selectedGuids.clear();
         });
         return;
       } catch (e) {
@@ -73,6 +81,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
           setState(() {
             _documents = items;
             _isLoading = false;
+            _selectedGuids.clear();
           });
           return;
         }
@@ -224,6 +233,11 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
   }
 
   void _openDocument(Map<String, dynamic> document) {
+    if (_selectionMode) {
+      _toggleDocumentSelection(document);
+      return;
+    }
+
     final guid = DocumentPayloadUtils.guid(document);
     if (guid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -245,14 +259,191 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         .then((_) => _loadDocuments());
   }
 
+  void _enterSelectionMode(Map<String, dynamic> document) {
+    final guid = DocumentPayloadUtils.guid(document);
+    if (guid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('У документа отсутствует идентификатор')),
+      );
+      return;
+    }
+
+    setState(() => _selectedGuids.add(guid));
+  }
+
+  void _toggleDocumentSelection(Map<String, dynamic> document) {
+    final guid = DocumentPayloadUtils.guid(document);
+    if (guid == null) return;
+
+    setState(() {
+      if (_selectedGuids.contains(guid)) {
+        _selectedGuids.remove(guid);
+      } else {
+        _selectedGuids.add(guid);
+      }
+    });
+  }
+
+  void _clearSelection() {
+    if (!_selectionMode) return;
+    setState(_selectedGuids.clear);
+  }
+
+  List<Map<String, dynamic>> get _selectedDocuments => _documents
+      .where((document) {
+        final guid = DocumentPayloadUtils.guid(document);
+        return guid != null && _selectedGuids.contains(guid);
+      })
+      .toList();
+
+  Future<void> _bulkAccept() async {
+    if (_isSubmitting || !_selectionMode) return;
+
+    final selected = _selectedDocuments;
+    if (selected.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$_acceptActionLabel документы?'),
+        content: Text(
+          'Будет обработано документов: ${selected.length}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(_acceptActionLabel),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      final guids = selected
+          .map(DocumentPayloadUtils.guid)
+          .whereType<String>()
+          .toList();
+      final numbers = selected
+          .map(DocumentPayloadUtils.number)
+          .whereType<String>()
+          .where((number) => number.trim().isNotEmpty)
+          .toList();
+
+      await DocumentsRepository.instance.acceptDocuments(
+        serviceId: widget.service.id,
+        guids: guids,
+        numbers: numbers.isEmpty ? null : numbers,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.service.isSigningService
+                ? 'Документы подписаны'
+                : 'Документы согласованы',
+          ),
+        ),
+      );
+      await _loadDocuments();
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось выполнить массовое действие';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Widget _buildSelectionBar() {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(color: Theme.of(context).colorScheme.outline),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _isSubmitting ? null : _clearSelection,
+                  child: const Text('Отмена'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _isSubmitting ? null : _bulkAccept,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text('$_acceptActionLabel (${_selectedGuids.length})'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentCheckbox({
+    required bool selected,
+    required ValueChanged<bool?> onChanged,
+  }) {
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Checkbox(
+        value: selected,
+        onChanged: onChanged,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.service.displayName),
+        title: Text(
+          _selectionMode
+              ? 'Выбрано: ${_selectedGuids.length}'
+              : widget.service.displayName,
+        ),
         centerTitle: true,
+        leading: _selectionMode
+            ? IconButton(
+                tooltip: 'Отменить выбор',
+                onPressed: _isSubmitting ? null : _clearSelection,
+                icon: const Icon(Icons.close),
+              )
+            : null,
       ),
       body: _buildBody(),
+      bottomNavigationBar: _selectionMode ? _buildSelectionBar() : null,
     );
   }
 
@@ -320,20 +511,56 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     return RefreshIndicator(
       onRefresh: () => _loadDocuments(),
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: EdgeInsets.fromLTRB(16, 8, 16, _selectionMode ? 8 : 16),
         itemCount: _documents.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        separatorBuilder: (context, index) => Divider(
+          height: 1,
+          thickness: 1,
+          color: Theme.of(context).colorScheme.outline,
+        ),
         itemBuilder: (context, index) {
           final document = _documents[index];
+          final guid = DocumentPayloadUtils.guid(document);
           final title = DocumentPayloadUtils.datalist(document) ??
               DocumentPayloadUtils.title(document);
+          final selected =
+              guid != null && _selectedGuids.contains(guid);
 
-          return Card(
-            clipBehavior: Clip.antiAlias,
-            child: ListTile(
-              title: Text(title),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openDocument(document),
+          return InkWell(
+            onTap: () {
+              if (_selectionMode) {
+                _toggleDocumentSelection(document);
+              } else {
+                _openDocument(document);
+              }
+            },
+            onLongPress: () => _enterSelectionMode(document),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (_selectionMode) ...[
+                    _buildDocumentCheckbox(
+                      selected: selected,
+                      onChanged: (_) => _toggleDocumentSelection(document),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                  if (!_selectionMode)
+                    Icon(
+                      Icons.chevron_right,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                ],
+              ),
             ),
           );
         },

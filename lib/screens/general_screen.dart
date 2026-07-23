@@ -4,7 +4,7 @@ import '../config/app_icons.dart';
 import 'bookings_screen.dart';
 import 'news_feed_screen.dart';
 
-/// Общая страница с вкладками «Новости» и «Бронирование».
+/// Общая страница с вкладками «Лента» и «Бронирование».
 class GeneralScreen extends StatelessWidget {
   const GeneralScreen({super.key});
 
@@ -19,7 +19,7 @@ class GeneralScreen extends StatelessWidget {
           elevation: 0,
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Новости', icon: AppIcon(AppIcons.news)),
+              Tab(text: 'Лента', icon: AppIcon(AppIcons.news)),
               Tab(text: 'Бронирование', icon: AppIcon(AppIcons.bookings)),
             ],
           ),

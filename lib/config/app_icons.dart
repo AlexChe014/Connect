@@ -1,120 +1,110 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
-/// SVG из [assets/icons/], подобранные по разделам приложения.
+import 'connect_icons.dart';
+
+/// Иконки из шрифта [ConnectIcons], сгруппированные по разделам приложения.
 abstract final class AppIcons {
   AppIcons._();
 
-  static const String _base = 'assets/icons';
-
   // 01 — главное меню / навигация
-  static const String dashboard = '$_base/01-1-dashboard.svg';
-  static const String bookings = '$_base/01-2-calendar-check.svg';
-  static const String news = '$_base/01-4-file-text.svg';
-  static const String documents = '$_base/01-7-file-check.svg';
-  static const String calendar = '$_base/01-8-calendar-grid.svg';
-  static const String user = '$_base/01-9-user.svg';
-  static const String mailAt = '$_base/01-6-at-sign.svg';
-  static const String chat = '$_base/01-11-message-circle.svg';
-  static const String settings = '$_base/01-17-settings.svg';
-  static const String mapPin = '$_base/01-18-map-pin.svg';
-  static const String users = '$_base/01-19-users.svg';
-  static const String settingsFilled = '$_base/01-settings-filled.svg';
+  static const IconData dashboard = ConnectIcons.icon011Dashboard;
+  static const IconData bookings = ConnectIcons.icon012CalendarCheck;
+  static const IconData news = ConnectIcons.icon014FileText;
+  static const IconData documents = ConnectIcons.icon017FileCheck;
+  static const IconData calendar = ConnectIcons.icon018CalendarGrid;
+  static const IconData user = ConnectIcons.icon019User;
+  static const IconData mailAt = ConnectIcons.icon016AtSign;
+  static const IconData chat = ConnectIcons.icon0111MessageCircle;
+  static const IconData settings = ConnectIcons.icon0117Settings;
+  static const IconData mapPin = ConnectIcons.icon0118MapPin;
+  static const IconData users = ConnectIcons.icon0119Users;
+  static const IconData settingsFilled = ConnectIcons.icon01SettingsFilled;
 
   // 03 — избранное / поиск
-  static const String search = '$_base/03-search.svg';
-  static const String favorite = '$_base/03-favorite.svg';
-  static const String starOutline = '$_base/03-star-outline.svg';
-  static const String starFilled = '$_base/03-star-filled.svg';
+  static const IconData search = ConnectIcons.icon03Search;
+  static const IconData favorite = ConnectIcons.icon03Favorite;
+  static const IconData starOutline = ConnectIcons.icon03StarOutline;
+  static const IconData starFilled = ConnectIcons.icon03StarFilled;
 
   // 04 — сотрудники
-  static const String birthdayCake = '$_base/04-birthday-cake.svg';
-  static const String phone = '$_base/04-phone.svg';
-  static const String staffMail = '$_base/04-mail.svg';
-  static const String staffMessage = '$_base/04-message.svg';
-  static const String fieldTime = '$_base/04-field-time.svg';
-  static const String home = '$_base/04-home.svg';
-  static const String car = '$_base/04-car.svg';
+  static const IconData birthdayCake = ConnectIcons.icon04BirthdayCake;
+  static const IconData phone = ConnectIcons.icon04Phone;
+  static const IconData staffMail = ConnectIcons.icon04Mail;
+  static const IconData staffMessage = ConnectIcons.icon04Message;
+  static const IconData fieldTime = ConnectIcons.icon04FieldTime;
+  static const IconData home = ConnectIcons.icon04Home;
+  static const IconData car = ConnectIcons.icon04Car;
 
   // 05 — чат
-  static const String attachment = '$_base/05-attachment.svg';
-  static const String close = '$_base/05-close.svg';
-  static const String download = '$_base/05-download.svg';
-  static const String smile = '$_base/05-smile.svg';
-  static const String thumbtack = '$_base/05-thumbtack.svg';
+  static const IconData attachment = ConnectIcons.icon05Attachment;
+  static const IconData close = ConnectIcons.icon05Close;
+  static const IconData download = ConnectIcons.icon05Download;
+  static const IconData smile = ConnectIcons.icon05Smile;
+  static const IconData thumbtack = ConnectIcons.icon05Thumbtack;
 
   // 06 — действия в чате
-  static const String copy = '$_base/06-copy.svg';
-  static const String reply = '$_base/06-reply.svg';
-  static const String share = '$_base/06-share.svg';
+  static const IconData copy = ConnectIcons.icon06Copy;
+  static const IconData reply = ConnectIcons.icon06Reply;
+  static const IconData share = ConnectIcons.icon06Share;
 
   // 07 — календарь
-  static const String date = '$_base/07-date.svg';
-  static const String locationPin = '$_base/07-location-pin.svg';
-  static const String attendees = '$_base/07-attendees.svg';
-  static const String calendarList = '$_base/07-list.svg';
+  static const IconData date = ConnectIcons.icon07Date;
+  static const IconData locationPin = ConnectIcons.icon07LocationPin;
+  static const IconData attendees = ConnectIcons.icon07Attendees;
+  static const IconData calendarList = ConnectIcons.icon07List;
 
   // 08 — профиль
-  static const String logout = '$_base/08-logout.svg';
-  static const String profileMail = '$_base/08-mail.svg';
-  static const String profileAdd = '$_base/08-add.svg';
-  static const String profileSettings = '$_base/08-settings.svg';
+  static const IconData logout = ConnectIcons.icon08Logout;
+  static const IconData profileMail = ConnectIcons.icon08Mail;
+  static const IconData profileAdd = ConnectIcons.icon08Add;
+  static const IconData profileSettings = ConnectIcons.icon08Settings;
 
   // 09 — лента
-  static const String eye = '$_base/09-eye.svg';
-  static const String like = '$_base/09-like.svg';
-  static const String send = '$_base/09-send.svg';
-  static const String feedSearch = '$_base/09-search.svg';
-  static const String feedList = '$_base/09-list.svg';
+  static const IconData eye = ConnectIcons.icon09Eye;
+  static const IconData like = ConnectIcons.icon09Like;
+  static const IconData send = ConnectIcons.icon09Send;
+  static const IconData feedSearch = ConnectIcons.icon09Search;
+  static const IconData feedList = ConnectIcons.icon09List;
 
   // 10 — бронирование
-  static const String bookingMap = '$_base/10-map.svg';
-  static const String sliders = '$_base/10-sliders.svg';
-  static const String bookingClose = '$_base/10-close.svg';
-  static const String bookingAttendees = '$_base/10-attendees.svg';
+  static const IconData bookingMap = ConnectIcons.icon10Map;
+  static const IconData sliders = ConnectIcons.icon10Sliders;
+  static const IconData bookingClose = ConnectIcons.icon10Close;
+  static const IconData bookingAttendees = ConnectIcons.icon10Attendees;
 
   // 12 — безопасность
-  static const String info = '$_base/12-info.svg';
+  static const IconData info = ConnectIcons.icon12Info;
 
   // 13 — почта
-  static const String mailAdd = '$_base/13-add.svg';
-  static const String compose = '$_base/13-compose.svg';
-  static const String refresh = '$_base/13-refresh.svg';
+  static const IconData mailAdd = ConnectIcons.icon13Add;
+  static const IconData compose = ConnectIcons.icon13Compose;
+  static const IconData refresh = ConnectIcons.icon13Refresh;
 
   // 14 — коннектор
-  static const String cameraOn = '$_base/14-camera-on.svg';
-  static const String videoMeeting = '$_base/14-video-meeting.svg';
+  static const IconData cameraOn = ConnectIcons.icon14CameraOn;
+  static const IconData videoMeeting = ConnectIcons.icon14VideoMeeting;
 }
 
-/// Виджет SVG-иконки с окраской через [ColorFilter].
+/// Иконка из [AppIcons] с поддержкой размера и цвета из [IconTheme].
 class AppIcon extends StatelessWidget {
   const AppIcon(
-    this.asset, {
+    this.icon, {
     super.key,
     this.size,
     this.color,
   });
 
-  final String asset;
+  final IconData icon;
   final double? size;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final iconTheme = IconTheme.of(context);
-    final resolvedSize = size ?? iconTheme.size ?? 24;
-    final resolved =
-        color ?? iconTheme.color ?? Theme.of(context).colorScheme.onSurface;
-    return SizedBox(
-      width: resolvedSize,
-      height: resolvedSize,
-      child: SvgPicture.asset(
-        asset,
-        width: resolvedSize,
-        height: resolvedSize,
-        fit: BoxFit.contain,
-        colorFilter: ColorFilter.mode(resolved, BlendMode.srcIn),
-      ),
+    return Icon(
+      icon,
+      size: size ?? iconTheme.size,
+      color: color ?? iconTheme.color,
     );
   }
 }

@@ -164,28 +164,21 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Widget _buildSearchBar(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
-        child: TextField(
-          controller: _qController,
-          textInputAction: TextInputAction.search,
-          style: const TextStyle(fontSize: 14),
-          decoration: const InputDecoration(
-            isDense: true,
-            hintText: 'Фамилия, имя, отчество или почта',
-            prefixIcon: AppIcon(AppIcons.search, size: 20),
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          ),
-          onSubmitted: (_) {
-            _debounce?.cancel();
-            _appliedQ = _qController.text.trim();
-            _loadFirstPage();
-          },
-        ),
+    return TextField(
+      controller: _qController,
+      textInputAction: TextInputAction.search,
+      style: const TextStyle(fontSize: 14),
+      decoration: const InputDecoration(
+        isDense: true,
+        hintText: 'Фамилия, имя, отчество или почта',
+        prefixIcon: AppIcon(AppIcons.search, size: 20),
+        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       ),
+      onSubmitted: (_) {
+        _debounce?.cancel();
+        _appliedQ = _qController.text.trim();
+        _loadFirstPage();
+      },
     );
   }
 

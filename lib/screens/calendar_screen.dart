@@ -302,13 +302,21 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 color: Theme.of(context).colorScheme.primary,
                 shape: BoxShape.circle,
               ),
-              todayDecoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                shape: BoxShape.circle,
+              todayDecoration: const BoxDecoration(),
+              todayTextStyle: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
               ),
               selectedDecoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
                 shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 1.5,
+                ),
+              ),
+              selectedTextStyle: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
               ),
             ),
             headerStyle: HeaderStyle(

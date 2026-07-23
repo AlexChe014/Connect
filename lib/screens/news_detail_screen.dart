@@ -294,7 +294,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                         Row(
                           children: [
                             _StatChip(
-                              iconAsset: AppIcons.eye,
+                              icon: AppIcons.eye,
                               label: '${_news.viewsCount}',
                               onTap: () => NewsPeopleSheet.show(
                                 context,
@@ -469,12 +469,12 @@ class _CommentTile extends StatelessWidget {
 
 class _StatChip extends StatelessWidget {
   const _StatChip({
-    required this.iconAsset,
+    required this.icon,
     required this.label,
     this.onTap,
   });
 
-  final String iconAsset;
+  final IconData icon;
   final String label;
   final VoidCallback? onTap;
 
@@ -486,7 +486,7 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppIcon(iconAsset, size: 14, color: cs.onSurfaceVariant),
+          AppIcon(icon, size: 14, color: cs.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             label,

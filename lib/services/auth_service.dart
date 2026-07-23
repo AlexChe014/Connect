@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:connect/config/api_config.dart';
 import 'package:connect/config/routes/auth_routes.dart';
+import 'package:connect/services/network_errors.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,7 +46,11 @@ class AuthService {
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
     } catch (e, st) {
       AppLogger.e('Auth login request failed: POST $uri', name: 'network.auth', error: e, stackTrace: st);
-      rethrow;
+      final mapped = mapNetworkError(e);
+      if (mapped is NetworkException) {
+        throw AuthException(mapped.message);
+      }
+      throw AuthException('Не удалось выполнить вход. Проверьте интернет и попробуйте снова.');
     }
 
     if (response.statusCode == 200 || response.statusCode == 201) {

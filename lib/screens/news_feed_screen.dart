@@ -8,6 +8,7 @@ import '../config/api_config.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
+import '../utils/app_feedback.dart';
 import '../widgets/news_people_sheet.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
@@ -101,11 +102,13 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         _isInitialLoading = false;
       });
       await _maybeOpenNewsFromPush();
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _isInitialLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось загрузить новости')),
+      AppFeedback.showSnackBar(
+        context,
+        e,
+        fallback: 'Не удалось загрузить новости',
       );
     }
   }
@@ -328,7 +331,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                   height: kToolbarHeight,
                   child: Center(
                     child: Text(
-                      'Новости',
+                      'Лента',
                       style:
                           appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
                     ),
@@ -396,7 +399,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Новости'),
+        title: const Text('Лента'),
         centerTitle: true,
         elevation: 0,
       ),
@@ -494,7 +497,7 @@ class _NewsCard extends StatelessWidget {
                   Row(
                     children: [
                       _StatChip(
-                        iconAsset: AppIcons.eye,
+                        icon: AppIcons.eye,
                         label: '${news.viewsCount}',
                         onTap: onShowViewers,
                       ),
@@ -522,12 +525,12 @@ class _NewsCard extends StatelessWidget {
 
 class _StatChip extends StatelessWidget {
   const _StatChip({
-    required this.iconAsset,
+    required this.icon,
     required this.label,
     this.onTap,
   });
 
-  final String iconAsset;
+  final IconData icon;
   final String label;
   final VoidCallback? onTap;
 
@@ -539,7 +542,7 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppIcon(iconAsset, size: 14, color: cs.onSurfaceVariant),
+          AppIcon(icon, size: 14, color: cs.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             label,

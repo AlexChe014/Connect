@@ -24,8 +24,22 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна, чтобы сотрудники могли делать фото и снимать короткие видео для сообщений в корпоративных чатах Connect.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Доступ к галерее нужен, чтобы прикреплять фото и изображения к сообщениям в чатах и к корпоративным материалам.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Разрешение на сохранение нужно, чтобы сохранять полученные в чатах и документах изображения в галерею устройства.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон используется при записи видеосообщения в корпоративном чате Connect.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Геолокация нужна, чтобы подтвердить, что вы находитесь на территории компании при использовании функций, связанных с присутствием на рабочем месте.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Разрешение на отслеживание помогает улучшать стабильность приложения и доставку корпоративных уведомлений. Данные не используются для рекламы третьих лиц.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -49,6 +63,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -66,11 +84,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Приложению нужен доступ к камере, чтобы сделать фото для чата.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Приложению нужен доступ к фото, чтобы прикреплять изображения в чате.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Микрофон используется при записи видео в чате.</string>
 </dict>
 </plist>
