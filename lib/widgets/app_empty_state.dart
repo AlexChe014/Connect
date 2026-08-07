@@ -45,9 +45,13 @@ class AppEmptyState extends StatelessWidget {
 
     // Скроллящийся контейнер, а не просто Center — иначе жест
     // pull-to-refresh не работает, когда этот виджет — единственный
-    // потомок RefreshIndicator (нет Scrollable-предка).
+    // потомок RefreshIndicator (нет Scrollable-предка). Но когда высота
+    // не ограничена (виджет — просто один из children обычного
+    // ListView), центрировать через minHeight нельзя — упадёт с
+    // "infinite height", поэтому в этом случае отдаём контент как есть.
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (!constraints.hasBoundedHeight) return content;
         return SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: ConstrainedBox(

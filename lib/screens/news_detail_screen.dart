@@ -4,18 +4,20 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../config/api_config.dart';
 import '../config/app_icons.dart';
+import '../config/app_theme.dart';
 import '../models/news_comment.dart';
 import '../models/news_item.dart';
 import '../repositories/comments_repository.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
+import '../widgets/app_network_image.dart';
+import '../widgets/chat_avatar.dart';
 import '../widgets/news_people_sheet.dart';
 
 class NewsDetailScreen extends StatefulWidget {
-  const NewsDetailScreen({
-    super.key,
-    required this.news,
-  });
+  const NewsDetailScreen({super.key, required this.news});
 
   final NewsItem news;
 
@@ -186,11 +188,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     if (url == null) return;
     setState(() => _commentsLoadingMore = true);
     try {
-      final Paginated<NewsComment> page =
-          await CommentsRepository.instance.getByNewsPage(
-        newsId: _news.id,
-        url: url,
-      );
+      final Paginated<NewsComment> page = await CommentsRepository.instance
+          .getByNewsPage(newsId: _news.id, url: url);
       if (!mounted) return;
       setState(() {
         _comments = [..._comments, ...page.data];
@@ -229,10 +228,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         _news.imageUrl != null && _news.imageUrl!.trim().isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Новость'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Новость'), centerTitle: true),
       body: Column(
         children: [
           Expanded(
@@ -259,29 +255,30 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                         ],
                         Text(
                           _formatDate(_news.date),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           _news.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
+                          style: Theme.of(context).textTheme.headlineSmall
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 16),
                         if (hasImage) ...[
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.network(
-                              _news.imageUrl!,
-                              width: double.infinity,
-                              fit: BoxFit.fitWidth,
-                              filterQuality: FilterQuality.medium,
-                              errorBuilder: (_, _, _) =>
-                                  const SizedBox.shrink(),
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: AppColors.cardPhotoShadow,
+                            ),
+                            child: AspectRatio(
+                              aspectRatio: 16 / 9,
+                              child: AppNetworkImage(
+                                url: _news.imageUrl,
+                                width: double.infinity,
+                                height: double.infinity,
+                                borderRadius: 16,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -323,24 +320,19 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   Text(
                     'Комментарии',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   if (_commentsLoading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: AppLoadingIndicator(),
                     )
                   else if (_comments.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Text(
-                        'Пока нет комментариев',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                      ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: AppEmptyState(message: 'Пока нет комментариев'),
                     )
                   else
                     ..._comments.map(
@@ -352,13 +344,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                   if (_commentsLoadingMore)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
+                      child: AppLoadingIndicator(size: 20),
                     ),
                 ],
               ),
@@ -416,22 +402,16 @@ class _CommentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final author = comment.author;
-    final avatarUrl = author?.avatarUrl?.trim();
-    final hasAvatar = avatarUrl != null && avatarUrl.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
+          MemberAvatar(
+            displayName: author?.fullName ?? 'Пользователь',
+            avatarUrl: author?.avatarUrl,
             radius: 16,
-            backgroundColor: cs.primaryContainer,
-            foregroundColor: cs.onPrimaryContainer,
-            backgroundImage: hasAvatar ? NetworkImage(avatarUrl) : null,
-            child: hasAvatar
-                ? null
-                : AppIcon(AppIcons.user, size: 16, color: cs.onPrimaryContainer),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -444,20 +424,23 @@ class _CommentTile extends StatelessWidget {
                       child: Text(
                         author?.fullName ?? 'Пользователь',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     Text(
                       dateLabel,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(comment.text, style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  comment.text,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ],
             ),
           ),
@@ -468,11 +451,7 @@ class _CommentTile extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const _StatChip({required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
@@ -490,10 +469,9 @@ class _StatChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -559,10 +537,9 @@ class _LikeButton extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(2, 4, 4, 4),
             child: Text(
               '$count',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: cs.onSurfaceVariant),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ),
         ),
@@ -579,32 +556,16 @@ class _AuthorHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final hasAvatar = avatarUrl != null && avatarUrl!.trim().isNotEmpty;
-
     return Row(
       children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: cs.primaryContainer,
-          foregroundColor: cs.onPrimaryContainer,
-          backgroundImage: hasAvatar ? NetworkImage(avatarUrl!) : null,
-          child: hasAvatar
-              ? null
-              : AppIcon(
-                  AppIcons.user,
-                  size: 18,
-                  color: cs.onPrimaryContainer,
-                ),
-        ),
+        MemberAvatar(displayName: authorName, avatarUrl: avatarUrl, radius: 16),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             authorName,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
       ],
