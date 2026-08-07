@@ -8,6 +8,8 @@ import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/push_notification_service.dart';
 import '../utils/media_url_utils.dart';
+import '../widgets/app_loading.dart';
+import '../widgets/chat_avatar.dart';
 import 'booking_detail_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -80,9 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         datetimeEndSeconds: weekEnd.millisecondsSinceEpoch ~/ 1000,
       );
 
-      final upcoming = items
-          .where((b) => !b.datetimeEnd.isBefore(now))
-          .toList()
+      final upcoming = items.where((b) => !b.datetimeEnd.isBefore(now)).toList()
         ..sort((a, b) => a.datetimeStart.compareTo(b.datetimeStart));
 
       if (!mounted) return;
@@ -100,22 +100,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String? get _avatarUrl => MediaUrlUtils.normalizeFirstUrl(_profile?['media']);
-
-  String get _initials {
-    final p = _profile;
-    if (p == null) return '?';
-    final parts = <String>[];
-    for (final key in ['surname', 'name']) {
-      final t = (p[key] ?? '').toString().trim();
-      if (t.isNotEmpty) parts.add(t.substring(0, 1));
-    }
-    if (parts.isEmpty) {
-      final e = (p['email'] ?? '').toString().trim();
-      if (e.isNotEmpty) return e[0].toUpperCase();
-      return '?';
-    }
-    return parts.take(2).join().toUpperCase();
-  }
 
   String get _displayName {
     final p = _profile;
@@ -227,7 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingIndicator(size: 32)
           : RefreshIndicator(
               onRefresh: _loadProfile,
               child: ListView(
@@ -235,26 +219,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   _ProfileHeader(
                     avatarUrl: _avatarUrl,
-                    initials: _initials,
                     displayName: _displayName,
                     position: _optionalField('position'),
                     birthday: _parseBirthday(),
                     email: _optionalField('email', altKeys: ['mail']),
-                    phone: _optionalField('phone', altKeys: ['mobile', 'tel', 'telephone']),
+                    phone: _optionalField(
+                      'phone',
+                      altKeys: ['mobile', 'tel', 'telephone'],
+                    ),
                     status: _statusLabel,
                   ),
                   if (_bookingsLoading)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: AppLoadingIndicator(),
                     )
                   else if (_upcomingBookings.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     Text(
                       'Ближайшие брони',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     ..._upcomingBookings.map(
@@ -286,7 +272,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: const Text('Выйти из аккаунта'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Theme.of(context).colorScheme.error,
-                      side: BorderSide(color: Theme.of(context).colorScheme.error),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -299,7 +287,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 class _ProfileHeader extends StatelessWidget {
   final String? avatarUrl;
-  final String initials;
   final String displayName;
   final String? position;
   final DateTime? birthday;
@@ -309,7 +296,6 @@ class _ProfileHeader extends StatelessWidget {
 
   const _ProfileHeader({
     required this.avatarUrl,
-    required this.initials,
     required this.displayName,
     this.position,
     this.birthday,
@@ -321,11 +307,6 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasAvatar = (avatarUrl ?? '').trim().isNotEmpty;
-    final initialsStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
-          color: cs.onPrimaryContainer,
-          fontWeight: FontWeight.w600,
-        );
 
     return Card(
       child: Padding(
@@ -333,25 +314,10 @@ class _ProfileHeader extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 88,
-              height: 88,
-              child: CircleAvatar(
-                radius: 44,
-                backgroundColor: cs.primaryContainer,
-                child: hasAvatar
-                    ? ClipOval(
-                        child: Image.network(
-                          avatarUrl!,
-                          width: 88,
-                          height: 88,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Text(initials, style: initialsStyle),
-                        ),
-                      )
-                    : Text(initials, style: initialsStyle),
-              ),
+            MemberAvatar(
+              displayName: displayName,
+              avatarUrl: avatarUrl,
+              radius: 44,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -361,16 +327,16 @@ class _ProfileHeader extends StatelessWidget {
                   Text(
                     displayName,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   if ((position ?? '').isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       position!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 10),
@@ -391,7 +357,11 @@ class _ProfileHeader extends StatelessWidget {
                     ),
                   if ((status ?? '').isNotEmpty)
                     _InfoIconRow(
-                      icon: Icon(Icons.badge_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      icon: Icon(
+                        Icons.badge_outlined,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                       text: status!,
                     ),
                 ],
@@ -423,10 +393,7 @@ class _InfoIconRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
           ),
         ],
       ),
@@ -467,16 +434,16 @@ class _UpcomingBookingTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       timeLabel,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurface,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     if ((booking.objectName ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 1),
@@ -485,9 +452,9 @@ class _UpcomingBookingTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: cs.onSurface,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ],
