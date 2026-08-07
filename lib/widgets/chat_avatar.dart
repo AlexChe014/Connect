@@ -8,7 +8,10 @@ import 'package:flutter/material.dart';
 String chatInitials(Chat c) {
   final t = c.title.trim();
   if (t.isEmpty) return '?';
-  final parts = t.split(RegExp(r'\s+')).where((p) => p.trim().isNotEmpty).toList();
+  final parts = t
+      .split(RegExp(r'\s+'))
+      .where((p) => p.trim().isNotEmpty)
+      .toList();
   if (parts.isEmpty) return '?';
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -50,43 +53,23 @@ String? chatAvatarBestUrl(Chat c) {
   return null;
 }
 
-class ChatAvatar extends StatelessWidget {
-  const ChatAvatar({
-    super.key,
-    required this.chat,
-    this.radius = 22,
+/// Заглушка из инициалов на цветном фоне (общий фоллбэк для аватаров).
+class _InitialsAvatar extends StatelessWidget {
+  const _InitialsAvatar({
+    required this.initials,
+    required this.backgroundColor,
+    required this.radius,
   });
 
-  final Chat chat;
+  final String initials;
+  final Color backgroundColor;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    final url = chatAvatarBestUrl(chat);
-    if (url != null) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundColor: Colors.transparent,
-        backgroundImage: NetworkImage(url),
-        onBackgroundImageError: (error, stackTrace) {},
-      );
-    }
-
-    final path = chatAvatarBestPath(chat);
-    if (path != null && !kIsWeb) {
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: FileImage(File(path)),
-        backgroundColor: Colors.transparent,
-        onBackgroundImageError: (error, stackTrace) {},
-      );
-    }
-
-    final initials = chatInitials(chat);
-    final bg = chatAvatarColor(chat.title);
     return CircleAvatar(
       radius: radius,
-      backgroundColor: bg,
+      backgroundColor: backgroundColor,
       child: Text(
         initials,
         style: TextStyle(
@@ -100,8 +83,59 @@ class ChatAvatar extends StatelessWidget {
   }
 }
 
+class ChatAvatar extends StatefulWidget {
+  const ChatAvatar({super.key, required this.chat, this.radius = 22});
+
+  final Chat chat;
+  final double radius;
+
+  @override
+  State<ChatAvatar> createState() => _ChatAvatarState();
+}
+
+class _ChatAvatarState extends State<ChatAvatar> {
+  bool _imageFailed = false;
+
+  Widget _fallback() => _InitialsAvatar(
+    initials: chatInitials(widget.chat),
+    backgroundColor: chatAvatarColor(widget.chat.title),
+    radius: widget.radius,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_imageFailed) {
+      final url = chatAvatarBestUrl(widget.chat);
+      if (url != null) {
+        return CircleAvatar(
+          radius: widget.radius,
+          backgroundColor: Colors.transparent,
+          backgroundImage: NetworkImage(url),
+          onBackgroundImageError: (error, stackTrace) {
+            if (mounted) setState(() => _imageFailed = true);
+          },
+        );
+      }
+
+      final path = chatAvatarBestPath(widget.chat);
+      if (path != null && !kIsWeb) {
+        return CircleAvatar(
+          radius: widget.radius,
+          backgroundImage: FileImage(File(path)),
+          backgroundColor: Colors.transparent,
+          onBackgroundImageError: (error, stackTrace) {
+            if (mounted) setState(() => _imageFailed = true);
+          },
+        );
+      }
+    }
+
+    return _fallback();
+  }
+}
+
 /// Аватар участника по имени и URL.
-class MemberAvatar extends StatelessWidget {
+class MemberAvatar extends StatefulWidget {
   const MemberAvatar({
     super.key,
     required this.displayName,
@@ -114,31 +148,36 @@ class MemberAvatar extends StatelessWidget {
   final double radius;
 
   @override
+  State<MemberAvatar> createState() => _MemberAvatarState();
+}
+
+class _MemberAvatarState extends State<MemberAvatar> {
+  bool _imageFailed = false;
+
+  @override
+  void didUpdateWidget(MemberAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.avatarUrl != widget.avatarUrl) _imageFailed = false;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final url = avatarUrl?.trim();
-    if (url != null && url.isNotEmpty) {
+    final url = widget.avatarUrl?.trim();
+    if (!_imageFailed && url != null && url.isNotEmpty) {
       return CircleAvatar(
-        radius: radius,
+        radius: widget.radius,
         backgroundColor: Colors.transparent,
         backgroundImage: NetworkImage(url),
-        onBackgroundImageError: (error, stackTrace) {},
+        onBackgroundImageError: (error, stackTrace) {
+          if (mounted) setState(() => _imageFailed = true);
+        },
       );
     }
 
-    final initials = userInitials(displayName);
-    final bg = chatAvatarColor(displayName);
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: bg,
-      child: Text(
-        initials,
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: radius * 0.75,
-          height: 1,
-        ),
-      ),
+    return _InitialsAvatar(
+      initials: userInitials(widget.displayName),
+      backgroundColor: chatAvatarColor(widget.displayName),
+      radius: widget.radius,
     );
   }
 }

@@ -8,6 +8,9 @@ import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/chat_service.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
+import '../widgets/chat_avatar.dart';
 import 'employee_detail_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
@@ -151,9 +154,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
     if (!mounted) return;
     if (chat == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть чат')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Не удалось открыть чат')));
       return;
     }
     await Navigator.of(context).push<void>(
@@ -182,13 +185,19 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
   }
 
-  Widget _buildListContent({required bool showInlineTitle}) {
+  Widget _buildResults() {
     if (_isInitialLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList();
     }
 
-    final headerCount = (showInlineTitle ? 1 : 0) + 1;
-    final itemCount = headerCount + _items.length + 1;
+    if (_items.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.people_outline,
+        message: _appliedQ.isEmpty
+            ? 'Пока нет сотрудников'
+            : 'Никого не нашлось по запросу «$_appliedQ»',
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -198,43 +207,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       },
       child: ListView.builder(
         controller: _scrollController,
-        padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
-        itemCount: itemCount,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        itemCount: _items.length + 1,
         itemBuilder: (context, index) {
-          if (showInlineTitle && index == 0) {
-            final theme = Theme.of(context);
-            final appBarTheme = theme.appBarTheme;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
-              child: SafeArea(
-                bottom: false,
-                child: SizedBox(
-                  height: kToolbarHeight,
-                  child: Center(
-                    child: Text(
-                      'Сотрудники',
-                      style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          final base = showInlineTitle ? 1 : 0;
-          final afterHeader = index - base;
-
-          if (afterHeader == 0) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: widget.showAppBar ? 0 : 12),
-              child: _buildSearchBar(context),
-            );
-          }
-
-          final listIndex = afterHeader - 1;
-          if (listIndex < _items.length) {
-            final user = _items[listIndex];
+          if (index < _items.length) {
+            final user = _items[index];
             return _EmployeeTile(
               user: user,
               onTap: () {
@@ -251,30 +228,63 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           if (!_isLoadingMore) return const SizedBox(height: 24);
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
+            child: AppLoadingIndicator(size: 20),
           );
         },
       ),
     );
   }
 
+  Widget _buildHeader({required bool showInlineTitle}) {
+    final theme = Theme.of(context);
+    final appBarTheme = theme.appBarTheme;
+
+    return Container(
+      color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            if (showInlineTitle)
+              SizedBox(
+                height: kToolbarHeight,
+                child: Center(
+                  child: Text(
+                    'Сотрудники',
+                    style:
+                        appBarTheme.titleTextStyle ??
+                        theme.textTheme.titleLarge,
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: _buildSearchBar(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody({required bool showInlineTitle}) {
+    return Column(
+      children: [
+        _buildHeader(showInlineTitle: showInlineTitle),
+        const Divider(height: 1),
+        Expanded(child: _buildResults()),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.showAppBar) {
-      return _buildListContent(showInlineTitle: true);
+      return _buildBody(showInlineTitle: true);
     }
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Сотрудники'),
-        centerTitle: true,
-      ),
-      body: _buildListContent(showInlineTitle: false),
+      appBar: AppBar(title: const Text('Сотрудники'), centerTitle: true),
+      body: _buildBody(showInlineTitle: false),
     );
   }
 }
@@ -293,7 +303,6 @@ class _EmployeeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasAvatar = user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -307,30 +316,10 @@ class _EmployeeTile extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  CircleAvatar(
+                  MemberAvatar(
+                    displayName: user.fullName,
+                    avatarUrl: user.avatarUrl,
                     radius: 24,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: hasAvatar
-                        ? ClipOval(
-                            child: Image.network(
-                              user.avatarUrl!,
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Text(
-                                user.initials,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  color: theme.colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ),
-                          )
-                        : Text(
-                            user.initials,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                          ),
                   ),
                   Positioned(
                     right: -2,
@@ -339,7 +328,9 @@ class _EmployeeTile extends StatelessWidget {
                       width: 14,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: user.isOnline ? const Color(0xFF34C759) : theme.colorScheme.outline,
+                        color: user.isOnline
+                            ? const Color(0xFF34C759)
+                            : theme.colorScheme.outline,
                         shape: BoxShape.circle,
                         border: Border.all(color: theme.cardColor, width: 2),
                       ),
@@ -351,7 +342,9 @@ class _EmployeeTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   user.fullName,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
