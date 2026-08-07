@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -109,6 +111,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   late int _currentIndex;
   late _HomeSection _homeSection;
+  bool _isDrawerOpen = false;
 
   @override
   void initState() {
@@ -156,6 +159,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
+      drawerScrimColor: Colors.transparent,
+      onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
         child: SafeArea(
           child: ListView(
@@ -243,21 +248,34 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         ),
       ),
-      body: SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final content = body;
-            if (constraints.maxWidth < 900) return content;
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: content,
+      body: Stack(
+        children: [
+          SafeArea(
+            top: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final content = body;
+                if (constraints.maxWidth < 900) return content;
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: content,
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_isDrawerOpen)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(color: Colors.black.withValues(alpha: 0.05)),
+                ),
               ),
-            );
-          },
-        ),
+            ),
+        ],
       ),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
