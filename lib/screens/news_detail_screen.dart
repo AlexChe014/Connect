@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -271,13 +273,41 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: AppColors.cardPhotoShadow,
                             ),
-                            child: AspectRatio(
-                              aspectRatio: 16 / 9,
-                              child: AppNetworkImage(
-                                url: _news.imageUrl,
-                                width: double.infinity,
-                                height: double.infinity,
-                                borderRadius: 16,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                // Фото целиком (contain) + блюр-копия того же
+                                // снимка по краям — портретные фото не
+                                // обрезаются, но карточка остаётся 16:9.
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    ImageFiltered(
+                                      imageFilter: ImageFilter.blur(
+                                        sigmaX: 24,
+                                        sigmaY: 24,
+                                      ),
+                                      child: AppNetworkImage(
+                                        url: _news.imageUrl,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    ColoredBox(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                    ),
+                                    AppNetworkImage(
+                                      url: _news.imageUrl,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

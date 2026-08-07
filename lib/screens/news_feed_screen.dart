@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -452,16 +454,31 @@ class _NewsCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Фиксированное соотношение сторон — иначе портретные фото
-              // растягивают карточку почти на весь экран.
+              // Фото целиком (contain) + блюр-копия того же снимка по краям —
+              // портретные фото не обрезаются, но карточка остаётся 16:9.
               if (hasImage)
                 AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: AppNetworkImage(
-                    url: news.imageUrl,
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ImageFiltered(
+                        imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                        child: AppNetworkImage(
+                          url: news.imageUrl,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      ColoredBox(color: Colors.black.withValues(alpha: 0.18)),
+                      AppNetworkImage(
+                        url: news.imageUrl,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.contain,
+                      ),
+                    ],
                   ),
                 ),
               Padding(
