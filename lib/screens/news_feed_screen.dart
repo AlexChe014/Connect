@@ -657,7 +657,7 @@ class _LikeButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final iconColor = isLiked ? cs.primary : cs.outline;
+    final iconColor = isLiked ? cs.primary : cs.onSurfaceVariant;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
