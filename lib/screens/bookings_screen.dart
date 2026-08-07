@@ -99,15 +99,13 @@ class _BookingsScreenState extends State<BookingsScreen> {
       _selectedDate = DateTime.now();
       final slots = BookingTimeUtils.slotsForDate(_selectedDate);
       final now = DateTime.now();
+      final lastIndex = slots.length - 1;
       _startSlotIndex = BookingTimeUtils.nearestSlotIndex(
         slots,
         now,
         floorToPrevious: false,
-      );
-      _endSlotIndex = (_startSlotIndex + 1).clamp(
-        0,
-        (slots.length - 1).clamp(0, 9999),
-      );
+      ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
+      _endSlotIndex = _startSlotIndex + 1;
 
       if (!mounted) return;
       setState(() {
@@ -311,11 +309,18 @@ class _BookingsScreenState extends State<BookingsScreen> {
     }
 
     final slots = BookingTimeUtils.slotsForDate(_selectedDate);
-    final minStartIndex = BookingTimeUtils.minStartIndex(slots, _selectedDate);
+    final lastIndex = slots.length - 1;
+    final minStartIndex = BookingTimeUtils.minStartIndex(
+      slots,
+      _selectedDate,
+    ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
 
-    final startIndex = _startSlotIndex.clamp(minStartIndex, slots.length - 1);
-    final minEndIndex = (startIndex + 1).clamp(0, slots.length - 1);
-    final endIndex = _endSlotIndex.clamp(minEndIndex, slots.length - 1);
+    final startIndex = _startSlotIndex.clamp(
+      minStartIndex,
+      (lastIndex - 1).clamp(0, lastIndex),
+    );
+    final minEndIndex = startIndex + 1;
+    final endIndex = _endSlotIndex.clamp(minEndIndex, lastIndex);
 
     if (startIndex != _startSlotIndex || endIndex != _endSlotIndex) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -380,29 +385,28 @@ class _BookingsScreenState extends State<BookingsScreen> {
                   setState(() {
                     _selectedDate = d;
                     final newSlots = BookingTimeUtils.slotsForDate(d);
+                    final lastIndex = newSlots.length - 1;
                     final minStartIndex = BookingTimeUtils.minStartIndex(
                       newSlots,
                       d,
-                    );
+                    ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
                     _startSlotIndex = _startSlotIndex.clamp(
                       minStartIndex,
-                      newSlots.length - 1,
+                      (lastIndex - 1).clamp(0, lastIndex),
                     );
-                    _endSlotIndex = (_startSlotIndex + 1).clamp(
-                      0,
-                      newSlots.length - 1,
-                    );
+                    _endSlotIndex = _startSlotIndex + 1;
                   });
                   await _loadResults();
                 },
                 onStartTimeChanged: (i) async {
                   setState(() {
-                    _startSlotIndex = i;
+                    final lastIndex = slots.length - 1;
+                    _startSlotIndex = i.clamp(
+                      0,
+                      (lastIndex - 1).clamp(0, lastIndex),
+                    );
                     if (_endSlotIndex <= _startSlotIndex) {
-                      _endSlotIndex = (_startSlotIndex + 1).clamp(
-                        0,
-                        slots.length - 1,
-                      );
+                      _endSlotIndex = _startSlotIndex + 1;
                     }
                   });
                   await _loadResults();
