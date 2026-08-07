@@ -1,98 +1,93 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tabler_icons/flutter_tabler_icons.dart';
 
-import 'connect_icons.dart';
-
-/// Иконки из шрифта [ConnectIcons], сгруппированные по разделам приложения.
+/// Иконки из набора Tabler Icons — единая толщина линий, самый большой
+/// открытый набор (MIT), технический/линейный стиль.
 abstract final class AppIcons {
   AppIcons._();
 
   // 01 — главное меню / навигация
-  static const IconData dashboard = ConnectIcons.icon011Dashboard;
-  static const IconData bookings = ConnectIcons.icon012CalendarCheck;
-  static const IconData news = ConnectIcons.icon014FileText;
-  static const IconData documents = ConnectIcons.icon017FileCheck;
-  static const IconData calendar = ConnectIcons.icon018CalendarGrid;
-  static const IconData user = ConnectIcons.icon019User;
-  static const IconData mailAt = ConnectIcons.icon016AtSign;
-  static const IconData chat = ConnectIcons.icon0111MessageCircle;
-  static const IconData settings = ConnectIcons.icon0117Settings;
-  static const IconData mapPin = ConnectIcons.icon0118MapPin;
-  static const IconData users = ConnectIcons.icon0119Users;
-  static const IconData settingsFilled = ConnectIcons.icon01SettingsFilled;
+  static const IconData dashboard = TablerIcons.news;
+  static const IconData bookings = TablerIcons.calendar_check;
+  static const IconData news = TablerIcons.photo;
+  static const IconData documents = TablerIcons.file_text;
+  static const IconData calendar = TablerIcons.calendar;
+  static const IconData user = TablerIcons.user_circle;
+  static const IconData mailAt = TablerIcons.mail;
+  static const IconData chat = TablerIcons.message_circle;
+  static const IconData settings = TablerIcons.settings;
+  static const IconData mapPin = TablerIcons.map_pin;
+  static const IconData users = TablerIcons.users;
+  static const IconData settingsFilled = TablerIcons.settings_filled;
 
   // 03 — избранное / поиск
-  static const IconData search = ConnectIcons.icon03Search;
-  static const IconData favorite = ConnectIcons.icon03Favorite;
-  static const IconData starOutline = ConnectIcons.icon03StarOutline;
-  static const IconData starFilled = ConnectIcons.icon03StarFilled;
+  static const IconData search = TablerIcons.search;
+  static const IconData favorite = TablerIcons.heart;
+  static const IconData starOutline = TablerIcons.star;
+  static const IconData starFilled = TablerIcons.star_filled;
 
   // 04 — сотрудники
-  static const IconData birthdayCake = ConnectIcons.icon04BirthdayCake;
-  static const IconData phone = ConnectIcons.icon04Phone;
-  static const IconData staffMail = ConnectIcons.icon04Mail;
-  static const IconData staffMessage = ConnectIcons.icon04Message;
-  static const IconData fieldTime = ConnectIcons.icon04FieldTime;
-  static const IconData home = ConnectIcons.icon04Home;
-  static const IconData car = ConnectIcons.icon04Car;
+  static const IconData birthdayCake = TablerIcons.cake;
+  static const IconData phone = TablerIcons.phone;
+  static const IconData staffMail = TablerIcons.mail;
+  static const IconData staffMessage = TablerIcons.message;
+  static const IconData fieldTime = TablerIcons.clock;
+  static const IconData home = TablerIcons.home;
+  static const IconData car = TablerIcons.car;
 
   // 05 — чат
-  static const IconData attachment = ConnectIcons.icon05Attachment;
-  static const IconData close = ConnectIcons.icon05Close;
-  static const IconData download = ConnectIcons.icon05Download;
-  static const IconData smile = ConnectIcons.icon05Smile;
-  static const IconData thumbtack = ConnectIcons.icon05Thumbtack;
+  static const IconData attachment = TablerIcons.paperclip;
+  static const IconData close = TablerIcons.x;
+  static const IconData download = TablerIcons.download;
+  static const IconData smile = TablerIcons.mood_smile;
+  static const IconData thumbtack = TablerIcons.pin;
 
   // 06 — действия в чате
-  static const IconData copy = ConnectIcons.icon06Copy;
-  static const IconData reply = ConnectIcons.icon06Reply;
-  static const IconData share = ConnectIcons.icon06Share;
+  static const IconData copy = TablerIcons.copy;
+  static const IconData reply = TablerIcons.corner_up_left;
+  static const IconData share = TablerIcons.share;
 
   // 07 — календарь
-  static const IconData date = ConnectIcons.icon07Date;
-  static const IconData locationPin = ConnectIcons.icon07LocationPin;
-  static const IconData attendees = ConnectIcons.icon07Attendees;
-  static const IconData calendarList = ConnectIcons.icon07List;
+  static const IconData date = TablerIcons.calendar;
+  static const IconData locationPin = TablerIcons.map_pin;
+  static const IconData attendees = TablerIcons.users;
+  static const IconData calendarList = TablerIcons.list;
 
   // 08 — профиль
-  static const IconData logout = ConnectIcons.icon08Logout;
-  static const IconData profileMail = ConnectIcons.icon08Mail;
-  static const IconData profileAdd = ConnectIcons.icon08Add;
-  static const IconData profileSettings = ConnectIcons.icon08Settings;
+  static const IconData logout = TablerIcons.logout;
+  static const IconData profileMail = TablerIcons.mail;
+  static const IconData profileAdd = TablerIcons.circle_plus;
+  static const IconData profileSettings = TablerIcons.settings;
 
   // 09 — лента
-  static const IconData eye = ConnectIcons.icon09Eye;
-  static const IconData like = ConnectIcons.icon09Like;
-  static const IconData send = ConnectIcons.icon09Send;
-  static const IconData feedSearch = ConnectIcons.icon09Search;
-  static const IconData feedList = ConnectIcons.icon09List;
+  static const IconData eye = TablerIcons.eye;
+  static const IconData like = TablerIcons.thumb_up;
+  static const IconData send = TablerIcons.send;
+  static const IconData feedSearch = TablerIcons.search;
+  static const IconData feedList = TablerIcons.list;
 
   // 10 — бронирование
-  static const IconData bookingMap = ConnectIcons.icon10Map;
-  static const IconData sliders = ConnectIcons.icon10Sliders;
-  static const IconData bookingClose = ConnectIcons.icon10Close;
-  static const IconData bookingAttendees = ConnectIcons.icon10Attendees;
+  static const IconData bookingMap = TablerIcons.map_pin;
+  static const IconData sliders = TablerIcons.adjustments;
+  static const IconData bookingClose = TablerIcons.x;
+  static const IconData bookingAttendees = TablerIcons.users;
 
   // 12 — безопасность
-  static const IconData info = ConnectIcons.icon12Info;
+  static const IconData info = TablerIcons.info_circle;
 
   // 13 — почта
-  static const IconData mailAdd = ConnectIcons.icon13Add;
-  static const IconData compose = ConnectIcons.icon13Compose;
-  static const IconData refresh = ConnectIcons.icon13Refresh;
+  static const IconData mailAdd = TablerIcons.circle_plus;
+  static const IconData compose = TablerIcons.edit;
+  static const IconData refresh = TablerIcons.refresh;
 
   // 14 — коннектор
-  static const IconData cameraOn = ConnectIcons.icon14CameraOn;
-  static const IconData videoMeeting = ConnectIcons.icon14VideoMeeting;
+  static const IconData cameraOn = TablerIcons.camera;
+  static const IconData videoMeeting = TablerIcons.video;
 }
 
 /// Иконка из [AppIcons] с поддержкой размера и цвета из [IconTheme].
 class AppIcon extends StatelessWidget {
-  const AppIcon(
-    this.icon, {
-    super.key,
-    this.size,
-    this.color,
-  });
+  const AppIcon(this.icon, {super.key, this.size, this.color});
 
   final IconData icon;
   final double? size;
