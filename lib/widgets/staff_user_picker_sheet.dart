@@ -132,9 +132,9 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -144,7 +144,9 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
 
     setState(() => _isLoadingMore = true);
     try {
-      final Paginated<StaffUser> page = await UsersRepository.instance.getPage(url: url);
+      final Paginated<StaffUser> page = await UsersRepository.instance.getPage(
+        url: url,
+      );
       if (!mounted) return;
       setState(() {
         _items = [..._items, ...page.data];
@@ -159,9 +161,9 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
 
   void _onUserTap(StaffUser user) {
     if (_selectedIds.contains(user.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Участник уже добавлен')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Участник уже добавлен')));
       return;
     }
     if (user.idAsInt == null) {
@@ -184,9 +186,9 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
               'Участники',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
           Padding(
@@ -197,8 +199,10 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Фамилия, имя или email',
-                prefixIcon: const AppIcon(AppIcons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                prefixIcon: AppIcon(AppIcons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 isDense: true,
               ),
               onSubmitted: (_) {
@@ -213,40 +217,40 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                    ? Center(
-                        child: Text(
-                          _appliedQ.isEmpty
-                              ? 'Сотрудники не найдены'
-                              : 'Никого не найдено по запросу',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        itemCount: _items.length + (_isLoadingMore ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index >= _items.length) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(
-                                child: SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              ),
-                            );
-                          }
-                          final user = _items[index];
-                          final isSelected = _selectedIds.contains(user.id);
-                          return _PickerUserTile(
-                            user: user,
-                            isSelected: isSelected,
-                            onTap: () => _onUserTap(user),
-                          );
-                        },
-                      ),
+                ? Center(
+                    child: Text(
+                      _appliedQ.isEmpty
+                          ? 'Сотрудники не найдены'
+                          : 'Никого не найдено по запросу',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: _items.length + (_isLoadingMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index >= _items.length) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        );
+                      }
+                      final user = _items[index];
+                      final isSelected = _selectedIds.contains(user.id);
+                      return _PickerUserTile(
+                        user: user,
+                        isSelected: isSelected,
+                        onTap: () => _onUserTap(user),
+                      );
+                    },
+                  ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -280,9 +284,7 @@ class _PickerUserTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
-      color: isSelected
-          ? theme.colorScheme.surfaceContainerHighest
-          : null,
+      color: isSelected ? theme.colorScheme.surfaceContainerHighest : null,
       child: InkWell(
         onTap: isSelected ? null : onTap,
         child: Padding(

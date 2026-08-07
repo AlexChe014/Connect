@@ -93,7 +93,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     }
 
     if (_chat.chats.isEmpty) {
-      return const AppEmptyState(icon: AppIcons.chat, message: 'Нет чатов');
+      return AppEmptyState(icon: AppIcons.chat, message: 'Нет чатов');
     }
 
     return ListView.separated(
@@ -131,7 +131,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         actions: [
           IconButton(
             tooltip: 'Новый диалог',
-            icon: const AppIcon(AppIcons.compose),
+            icon: AppIcon(AppIcons.compose),
             onPressed: _openNewDirect,
           ),
         ],
@@ -142,7 +142,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openNewGroup,
-        icon: const AppIcon(AppIcons.users),
+        icon: AppIcon(AppIcons.users),
         label: const Text('Группа'),
       ),
     );

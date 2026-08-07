@@ -1,98 +1,116 @@
 import 'package:flutter/material.dart';
 
-import 'connect_icons.dart';
+// Не импортируем package:phosphor_flutter/phosphor_flutter.dart — его классы
+// (`PhosphorIconData extends IconData`) не компилируются на новых версиях
+// Dart, где `IconData` стал `final class` и больше не наследуется. Пакет
+// нужен здесь только как источник самого файла шрифта (объявлен в его
+// pubspec.yaml и подхватывается Flutter автоматически), а `IconData`
+// собираем сами напрямую по кодпоинтам.
+const String _kRegular = 'PhosphorRegular';
+const String _kFill = 'PhosphorFill';
+const String _kPhosphorPackage = 'phosphor_flutter';
 
-/// Иконки из шрифта [ConnectIcons], сгруппированные по разделам приложения.
+IconData _regular(int codePoint) => IconData(
+  codePoint,
+  fontFamily: _kRegular,
+  fontPackage: _kPhosphorPackage,
+  matchTextDirection: true,
+);
+
+IconData _fill(int codePoint) => IconData(
+  codePoint,
+  fontFamily: _kFill,
+  fontPackage: _kPhosphorPackage,
+  matchTextDirection: true,
+);
+
+/// Семантические иконки приложения на базе набора Phosphor
+/// (стиль Regular — единая толщина линий, современный SaaS-вид).
 abstract final class AppIcons {
   AppIcons._();
 
   // 01 — главное меню / навигация
-  static const IconData dashboard = ConnectIcons.icon011Dashboard;
-  static const IconData bookings = ConnectIcons.icon012CalendarCheck;
-  static const IconData news = ConnectIcons.icon014FileText;
-  static const IconData documents = ConnectIcons.icon017FileCheck;
-  static const IconData calendar = ConnectIcons.icon018CalendarGrid;
-  static const IconData user = ConnectIcons.icon019User;
-  static const IconData mailAt = ConnectIcons.icon016AtSign;
-  static const IconData chat = ConnectIcons.icon0111MessageCircle;
-  static const IconData settings = ConnectIcons.icon0117Settings;
-  static const IconData mapPin = ConnectIcons.icon0118MapPin;
-  static const IconData users = ConnectIcons.icon0119Users;
-  static const IconData settingsFilled = ConnectIcons.icon01SettingsFilled;
+  static final IconData dashboard = _regular(0xe344); // newspaper
+  static final IconData bookings = _regular(0xe712); // calendarCheck
+  static final IconData news = _regular(0xe2ca); // image
+  static final IconData documents = _regular(0xe23a); // fileText
+  static final IconData calendar = _regular(0xe10a); // calendarBlank
+  static final IconData user = _regular(0xe4c4); // userCircle
+  static final IconData mailAt = _regular(0xe218); // envelopeSimple
+  static final IconData chat = _regular(0xe168); // chatCircle
+  static final IconData settings = _regular(0xe270); // gear
+  static final IconData mapPin = _regular(0xe316); // mapPin
+  static final IconData users = _regular(0xe68e); // usersThree
+  static final IconData settingsFilled = _fill(0xe270); // gear
 
   // 03 — избранное / поиск
-  static const IconData search = ConnectIcons.icon03Search;
-  static const IconData favorite = ConnectIcons.icon03Favorite;
-  static const IconData starOutline = ConnectIcons.icon03StarOutline;
-  static const IconData starFilled = ConnectIcons.icon03StarFilled;
+  static final IconData search = _regular(0xe30c); // magnifyingGlass
+  static final IconData favorite = _regular(0xe2a8); // heart
+  static final IconData starOutline = _regular(0xe46a); // star
+  static final IconData starFilled = _fill(0xe46a); // star
 
   // 04 — сотрудники
-  static const IconData birthdayCake = ConnectIcons.icon04BirthdayCake;
-  static const IconData phone = ConnectIcons.icon04Phone;
-  static const IconData staffMail = ConnectIcons.icon04Mail;
-  static const IconData staffMessage = ConnectIcons.icon04Message;
-  static const IconData fieldTime = ConnectIcons.icon04FieldTime;
-  static const IconData home = ConnectIcons.icon04Home;
-  static const IconData car = ConnectIcons.icon04Car;
+  static final IconData birthdayCake = _regular(0xe780); // cake
+  static final IconData phone = _regular(0xe3b8); // phone
+  static final IconData staffMail = _regular(0xe218); // envelopeSimple
+  static final IconData staffMessage = _regular(0xe16e); // chatCircleText
+  static final IconData fieldTime = _regular(0xed2c); // clockCountdown
+  static final IconData home = _regular(0xe2c6); // houseSimple
+  static final IconData car = _regular(0xe114); // carSimple
 
   // 05 — чат
-  static const IconData attachment = ConnectIcons.icon05Attachment;
-  static const IconData close = ConnectIcons.icon05Close;
-  static const IconData download = ConnectIcons.icon05Download;
-  static const IconData smile = ConnectIcons.icon05Smile;
-  static const IconData thumbtack = ConnectIcons.icon05Thumbtack;
+  static final IconData attachment = _regular(0xe39a); // paperclip
+  static final IconData close = _regular(0xe4f6); // x
+  static final IconData download = _regular(0xe20c); // downloadSimple
+  static final IconData smile = _regular(0xe436); // smiley
+  static final IconData thumbtack = _regular(0xe3e2); // pushPin
 
   // 06 — действия в чате
-  static const IconData copy = ConnectIcons.icon06Copy;
-  static const IconData reply = ConnectIcons.icon06Reply;
-  static const IconData share = ConnectIcons.icon06Share;
+  static final IconData copy = _regular(0xe1ca); // copy
+  static final IconData reply = _regular(0xe024); // arrowBendUpLeft
+  static final IconData share = _regular(0xe408); // shareNetwork
 
   // 07 — календарь
-  static const IconData date = ConnectIcons.icon07Date;
-  static const IconData locationPin = ConnectIcons.icon07LocationPin;
-  static const IconData attendees = ConnectIcons.icon07Attendees;
-  static const IconData calendarList = ConnectIcons.icon07List;
+  static final IconData date = _regular(0xe7b4); // calendarDots
+  static final IconData locationPin = _regular(0xe316); // mapPin
+  static final IconData attendees = _regular(0xe68e); // usersThree
+  static final IconData calendarList = _regular(0xe2f2); // listBullets
 
   // 08 — профиль
-  static const IconData logout = ConnectIcons.icon08Logout;
-  static const IconData profileMail = ConnectIcons.icon08Mail;
-  static const IconData profileAdd = ConnectIcons.icon08Add;
-  static const IconData profileSettings = ConnectIcons.icon08Settings;
+  static final IconData logout = _regular(0xe42a); // signOut
+  static final IconData profileMail = _regular(0xe218); // envelopeSimple
+  static final IconData profileAdd = _regular(0xe3d6); // plusCircle
+  static final IconData profileSettings = _regular(0xe272); // gearSix
 
   // 09 — лента
-  static const IconData eye = ConnectIcons.icon09Eye;
-  static const IconData like = ConnectIcons.icon09Like;
-  static const IconData send = ConnectIcons.icon09Send;
-  static const IconData feedSearch = ConnectIcons.icon09Search;
-  static const IconData feedList = ConnectIcons.icon09List;
+  static final IconData eye = _regular(0xe220); // eye
+  static final IconData like = _regular(0xe48e); // thumbsUp
+  static final IconData send = _regular(0xe398); // paperPlaneTilt
+  static final IconData feedSearch = _regular(0xe30c); // magnifyingGlass
+  static final IconData feedList = _regular(0xe2f2); // listBullets
 
   // 10 — бронирование
-  static const IconData bookingMap = ConnectIcons.icon10Map;
-  static const IconData sliders = ConnectIcons.icon10Sliders;
-  static const IconData bookingClose = ConnectIcons.icon10Close;
-  static const IconData bookingAttendees = ConnectIcons.icon10Attendees;
+  static final IconData bookingMap = _regular(0xe31a); // mapTrifold
+  static final IconData sliders = _regular(0xe434); // slidersHorizontal
+  static final IconData bookingClose = _regular(0xe4f8); // xCircle
+  static final IconData bookingAttendees = _regular(0xe68c); // usersFour
 
   // 12 — безопасность
-  static const IconData info = ConnectIcons.icon12Info;
+  static final IconData info = _regular(0xe2ce); // info
 
   // 13 — почта
-  static const IconData mailAdd = ConnectIcons.icon13Add;
-  static const IconData compose = ConnectIcons.icon13Compose;
-  static const IconData refresh = ConnectIcons.icon13Refresh;
+  static final IconData mailAdd = _regular(0xe3d6); // plusCircle
+  static final IconData compose = _regular(0xebc6); // pencilSimpleLine
+  static final IconData refresh = _regular(0xe094); // arrowsClockwise
 
   // 14 — коннектор
-  static const IconData cameraOn = ConnectIcons.icon14CameraOn;
-  static const IconData videoMeeting = ConnectIcons.icon14VideoMeeting;
+  static final IconData cameraOn = _regular(0xe10e); // camera
+  static final IconData videoMeeting = _regular(0xe4da); // videoCamera
 }
 
 /// Иконка из [AppIcons] с поддержкой размера и цвета из [IconTheme].
 class AppIcon extends StatelessWidget {
-  const AppIcon(
-    this.icon, {
-    super.key,
-    this.size,
-    this.color,
-  });
+  const AppIcon(this.icon, {super.key, this.size, this.color});
 
   final IconData icon;
   final double? size;

@@ -171,11 +171,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       controller: _qController,
       textInputAction: TextInputAction.search,
       style: const TextStyle(fontSize: 14),
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         isDense: true,
         hintText: 'Фамилия, имя, отчество или почта',
         prefixIcon: AppIcon(AppIcons.search, size: 20),
-        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       ),
       onSubmitted: (_) {
         _debounce?.cancel();
@@ -356,7 +356,7 @@ class _EmployeeTile extends StatelessWidget {
               IconButton(
                 tooltip: 'Написать',
                 onPressed: onChat,
-                icon: const AppIcon(AppIcons.chat, size: 22),
+                icon: AppIcon(AppIcons.chat, size: 22),
               ),
             ],
           ),

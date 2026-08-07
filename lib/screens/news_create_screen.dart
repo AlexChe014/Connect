@@ -49,11 +49,7 @@ class _NewsCreateScreenState extends State<NewsCreateScreen> {
     for (final image in images) {
       final bytes = await image.readAsBytes();
       picked.add(
-        _PendingFile(
-          filename: image.name,
-          bytes: bytes,
-          isPicture: true,
-        ),
+        _PendingFile(filename: image.name, bytes: bytes, isPicture: true),
       );
     }
     if (!mounted || picked.isEmpty) return;
@@ -69,11 +65,7 @@ class _NewsCreateScreenState extends State<NewsCreateScreen> {
       final bytes = file.bytes;
       if (bytes == null) continue;
       picked.add(
-        _PendingFile(
-          filename: file.name,
-          bytes: bytes,
-          isPicture: false,
-        ),
+        _PendingFile(filename: file.name, bytes: bytes, isPicture: false),
       );
     }
     if (picked.isEmpty || !mounted) return;
@@ -183,13 +175,13 @@ class _NewsCreateScreenState extends State<NewsCreateScreen> {
               children: [
                 OutlinedButton.icon(
                   onPressed: _isSaving ? null : _pickPictures,
-                  icon: const AppIcon(AppIcons.attachment, size: 18),
+                  icon: AppIcon(AppIcons.attachment, size: 18),
                   label: const Text('Фото'),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _isSaving ? null : _pickDocuments,
-                  icon: const AppIcon(AppIcons.documents, size: 18),
+                  icon: AppIcon(AppIcons.documents, size: 18),
                   label: const Text('Документы'),
                 ),
               ],
@@ -204,11 +196,15 @@ class _NewsCreateScreenState extends State<NewsCreateScreen> {
                     file.isPicture ? AppIcons.news : AppIcons.documents,
                     size: 20,
                   ),
-                  title: Text(file.filename, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(
+                    file.filename,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   subtitle: Text(file.isPicture ? 'Изображение' : 'Документ'),
                   trailing: IconButton(
                     onPressed: _isSaving ? null : () => _removeFile(index),
-                    icon: const AppIcon(AppIcons.close, size: 18),
+                    icon: AppIcon(AppIcons.close, size: 18),
                   ),
                 );
               }),

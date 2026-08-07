@@ -60,22 +60,22 @@ class _ConnectAppState extends State<ConnectApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('ru', 'RU'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
       locale: const Locale('ru', 'RU'),
       initialRoute: AuthService.instance.isAuthenticated ? '/home' : '/login',
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-          final initialIndex =
-              args is Map ? (args['initialIndex'] as int?) : null;
-          final homeSection =
-              args is Map ? (args['homeSection'] as String?) : null;
-          final openNewsId =
-              args is Map ? (args['openNewsId'] as String?) : null;
+          final initialIndex = args is Map
+              ? (args['initialIndex'] as int?)
+              : null;
+          final homeSection = args is Map
+              ? (args['homeSection'] as String?)
+              : null;
+          final openNewsId = args is Map
+              ? (args['openNewsId'] as String?)
+              : null;
           return MainNavigationScreen(
             initialIndex: initialIndex ?? 0,
             initialHomeSection: homeSection,
@@ -133,10 +133,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _homeBody() {
     switch (_homeSection) {
       case _HomeSection.news:
-        return NewsFeedScreen(
-          showAppBar: false,
-          openNewsId: widget.openNewsId,
-        );
+        return NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId);
       case _HomeSection.bookings:
         return const BookingsScreen(showAppBar: false);
       case _HomeSection.employees:
@@ -166,21 +163,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                child: Column(
-                  children: [
-                    BrandingLoginLogo(height: 56),
-                  ],
-                ),
+                child: Column(children: [BrandingLoginLogo(height: 56)]),
               ),
               ListTileTheme(
                 data: const ListTileThemeData(
                   tileColor: Colors.transparent,
-                  selectedTileColor: Colors.transparent, // no background in menu
+                  selectedTileColor:
+                      Colors.transparent, // no background in menu
                 ),
                 child: Column(
                   children: [
                     ListTile(
-                      leading: const AppIcon(AppIcons.dashboard),
+                      leading: AppIcon(AppIcons.dashboard),
                       title: const Text('Лента'),
                       selected: _homeSection == _HomeSection.news,
                       onTap: () {
@@ -192,7 +186,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const AppIcon(AppIcons.bookings),
+                      leading: AppIcon(AppIcons.bookings),
                       title: const Text('Бронирования'),
                       selected: _homeSection == _HomeSection.bookings,
                       onTap: () {
@@ -204,7 +198,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const AppIcon(AppIcons.user),
+                      leading: AppIcon(AppIcons.user),
                       title: const Text('Сотрудники'),
                       selected: _homeSection == _HomeSection.employees,
                       onTap: () {
@@ -216,7 +210,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const AppIcon(AppIcons.mailAt),
+                      leading: AppIcon(AppIcons.mailAt),
                       title: const Text('Почта'),
                       selected: _homeSection == _HomeSection.mail,
                       onTap: () {
@@ -228,7 +222,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       },
                     ),
                     ListTile(
-                      leading: const AppIcon(AppIcons.documents),
+                      leading: AppIcon(AppIcons.documents),
                       title: const Text('Согласование'),
                       selected: _homeSection == _HomeSection.documents,
                       onTap: () {
@@ -268,37 +262,37 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           border: Border(top: BorderSide(color: AppColors.outline)),
         ),
         child: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          if (index == 0) {
-            _scaffoldKey.currentState?.openDrawer();
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: _LogoNavIcon(selected: false),
-            selectedIcon: _LogoNavIcon(selected: true),
-            label: '',
-          ),
-          NavigationDestination(
-            icon: AppIcon(AppIcons.calendar),
-            selectedIcon: AppIcon(AppIcons.calendar),
-            label: '',
-          ),
-          NavigationDestination(
-            icon: AppIcon(AppIcons.chat),
-            selectedIcon: AppIcon(AppIcons.chat),
-            label: '',
-          ),
-          NavigationDestination(
-            icon: AppIcon(AppIcons.user),
-            selectedIcon: AppIcon(AppIcons.user),
-            label: '',
-          ),
-        ],
-      ),
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) {
+            if (index == 0) {
+              _scaffoldKey.currentState?.openDrawer();
+              return;
+            }
+            setState(() => _currentIndex = index);
+          },
+          destinations: [
+            const NavigationDestination(
+              icon: _LogoNavIcon(selected: false),
+              selectedIcon: _LogoNavIcon(selected: true),
+              label: '',
+            ),
+            NavigationDestination(
+              icon: AppIcon(AppIcons.calendar),
+              selectedIcon: AppIcon(AppIcons.calendar),
+              label: '',
+            ),
+            NavigationDestination(
+              icon: AppIcon(AppIcons.chat),
+              selectedIcon: AppIcon(AppIcons.chat),
+              label: '',
+            ),
+            NavigationDestination(
+              icon: AppIcon(AppIcons.user),
+              selectedIcon: AppIcon(AppIcons.user),
+              label: '',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -312,9 +306,15 @@ class _LogoNavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final border = selected ? scheme.primary : scheme.outline.withValues(alpha: 0.45);
-    final fill = selected ? scheme.primary.withValues(alpha: 0.10) : Colors.transparent;
-    final fg = selected ? scheme.primary : scheme.onSurface.withValues(alpha: 0.70);
+    final border = selected
+        ? scheme.primary
+        : scheme.outline.withValues(alpha: 0.45);
+    final fill = selected
+        ? scheme.primary.withValues(alpha: 0.10)
+        : Colors.transparent;
+    final fg = selected
+        ? scheme.primary
+        : scheme.onSurface.withValues(alpha: 0.70);
 
     return Container(
       width: 30,

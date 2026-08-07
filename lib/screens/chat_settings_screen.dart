@@ -389,7 +389,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                     trailing: canRemove
                         ? IconButton(
                             icon: m.userId == selfId
-                                ? const AppIcon(AppIcons.logout)
+                                ? AppIcon(AppIcons.logout)
                                 : const Icon(Icons.person_remove_outlined),
                             tooltip: m.userId == selfId ? 'Выйти' : 'Удалить',
                             onPressed: () => _removeMember(m),

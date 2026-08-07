@@ -48,8 +48,8 @@ class _LoginScreenState extends State<LoginScreen> {
         await AuthService.instance.logout();
         if (!mounted) return;
         setState(() {
-          _errorMessage = location.message ??
-              'Не удалось подтвердить геопозицию.';
+          _errorMessage =
+              location.message ?? 'Не удалось подтвердить геопозицию.';
           _isLoading = false;
         });
         await AppFeedback.showAlert(
@@ -63,10 +63,9 @@ class _LoginScreenState extends State<LoginScreen> {
       await PushNotificationService.instance.requestPermissions();
       await PushNotificationService.instance.registerCurrentDevice();
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed(
-          '/home',
-          arguments: {'initialIndex': 3},
-        );
+        Navigator.of(
+          context,
+        ).pushReplacementNamed('/home', arguments: {'initialIndex': 3});
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -99,8 +98,9 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final maxFormWidth =
-                constraints.maxWidth >= 700 ? 480.0 : constraints.maxWidth;
+            final maxFormWidth = constraints.maxWidth >= 700
+                ? 480.0
+                : constraints.maxWidth;
 
             return Center(
               child: SingleChildScrollView(
@@ -108,7 +108,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: maxFormWidth,
-                    minHeight: (constraints.maxHeight - 48).clamp(0.0, double.infinity),
+                    minHeight: (constraints.maxHeight - 48).clamp(
+                      0.0,
+                      double.infinity,
+                    ),
                   ),
                   child: Form(
                     key: _formKey,
@@ -121,46 +124,37 @@ class _LoginScreenState extends State<LoginScreen> {
                         Text(
                           'Connect',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
+                          style: Theme.of(context).textTheme.headlineMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Корпоративный сервис для сотрудников компании',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(color: scheme.onSurfaceVariant),
                         ),
                         const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest
-                                .withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: scheme.outlineVariant,
+                            color: scheme.surfaceContainerHighest.withValues(
+                              alpha: 0.65,
                             ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: scheme.outlineVariant),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                Icons.info_outline,
-                                color: scheme.primary,
-                              ),
+                              Icon(Icons.info_outline, color: scheme.primary),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   'Приложение предназначено только для сотрудников компании. '
                                   'Вход выполняется по корпоративной учётной записи. '
                                   'Регистрация для внешних пользователей недоступна.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
+                                  style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(
                                         color: scheme.onSurfaceVariant,
                                         height: 1.35,
@@ -175,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           autocorrect: false,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Email',
                             hintText: 'user@company.com',
                             prefixIcon: AppIcon(AppIcons.profileMail),

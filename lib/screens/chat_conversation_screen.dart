@@ -345,7 +345,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   children: other
                       .map(
                         (c) => ListTile(
-                          leading: const AppIcon(AppIcons.chat),
+                          leading: AppIcon(AppIcons.chat),
                           title: Text(c.title),
                           onTap: () => Navigator.pop(context, c.id),
                         ),
@@ -377,17 +377,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 onTap: () => Navigator.pop(context, 'gallery'),
               ),
               ListTile(
-                leading: const AppIcon(AppIcons.videoMeeting),
+                leading: AppIcon(AppIcons.videoMeeting),
                 title: const Text('Видео'),
                 onTap: () => Navigator.pop(context, 'video'),
               ),
               ListTile(
-                leading: const AppIcon(AppIcons.cameraOn),
+                leading: AppIcon(AppIcons.cameraOn),
                 title: const Text('Камера'),
                 onTap: () => Navigator.pop(context, 'camera'),
               ),
               ListTile(
-                leading: const AppIcon(AppIcons.attachment),
+                leading: AppIcon(AppIcons.attachment),
                 title: const Text('Файл'),
                 onTap: () => Navigator.pop(context, 'file'),
               ),
@@ -594,10 +594,7 @@ class _ReplyBanner extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                onPressed: onClose,
-                icon: const AppIcon(AppIcons.close),
-              ),
+              IconButton(onPressed: onClose, icon: AppIcon(AppIcons.close)),
             ],
           ),
         ),
@@ -679,7 +676,7 @@ class _Composer extends StatelessWidget {
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: onSend,
-                    child: const AppIcon(
+                    child: AppIcon(
                       AppIcons.send,
                       size: 20,
                       color: Colors.white,
@@ -783,7 +780,7 @@ class _MessageTile extends StatelessWidget {
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                             ),
-                            leading: const AppIcon(AppIcons.reply, size: 22),
+                            leading: AppIcon(AppIcons.reply, size: 22),
                             title: const Text(
                               'Ответить',
                               style: TextStyle(fontSize: 15),
@@ -799,7 +796,7 @@ class _MessageTile extends StatelessWidget {
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,
                             ),
-                            leading: const AppIcon(AppIcons.share, size: 22),
+                            leading: AppIcon(AppIcons.share, size: 22),
                             title: const Text(
                               'Переслать',
                               style: TextStyle(fontSize: 15),

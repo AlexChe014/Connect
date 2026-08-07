@@ -342,17 +342,17 @@ class _ProfileHeader extends StatelessWidget {
                   const SizedBox(height: 10),
                   if (birthday != null)
                     _InfoIconRow(
-                      icon: const AppIcon(AppIcons.birthdayCake, size: 18),
+                      icon: AppIcon(AppIcons.birthdayCake, size: 18),
                       text: DateFormat('dd.MM.yyyy').format(birthday!),
                     ),
                   if ((email ?? '').isNotEmpty)
                     _InfoIconRow(
-                      icon: const AppIcon(AppIcons.profileMail, size: 18),
+                      icon: AppIcon(AppIcons.profileMail, size: 18),
                       text: email!,
                     ),
                   if ((phone ?? '').isNotEmpty)
                     _InfoIconRow(
-                      icon: const AppIcon(AppIcons.phone, size: 18),
+                      icon: AppIcon(AppIcons.phone, size: 18),
                       text: phone!,
                     ),
                   if ((status ?? '').isNotEmpty)
