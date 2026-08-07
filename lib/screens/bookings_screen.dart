@@ -11,6 +11,9 @@ import 'package:connect/repositories/bookings_repository.dart';
 import 'package:connect/repositories/infrastructure_repository.dart';
 import 'package:connect/screens/create_booking_screen.dart';
 import 'package:connect/utils/booking_time_utils.dart';
+import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_loading.dart';
+import 'package:connect/widgets/app_network_image.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key, this.showAppBar = true});
@@ -65,34 +68,46 @@ class _BookingsScreenState extends State<BookingsScreen> {
     });
 
     try {
-      final buildings = await InfrastructureRepository.instance.getActiveBuildings();
+      final buildings = await InfrastructureRepository.instance
+          .getActiveBuildings();
       if (buildings.isEmpty) {
         throw Exception('Нет активных офисов для бронирования');
       }
 
       final selectedBuilding = buildings.first;
-      final spacesAndTypes =
-          await InfrastructureRepository.instance.getActiveSpacesAndTypes(selectedBuilding.id);
+      final spacesAndTypes = await InfrastructureRepository.instance
+          .getActiveSpacesAndTypes(selectedBuilding.id);
 
       if (spacesAndTypes.spaces.isEmpty) {
-        throw Exception('В выбранном офисе нет активных этажей для бронирования');
+        throw Exception(
+          'В выбранном офисе нет активных этажей для бронирования',
+        );
       }
 
       final initialSpace = spacesAndTypes.spaces.first;
       final initialTypes = initialSpace.types;
 
       if (initialTypes.isEmpty) {
-        throw Exception('В выбранном офисе нет доступных типов объектов для бронирования');
+        throw Exception(
+          'В выбранном офисе нет доступных типов объектов для бронирования',
+        );
       }
 
-      final equipment =
-          await InfrastructureRepository.instance.getActiveEquipment(selectedBuilding.id);
+      final equipment = await InfrastructureRepository.instance
+          .getActiveEquipment(selectedBuilding.id);
 
       _selectedDate = DateTime.now();
       final slots = BookingTimeUtils.slotsForDate(_selectedDate);
       final now = DateTime.now();
-      _startSlotIndex = BookingTimeUtils.nearestSlotIndex(slots, now, floorToPrevious: false);
-      _endSlotIndex = (_startSlotIndex + 1).clamp(0, (slots.length - 1).clamp(0, 9999));
+      _startSlotIndex = BookingTimeUtils.nearestSlotIndex(
+        slots,
+        now,
+        floorToPrevious: false,
+      );
+      _endSlotIndex = (_startSlotIndex + 1).clamp(
+        0,
+        (slots.length - 1).clamp(0, 9999),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -116,11 +131,15 @@ class _BookingsScreenState extends State<BookingsScreen> {
     }
   }
 
-  DateTime _startDateTime() =>
-      BookingTimeUtils.slotAt(BookingTimeUtils.slotsForDate(_selectedDate), _startSlotIndex);
+  DateTime _startDateTime() => BookingTimeUtils.slotAt(
+    BookingTimeUtils.slotsForDate(_selectedDate),
+    _startSlotIndex,
+  );
 
-  DateTime _endDateTime() =>
-      BookingTimeUtils.slotAt(BookingTimeUtils.slotsForDate(_selectedDate), _endSlotIndex);
+  DateTime _endDateTime() => BookingTimeUtils.slotAt(
+    BookingTimeUtils.slotsForDate(_selectedDate),
+    _endSlotIndex,
+  );
 
   bool get _isTimeRangeValid {
     return _endDateTime().isAfter(_startDateTime());
@@ -134,26 +153,33 @@ class _BookingsScreenState extends State<BookingsScreen> {
     return parsed;
   }
 
-  Future<void> _loadSpacesTypesAndEquipmentForBuilding(Building building) async {
+  Future<void> _loadSpacesTypesAndEquipmentForBuilding(
+    Building building,
+  ) async {
     setState(() {
       _isBootLoading = true;
       _bootError = null;
     });
     try {
-      final spacesAndTypes =
-          await InfrastructureRepository.instance.getActiveSpacesAndTypes(building.id);
+      final spacesAndTypes = await InfrastructureRepository.instance
+          .getActiveSpacesAndTypes(building.id);
       if (spacesAndTypes.spaces.isEmpty) {
-        throw Exception('В выбранном офисе нет активных этажей для бронирования');
+        throw Exception(
+          'В выбранном офисе нет активных этажей для бронирования',
+        );
       }
 
       final initialSpace = spacesAndTypes.spaces.first;
       final initialTypes = initialSpace.types;
 
       if (initialTypes.isEmpty) {
-        throw Exception('В выбранном офисе нет доступных типов объектов для бронирования');
+        throw Exception(
+          'В выбранном офисе нет доступных типов объектов для бронирования',
+        );
       }
 
-      final equipment = await InfrastructureRepository.instance.getActiveEquipment(building.id);
+      final equipment = await InfrastructureRepository.instance
+          .getActiveEquipment(building.id);
 
       if (!mounted) return;
       setState(() {
@@ -187,7 +213,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         _resultsError = 'Дата/время окончания должно быть строго позже начала';
         _results = const [];
       });
-      
+
       return;
     }
 
@@ -252,19 +278,20 @@ class _BookingsScreenState extends State<BookingsScreen> {
     if (created == true && mounted) {
       await _loadResults();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Бронирование создано')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Бронирование создано')));
     }
   }
 
   Widget _buildBody() {
     if (_isBootLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingIndicator(size: 32);
     }
 
     if (_bootError != null) {
-      return _ErrorState(
+      return AppEmptyState(
+        icon: Icons.error_outline,
         message: _bootError!,
         onRetry: _bootstrap,
       );
@@ -273,8 +300,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
     final selectedBuilding = _selectedBuilding;
     final selectedSpace = _selectedSpace;
     final selectedType = _selectedType;
-    if (selectedBuilding == null || selectedSpace == null || selectedType == null) {
-      return _ErrorState(
+    if (selectedBuilding == null ||
+        selectedSpace == null ||
+        selectedType == null) {
+      return AppEmptyState(
+        icon: Icons.error_outline,
         message: 'Не удалось инициализировать фильтры бронирования',
         onRetry: _bootstrap,
       );
@@ -297,14 +327,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
       });
     }
 
-    final showInlineTitle = !widget.showAppBar;
-
     return RefreshIndicator(
       onRefresh: _loadResults,
       child: ListView(
-        padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 16, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
         children: [
-          if (showInlineTitle) _InlinePageTitle(title: 'Бронирование'),
           _FiltersDisclosure(
             isExpanded: _filtersExpanded,
             title: 'Фильтры',
@@ -335,7 +362,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 endIndex: _endSlotIndex,
                 capacityController: _capacityController,
                 selectedEquipmentIds: _selectedEquipmentIds,
-                onBuildingChanged: (b) => _loadSpacesTypesAndEquipmentForBuilding(b),
+                onBuildingChanged: (b) =>
+                    _loadSpacesTypesAndEquipmentForBuilding(b),
                 onSpaceChanged: (s) async {
                   setState(() {
                     _selectedSpace = s;
@@ -352,9 +380,18 @@ class _BookingsScreenState extends State<BookingsScreen> {
                   setState(() {
                     _selectedDate = d;
                     final newSlots = BookingTimeUtils.slotsForDate(d);
-                    final minStartIndex = BookingTimeUtils.minStartIndex(newSlots, d);
-                    _startSlotIndex = _startSlotIndex.clamp(minStartIndex, newSlots.length - 1);
-                    _endSlotIndex = (_startSlotIndex + 1).clamp(0, newSlots.length - 1);
+                    final minStartIndex = BookingTimeUtils.minStartIndex(
+                      newSlots,
+                      d,
+                    );
+                    _startSlotIndex = _startSlotIndex.clamp(
+                      minStartIndex,
+                      newSlots.length - 1,
+                    );
+                    _endSlotIndex = (_startSlotIndex + 1).clamp(
+                      0,
+                      newSlots.length - 1,
+                    );
                   });
                   await _loadResults();
                 },
@@ -362,7 +399,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
                   setState(() {
                     _startSlotIndex = i;
                     if (_endSlotIndex <= _startSlotIndex) {
-                      _endSlotIndex = (_startSlotIndex + 1).clamp(0, slots.length - 1);
+                      _endSlotIndex = (_startSlotIndex + 1).clamp(
+                        0,
+                        slots.length - 1,
+                      );
                     }
                   });
                   await _loadResults();
@@ -399,8 +439,9 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 },
               ),
             ),
-            crossFadeState:
-                _filtersExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState: _filtersExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 220),
             sizeCurve: Curves.easeOutCubic,
           ),
@@ -411,14 +452,17 @@ class _BookingsScreenState extends State<BookingsScreen> {
               child: Text(
                 _resultsError!,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
             ),
           if (_isResultsLoading) const LinearProgressIndicator(),
           if (_results.isNotEmpty) const SizedBox(height: 2),
           if (!_isResultsLoading && _resultsError == null && _results.isEmpty)
-            _EmptyState(message: 'Нет доступных объектов по выбранным параметрам'),
+            const AppEmptyState(
+              icon: Icons.search_off,
+              message: 'Нет доступных объектов по выбранным параметрам',
+            ),
           if (_results.isNotEmpty)
             GridView.builder(
               shrinkWrap: true,
@@ -444,7 +488,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (!widget.showAppBar) {
-      return _buildBody();
+      // Заголовок рисуем сразу, а не только после загрузки фильтров —
+      // иначе шапка "прыгает" по высоте, когда данные приходят с сервера.
+      return Column(
+        children: [
+          const _InlinePageTitle(title: 'Бронирование'),
+          Expanded(child: _buildBody()),
+        ],
+      );
     }
     return Scaffold(
       appBar: AppBar(
@@ -527,10 +578,7 @@ class _FiltersCard extends StatelessWidget {
     final endMinIndex = (startIndex + 1).clamp(0, slots.length - 1);
 
     InputDecoration decoration(String label, {Widget? suffixIcon}) {
-      return InputDecoration(
-        labelText: label,
-        suffixIcon: suffixIcon,
-      );
+      return InputDecoration(labelText: label, suffixIcon: suffixIcon);
     }
 
     Future<T?> pickOption<T>({
@@ -553,7 +601,10 @@ class _FiltersCard extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                   child: Text(
                     title,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 ConstrainedBox(
@@ -577,7 +628,9 @@ class _FiltersCard extends StatelessWidget {
                         trailing: selected
                             ? Icon(Icons.check, color: colorScheme.primary)
                             : null,
-                        onTap: enabled ? () => Navigator.pop(context, option) : null,
+                        onTap: enabled
+                            ? () => Navigator.pop(context, option)
+                            : null,
                       );
                     }).toList(),
                   ),
@@ -599,7 +652,10 @@ class _FiltersCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: InputDecorator(
-          decoration: decoration(label, suffixIcon: const Icon(Icons.keyboard_arrow_down)),
+          decoration: decoration(
+            label,
+            suffixIcon: const Icon(Icons.keyboard_arrow_down),
+          ),
           child: Text(value),
         ),
       );
@@ -677,7 +733,10 @@ class _FiltersCard extends StatelessWidget {
                 if (picked != null) onDateChanged(picked);
               },
               child: InputDecorator(
-                decoration: decoration('Дата', suffixIcon: const AppIcon(AppIcons.date, size: 20)),
+                decoration: decoration(
+                  'Дата',
+                  suffixIcon: const AppIcon(AppIcons.date, size: 20),
+                ),
                 child: Text(_formatDate(selectedDate)),
               ),
             ),
@@ -687,13 +746,21 @@ class _FiltersCard extends StatelessWidget {
                 Expanded(
                   child: optionField(
                     label: 'С',
-                    value: formatHm(slots[startIndex.clamp(minStartIndex, slots.length - 1)]),
+                    value: formatHm(
+                      slots[startIndex.clamp(minStartIndex, slots.length - 1)],
+                    ),
                     onTap: () async {
-                      final indices = List<int>.generate(slots.length, (i) => i);
+                      final indices = List<int>.generate(
+                        slots.length,
+                        (i) => i,
+                      );
                       final picked = await pickOption<int>(
                         title: 'Начало',
                         options: indices,
-                        current: startIndex.clamp(minStartIndex, slots.length - 1),
+                        current: startIndex.clamp(
+                          minStartIndex,
+                          slots.length - 1,
+                        ),
                         labelOf: (i) => formatHm(slots[i]),
                         enabledOf: (i) => i >= minStartIndex,
                       );
@@ -705,9 +772,14 @@ class _FiltersCard extends StatelessWidget {
                 Expanded(
                   child: optionField(
                     label: 'По',
-                    value: formatHm(slots[endIndex.clamp(endMinIndex, slots.length - 1)]),
+                    value: formatHm(
+                      slots[endIndex.clamp(endMinIndex, slots.length - 1)],
+                    ),
                     onTap: () async {
-                      final indices = List<int>.generate(slots.length, (i) => i);
+                      final indices = List<int>.generate(
+                        slots.length,
+                        (i) => i,
+                      );
                       final picked = await pickOption<int>(
                         title: 'Окончание',
                         options: indices,
@@ -726,7 +798,9 @@ class _FiltersCard extends StatelessWidget {
               controller: capacityController,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.search,
-              decoration: decoration('Вместимость (необязательно)').copyWith(hintText: 'Например, 8'),
+              decoration: decoration(
+                'Вместимость (необязательно)',
+              ).copyWith(hintText: 'Например, 8'),
               onSubmitted: onCapacitySubmitted,
             ),
             const SizedBox(height: 12),
@@ -740,10 +814,12 @@ class _FiltersCard extends StatelessWidget {
                 ),
                 child: selectedEquipmentIds.isEmpty
                     ? Text(
-                        equipment.isEmpty ? 'Нет доступного оборудования' : 'Выберите оборудование',
+                        equipment.isEmpty
+                            ? 'Нет доступного оборудования'
+                            : 'Выберите оборудование',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: equipment.isEmpty ? colorScheme.outline : null,
-                            ),
+                          color: equipment.isEmpty ? colorScheme.outline : null,
+                        ),
                       )
                     : Wrap(
                         spacing: 8,
@@ -810,11 +886,7 @@ class _FiltersDisclosure extends StatelessWidget {
                   color: cs.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: AppIcon(
-                  AppIcons.sliders,
-                  color: cs.primary,
-                  size: 18,
-                ),
+                child: AppIcon(AppIcons.sliders, color: cs.primary, size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -823,10 +895,9 @@ class _FiltersDisclosure extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -834,16 +905,18 @@ class _FiltersDisclosure extends StatelessWidget {
                       maxLines: isExpanded ? 4 : 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            height: 1.25,
-                          ),
+                        color: cs.onSurfaceVariant,
+                        height: 1.25,
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               Icon(
-                isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                isExpanded
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down,
                 color: cs.onSurfaceVariant,
               ),
             ],
@@ -890,10 +963,7 @@ class _BookableObjectTile extends StatelessWidget {
   final BookableObject object;
   final VoidCallback onTap;
 
-  const _BookableObjectTile({
-    required this.object,
-    required this.onTap,
-  });
+  const _BookableObjectTile({required this.object, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -901,79 +971,81 @@ class _BookableObjectTile extends StatelessWidget {
     final description = (object.description ?? '').trim();
     final cs = Theme.of(context).colorScheme;
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(
-              color: cs.primaryContainer,
-              child: imageUrl == null
-                  ? AppIcon(
-                      AppIcons.locationPin,
-                      color: cs.onPrimaryContainer,
-                      size: 40,
-                    )
-                  : Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Icon(
-                        Icons.broken_image_outlined,
-                        color: cs.onPrimaryContainer,
-                        size: 36,
-                      ),
-                    ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.75),
-                    ],
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        boxShadow: AppColors.cardPhotoShadow,
+      ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imageUrl == null)
+                ColoredBox(
+                  color: cs.primaryContainer,
+                  child: AppIcon(
+                    AppIcons.locationPin,
+                    color: cs.onPrimaryContainer,
+                    size: 40,
                   ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 28, 10, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        object.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      if (description.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                )
+              else
+                AppNetworkImage(url: imageUrl, fit: BoxFit.cover),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.75),
+                      ],
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 28, 10, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          description,
+                          object.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.92),
-                                height: 1.2,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
                               ),
                         ),
+                        if (description.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.92),
+                                  height: 1.2,
+                                ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1012,7 +1084,9 @@ class _EquipmentPickerSheetState extends State<_EquipmentPickerSheet> {
           children: [
             Text(
               'Оборудование',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             if (widget.equipment.isEmpty)
@@ -1057,77 +1131,6 @@ class _EquipmentPickerSheetState extends State<_EquipmentPickerSheet> {
                   child: const Text('Готово'),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: 42,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const AppIcon(AppIcons.refresh),
-              label: const Text('Повторить'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  final String message;
-
-  const _EmptyState({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            AppIcon(
-              AppIcons.info,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
             ),
           ],
         ),
