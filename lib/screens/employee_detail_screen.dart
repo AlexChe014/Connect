@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/staff_user.dart';
+import '../widgets/chat_avatar.dart';
 
 class EmployeeDetailScreen extends StatelessWidget {
   const EmployeeDetailScreen({super.key, required this.user});
@@ -38,43 +39,16 @@ class EmployeeDetailScreen extends StatelessWidget {
         : null;
     final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
 
-    final hasAvatar = user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(user.fullName),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(user.fullName), centerTitle: true),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           Center(
-            child: CircleAvatar(
+            child: MemberAvatar(
+              displayName: user.fullName,
+              avatarUrl: user.avatarUrl,
               radius: 48,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: hasAvatar
-                  ? ClipOval(
-                      child: Image.network(
-                        user.avatarUrl!,
-                        width: 96,
-                        height: 96,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Text(
-                            user.initials,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                          );
-                        },
-                      ),
-                    )
-                  : Text(
-                      user.initials,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
             ),
           ),
           const SizedBox(height: 8),
@@ -87,7 +61,9 @@ class EmployeeDetailScreen extends StatelessWidget {
                   height: 10,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: user.isOnline ? const Color(0xFF34C759) : theme.colorScheme.outline,
+                    color: user.isOnline
+                        ? const Color(0xFF34C759)
+                        : theme.colorScheme.outline,
                   ),
                 ),
                 const SizedBox(width: 8),
