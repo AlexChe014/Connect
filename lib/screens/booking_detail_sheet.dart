@@ -3,29 +3,28 @@ import 'package:flutter/material.dart';
 import '../models/bookings/booking_detail.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/bookable_object_preview.dart';
+import '../widgets/chat_avatar.dart';
 import 'edit_booking_screen.dart';
 
 /// Нижняя панель с деталями брони (`GET /booking/get/{id}`).
 class BookingDetailSheet extends StatefulWidget {
-  const BookingDetailSheet({
-    super.key,
-    required this.bookingId,
-  });
+  const BookingDetailSheet({super.key, required this.bookingId});
 
   final int bookingId;
 
   /// `true` — бронь изменена или удалена.
-  static Future<bool?> show(
-    BuildContext context, {
-    required int bookingId,
-  }) {
+  static Future<bool?> show(BuildContext context, {required int bookingId}) {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: BookingDetailSheet(bookingId: bookingId),
       ),
     );
@@ -54,7 +53,9 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     });
 
     try {
-      final detail = await BookingsRepository.instance.getBookingById(widget.bookingId);
+      final detail = await BookingsRepository.instance.getBookingById(
+        widget.bookingId,
+      );
       if (!mounted) return;
       setState(() {
         _detail = detail;
@@ -115,7 +116,8 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
       if (choice == null) return;
       deleteAll = choice == 'all';
     } else {
-      final ok = await showDialog<bool>(
+      final ok =
+          await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Удалить бронь?'),
@@ -146,9 +148,9 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -176,8 +178,8 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
           Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
+              color: Theme.of(context).colorScheme.outline,
+            ),
           ),
           const SizedBox(height: 4),
           Text(value, style: Theme.of(context).textTheme.bodyLarge),
@@ -195,33 +197,19 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
         Text(
           'Участники',
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Theme.of(context).colorScheme.outline,
-              ),
+            color: Theme.of(context).colorScheme.outline,
+          ),
         ),
         const SizedBox(height: 8),
         ...users.map((user) {
-          final hasAvatar = (user.avatarUrl ?? '').trim().isNotEmpty;
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
-                CircleAvatar(
+                MemberAvatar(
+                  displayName: user.fullName,
+                  avatarUrl: user.avatarUrl,
                   radius: 18,
-                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                  child: hasAvatar
-                      ? ClipOval(
-                          child: Image.network(
-                            user.avatarUrl!,
-                            width: 36,
-                            height: 36,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Text(
-                              user.initials,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        )
-                      : Text(user.initials, style: const TextStyle(fontSize: 12)),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -231,13 +219,14 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                       Text(
                         user.fullName,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       if ((user.email ?? '').isNotEmpty)
                         Text(
                           user.email!,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
                                 color: Theme.of(context).colorScheme.outline,
                               ),
                         ),
@@ -269,25 +258,20 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
               if (_isLoading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(child: CircularProgressIndicator()),
+                  child: AppLoadingIndicator(size: 32),
                 )
               else if (_error != null)
-                Column(
-                  children: [
-                    Text(
-                      _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton(onPressed: _load, child: const Text('Повторить')),
-                  ],
+                AppEmptyState(
+                  icon: Icons.error_outline,
+                  message: _error!,
+                  onRetry: _load,
                 )
               else if (detail != null) ...[
                 Text(
                   detail.displayObjectName,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
                 if (detail.object != null)
@@ -297,7 +281,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                 _infoRow(
                   'Дата и время',
                   '${_formatDate(detail.datetimeStart)}, '
-                  '${_formatHm(detail.datetimeStart)}—${_formatHm(detail.datetimeEnd)}',
+                      '${_formatHm(detail.datetimeStart)}—${_formatHm(detail.datetimeEnd)}',
                 ),
                 if (detail.isPrivate) _infoRow('Доступ', 'Приватное'),
                 if ((detail.description ?? '').trim().isNotEmpty)
@@ -323,12 +307,16 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: detail.isPassed || _isDeleting ? null : _delete,
+                        onPressed: detail.isPassed || _isDeleting
+                            ? null
+                            : _delete,
                         icon: _isDeleting
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.delete_outline),
                         label: const Text('Удалить'),
