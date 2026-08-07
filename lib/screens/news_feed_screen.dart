@@ -9,16 +9,16 @@ import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
 import '../utils/app_feedback.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
+import '../widgets/app_network_image.dart';
+import '../widgets/chat_avatar.dart';
 import '../widgets/news_people_sheet.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
 
 class NewsFeedScreen extends StatefulWidget {
-  const NewsFeedScreen({
-    super.key,
-    this.showAppBar = true,
-    this.openNewsId,
-  });
+  const NewsFeedScreen({super.key, this.showAppBar = true, this.openNewsId});
 
   final bool showAppBar;
   final String? openNewsId;
@@ -35,6 +35,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   final ScrollController _scrollController = ScrollController();
   final Set<String> _likeInFlight = <String>{};
   final Set<String> _viewInFlight = <String>{};
+
   /// Id новостей, которые сейчас полностью видны (чтобы отметить просмотр
   /// снова после ухода с экрана и повторного появления).
   final Set<String> _fullyVisibleIds = <String>{};
@@ -119,8 +120,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
     setState(() => _isLoadingMore = true);
     try {
-      final Paginated<NewsItem> page =
-          await NewsRepository.instance.getPage(url: url);
+      final Paginated<NewsItem> page = await NewsRepository.instance.getPage(
+        url: url,
+      );
       if (!mounted) return;
       setState(() {
         _news = [..._news, ...page.data];
@@ -180,9 +182,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     final current = index >= 0 ? _news[index] : item;
 
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => NewsDetailScreen(news: current),
-      ),
+      MaterialPageRoute(builder: (_) => NewsDetailScreen(news: current)),
     );
     if (!mounted) return;
     // Обновляем карточку после возврата (лайки / просмотры могли измениться).
@@ -194,9 +194,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   }
 
   Future<void> _openCreate() async {
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const NewsCreateScreen()),
-    );
+    final created = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const NewsCreateScreen()));
     if (created == true && mounted) {
       await _loadFirstPage();
     }
@@ -238,10 +238,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         if (!mounted) return false;
         _updateItem(
           id,
-          (n) => n.copyWith(
-            isLiked: true,
-            likesCount: n.likesCount + 1,
-          ),
+          (n) => n.copyWith(isLiked: true, likesCount: n.likesCount + 1),
         );
       }
       return true;
@@ -273,10 +270,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       if (!mounted) return;
       _updateItem(
         id,
-        (n) => n.copyWith(
-          viewsCount: n.viewsCount + 1,
-          isViewed: true,
-        ),
+        (n) => n.copyWith(viewsCount: n.viewsCount + 1, isViewed: true),
       );
     } catch (_) {
       // Просмотр — тихо игнорируем ошибки.
@@ -303,7 +297,19 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   Widget _buildBody() {
     if (_isInitialLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+        itemCount: 3,
+        itemBuilder: (context, index) => const _NewsCardSkeleton(),
+      );
+    }
+
+    if (_news.isEmpty) {
+      return AppEmptyState(
+        icon: AppIcons.dashboard,
+        message: 'Пока нет новостей',
+        onRetry: _loadFirstPage,
+      );
     }
 
     final showInlineTitle = !widget.showAppBar;
@@ -323,7 +329,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: appBarTheme.backgroundColor ?? AppColors.surfaceElevated,
-                border: const Border(bottom: BorderSide(color: AppColors.outline)),
+                border: const Border(
+                  bottom: BorderSide(color: AppColors.outline),
+                ),
               ),
               child: SafeArea(
                 bottom: false,
@@ -333,7 +341,8 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                     child: Text(
                       'Лента',
                       style:
-                          appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
+                          appBarTheme.titleTextStyle ??
+                          theme.textTheme.titleLarge,
                     ),
                   ),
                 ),
@@ -392,10 +401,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     );
 
     if (!widget.showAppBar) {
-      return Scaffold(
-        body: _buildBody(),
-        floatingActionButton: fab,
-      );
+      return Scaffold(body: _buildBody(), floatingActionButton: fab);
     }
     return Scaffold(
       appBar: AppBar(
@@ -432,86 +438,143 @@ class _NewsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasImage = news.imageUrl != null && news.imageUrl!.trim().isNotEmpty;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        boxShadow: hasImage ? AppColors.cardPhotoShadow : null,
+      ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onOpen,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Фиксированное соотношение сторон — иначе портретные фото
+              // растягивают карточку почти на весь экран.
+              if (hasImage)
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: AppNetworkImage(
+                    url: news.imageUrl,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (news.author != null) ...[
+                          _AuthorChip(
+                            authorName: news.author!.fullName,
+                            avatarUrl: news.author!.avatarUrl,
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        AppIcon(
+                          AppIcons.date,
+                          size: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          dateLabel,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      news.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      news.content,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _StatChip(
+                          icon: AppIcons.eye,
+                          label: '${news.viewsCount}',
+                          onTap: onShowViewers,
+                        ),
+                        const SizedBox(width: 10),
+                        _LikeButton(
+                          count: news.likesCount,
+                          isLiked: news.isLiked,
+                          isLoading: isLikeInFlight,
+                          onPressed: () async {
+                            await onLike();
+                          },
+                          onCountTap: onShowLikers,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Заготовка карточки новости на время первой загрузки ленты.
+class _NewsCardSkeleton extends StatelessWidget {
+  const _NewsCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppColors.radius),
+        boxShadow: AppColors.cardPhotoShadow,
+      ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (hasImage)
-              Image.network(
-                news.imageUrl!,
-                width: double.infinity,
-                fit: BoxFit.fitWidth,
-                filterQuality: FilterQuality.medium,
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.shrink(),
-              ),
+            const AspectRatio(
+              aspectRatio: 16 / 9,
+              child: AppSkeletonBox(borderRadius: 0),
+            ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      if (news.author != null) ...[
-                        _AuthorChip(
-                          authorName: news.author!.fullName,
-                          avatarUrl: news.author!.avatarUrl,
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      AppIcon(
-                        AppIcons.date,
-                        size: 14,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        dateLabel,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    news.title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    news.content,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _StatChip(
-                        icon: AppIcons.eye,
-                        label: '${news.viewsCount}',
-                        onTap: onShowViewers,
-                      ),
-                      const SizedBox(width: 10),
-                      _LikeButton(
-                        count: news.likesCount,
-                        isLiked: news.isLiked,
-                        isLoading: isLikeInFlight,
-                        onPressed: () async {
-                          await onLike();
-                        },
-                        onCountTap: onShowLikers,
-                      ),
-                    ],
+                  AppSkeletonBox(width: 160, height: 12, borderRadius: 6),
+                  const SizedBox(height: AppSpacing.md),
+                  const AppSkeletonBox(height: 16, borderRadius: 6),
+                  const SizedBox(height: AppSpacing.sm),
+                  AppSkeletonBox(
+                    width: MediaQuery.sizeOf(context).width * 0.6,
+                    height: 16,
+                    borderRadius: 6,
                   ),
                 ],
               ),
@@ -524,11 +587,7 @@ class _NewsCard extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const _StatChip({required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
@@ -546,10 +605,9 @@ class _StatChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -615,10 +673,9 @@ class _LikeButton extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(2, 4, 4, 4),
             child: Text(
               '$count',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: cs.onSurfaceVariant),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ),
         ),
@@ -633,36 +690,14 @@ class _AuthorChip extends StatelessWidget {
   final String authorName;
   final String? avatarUrl;
 
-  String _initials(String s) {
-    final parts =
-        s.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '';
-    String firstChar(String p) => p.isEmpty ? '' : p.substring(0, 1);
-    final first = firstChar(parts.first);
-    final second = parts.length > 1 ? firstChar(parts[1]) : '';
-    return (first + second).toUpperCase().trim();
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasAvatar = avatarUrl != null && avatarUrl!.trim().isNotEmpty;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CircleAvatar(
-          radius: 10,
-          backgroundColor: cs.primaryContainer,
-          foregroundColor: cs.onPrimaryContainer,
-          backgroundImage: hasAvatar ? NetworkImage(avatarUrl!) : null,
-          child: hasAvatar
-              ? null
-              : Text(
-                  _initials(authorName),
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-                ),
-        ),
+        MemberAvatar(displayName: authorName, avatarUrl: avatarUrl, radius: 10),
         const SizedBox(width: 6),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 180),
@@ -670,10 +705,9 @@ class _AuthorChip extends StatelessWidget {
             authorName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ),
       ],
