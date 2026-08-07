@@ -1,5 +1,6 @@
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/material.dart';
 
 class CreateGroupChatScreen extends StatefulWidget {
@@ -31,9 +32,9 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
   Future<void> _create() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введите название группы')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Введите название группы')));
       return;
     }
     if (_selected.isEmpty) {
@@ -102,10 +103,7 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
             maxLines: 2,
           ),
           const SizedBox(height: 24),
-          Text(
-            'Участники',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text('Участники', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           ...contacts.map((c) {
             if (c.userId <= 0) return const SizedBox.shrink();
@@ -120,6 +118,11 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
                   }
                 });
               },
+              secondary: MemberAvatar(
+                displayName: c.fullName,
+                avatarUrl: c.avatarUrl,
+                radius: 18,
+              ),
               title: Text(c.fullName),
               contentPadding: EdgeInsets.zero,
             );
