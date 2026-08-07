@@ -399,7 +399,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   Widget build(BuildContext context) {
     final fab = FloatingActionButton(
       onPressed: _openCreate,
-      child: AppIcon(AppIcons.profileAdd, size: 22),
+      child: const AppIcon(AppIcons.profileAdd, size: 22),
     );
 
     if (!widget.showAppBar) {

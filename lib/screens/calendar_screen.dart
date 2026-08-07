@@ -168,12 +168,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     if (_selectedDay == null) {
-      return AppEmptyState(icon: AppIcons.date, message: 'Выберите день');
+      return const AppEmptyState(icon: AppIcons.date, message: 'Выберите день');
     }
 
     final items = _eventsForDay(_selectedDay!);
     if (items.isEmpty) {
-      return AppEmptyState(
+      return const AppEmptyState(
         icon: AppIcons.date,
         message: 'На этот день событий нет',
       );

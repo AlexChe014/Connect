@@ -15,7 +15,11 @@ class _PendingAttachment {
 }
 
 class ComposeMailScreen extends StatefulWidget {
-  const ComposeMailScreen({super.key, required this.connection, this.replyTo});
+  const ComposeMailScreen({
+    super.key,
+    required this.connection,
+    this.replyTo,
+  });
 
   final MailConnection connection;
   final MailMessage? replyTo;
@@ -64,7 +68,12 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     for (final file in result.files) {
       final bytes = file.bytes;
       if (bytes == null) continue;
-      picked.add(_PendingAttachment(filename: file.name, bytes: bytes));
+      picked.add(
+        _PendingAttachment(
+          filename: file.name,
+          bytes: bytes,
+        ),
+      );
     }
     if (picked.isEmpty || !mounted) return;
     setState(() => _attachments.addAll(picked));
@@ -137,8 +146,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             Text(
               'От: ${widget.connection.email}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -149,8 +158,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
                 border: OutlineInputBorder(),
               ),
               validator: (v) {
-                if (v == null || v.trim().isEmpty)
-                  return 'Введите адрес получателя';
+                if (v == null || v.trim().isEmpty) return 'Введите адрес получателя';
                 if (!v.contains('@')) return 'Некорректный email';
                 return null;
               },
@@ -179,7 +187,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _isSending ? null : _pickAttachments,
-              icon: AppIcon(AppIcons.attachment),
+              icon: const AppIcon(AppIcons.attachment),
               label: const Text('Прикрепить файлы'),
             ),
             if (_attachments.isNotEmpty) ...[
@@ -192,10 +200,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
                     leading: const Icon(Icons.insert_drive_file_outlined),
                     title: Text(attachment.filename),
                     trailing: IconButton(
-                      icon: AppIcon(AppIcons.close),
-                      onPressed: _isSending
-                          ? null
-                          : () => _removeAttachment(index),
+                      icon: const AppIcon(AppIcons.close),
+                      onPressed: _isSending ? null : () => _removeAttachment(index),
                     ),
                   ),
                 );

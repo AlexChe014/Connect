@@ -376,7 +376,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                 for (var i = 0; i < files.length; i++) ...[
                   if (i > 0) const Divider(height: 1),
                   ListTile(
-                    leading: AppIcon(AppIcons.attachment),
+                    leading: const AppIcon(AppIcons.attachment),
                     title: Text(files[i]['namefile']?.toString() ?? 'Файл'),
                   ),
                 ],

@@ -234,7 +234,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
             IconButton(
               tooltip: 'Ответить',
               onPressed: _reply,
-              icon: AppIcon(AppIcons.reply),
+              icon: const AppIcon(AppIcons.reply),
             ),
           if (widget.folders.isNotEmpty)
             IconButton(
@@ -297,12 +297,12 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                     (attachment) => Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
-                        leading: AppIcon(AppIcons.attachment),
+                        leading: const AppIcon(AppIcons.attachment),
                         title: Text(attachment.filename),
                         subtitle: attachment.size != null
                             ? Text('${attachment.size} байт')
                             : null,
-                        trailing: AppIcon(AppIcons.download),
+                        trailing: const AppIcon(AppIcons.download),
                         onTap: () => _downloadAttachment(attachment),
                       ),
                     ),

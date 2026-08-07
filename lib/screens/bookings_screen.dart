@@ -735,7 +735,7 @@ class _FiltersCard extends StatelessWidget {
               child: InputDecorator(
                 decoration: decoration(
                   'Дата',
-                  suffixIcon: AppIcon(AppIcons.date, size: 20),
+                  suffixIcon: const AppIcon(AppIcons.date, size: 20),
                 ),
                 child: Text(_formatDate(selectedDate)),
               ),
@@ -810,7 +810,7 @@ class _FiltersCard extends StatelessWidget {
               child: InputDecorator(
                 decoration: decoration(
                   'Оборудование (необязательно)',
-                  suffixIcon: AppIcon(AppIcons.sliders),
+                  suffixIcon: const AppIcon(AppIcons.sliders),
                 ),
                 child: selectedEquipmentIds.isEmpty
                     ? Text(
@@ -836,7 +836,7 @@ class _FiltersCard extends StatelessWidget {
               width: double.infinity,
               child: FilledButton.tonalIcon(
                 onPressed: () => onApplyPressed(),
-                icon: AppIcon(AppIcons.search),
+                icon: const AppIcon(AppIcons.search),
                 label: const Text('Показать доступные'),
               ),
             ),

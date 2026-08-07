@@ -10,8 +10,7 @@ class MailConnectionFormScreen extends StatefulWidget {
   final MailConnection? existing;
 
   @override
-  State<MailConnectionFormScreen> createState() =>
-      _MailConnectionFormScreenState();
+  State<MailConnectionFormScreen> createState() => _MailConnectionFormScreenState();
 }
 
 class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
@@ -55,9 +54,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
         _imapPortController.text = existing.customImapPort.toString();
       }
       _encryption = existing.customImapEncryption ?? 'ssl';
-      _service = existing.isCustom
-          ? 'other'
-          : (existing.service?.toLowerCase() ?? 'yandex');
+      _service = existing.isCustom ? 'other' : (existing.service?.toLowerCase() ?? 'yandex');
     }
   }
 
@@ -90,10 +87,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
               ...options.entries.map(
@@ -101,10 +95,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
                   dense: true,
                   title: Text(e.value),
                   trailing: e.key == current
-                      ? Icon(
-                          Icons.check,
-                          color: Theme.of(context).colorScheme.primary,
-                        )
+                      ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
                       : null,
                   onTap: () => Navigator.pop(context, e.key),
                 ),
@@ -152,12 +143,8 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
             email: _emailController.text.trim(),
             username: _usernameController.text.trim(),
             password: _passwordController.text,
-            name: _nameController.text.trim().isEmpty
-                ? null
-                : _nameController.text.trim(),
-            customImapHost: _service == 'other'
-                ? _imapHostController.text.trim()
-                : null,
+            name: _nameController.text.trim().isEmpty ? null : _nameController.text.trim(),
+            customImapHost: _service == 'other' ? _imapHostController.text.trim() : null,
             customImapPort: _service == 'other'
                 ? int.tryParse(_imapPortController.text.trim())
                 : null,
@@ -172,9 +159,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _isEdit
-                ? 'Не удалось обновить пароль'
-                : 'Не удалось создать подключение',
+            _isEdit ? 'Не удалось обновить пароль' : 'Не удалось создать подключение',
           ),
         ),
       );
@@ -225,27 +210,21 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Имя пользователя',
-                ),
-                validator: (v) => v == null || v.trim().isEmpty
-                    ? 'Введите имя пользователя'
-                    : null,
+                decoration: const InputDecoration(labelText: 'Имя пользователя'),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Введите имя пользователя' : null,
               ),
               const SizedBox(height: 12),
               if (_service == 'other') ...[
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Название (необязательно)',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Название (необязательно)'),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _imapHostController,
                   decoration: const InputDecoration(labelText: 'IMAP-хост'),
-                  validator: (v) =>
-                      _service == 'other' && (v == null || v.trim().isEmpty)
+                  validator: (v) => _service == 'other' && (v == null || v.trim().isEmpty)
                       ? 'Введите IMAP-хост'
                       : null,
                 ),
@@ -273,7 +252,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
             ] else
               Card(
                 child: ListTile(
-                  leading: AppIcon(AppIcons.mailAt),
+                  leading: const AppIcon(AppIcons.mailAt),
                   title: Text(widget.existing!.email),
                   subtitle: Text(widget.existing!.serviceLabel),
                 ),
@@ -292,24 +271,15 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
             FilledButton(
               style: FilledButton.styleFrom(
                 minimumSize: const Size(64, 42),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
               onPressed: _isSaving ? null : _save,
               child: _isSaving
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
                   : Text(_isEdit ? 'Сохранить' : 'Подключить'),
             ),

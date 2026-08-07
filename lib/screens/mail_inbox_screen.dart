@@ -161,13 +161,13 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
           IconButton(
             tooltip: 'Обновить',
             onPressed: _isLoadingMessages ? null : _loadMessages,
-            icon: AppIcon(AppIcons.refresh),
+            icon: const AppIcon(AppIcons.refresh),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openCompose(),
-        child: AppIcon(AppIcons.compose),
+        child: const AppIcon(AppIcons.compose),
       ),
       body: _isLoadingFolders && _isLoadingMessages
           ? const AppLoadingIndicator(size: 32)

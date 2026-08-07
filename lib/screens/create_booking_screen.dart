@@ -375,7 +375,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
 
               borderRadius: BorderRadius.circular(12),
               child: InputDecorator(
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'День',
                   suffixIcon: AppIcon(AppIcons.date, size: 20),
                 ),
@@ -536,7 +536,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                             _additionQuantities[a.id] = qty + 1;
                           }),
 
-                          icon: AppIcon(AppIcons.profileAdd),
+                          icon: const AppIcon(AppIcons.profileAdd),
                         ),
                       ],
                     ),

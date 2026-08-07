@@ -410,7 +410,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : AppIcon(AppIcons.send, size: 20),
+                        : const AppIcon(AppIcons.send, size: 20),
                   ),
                 ],
               ),
