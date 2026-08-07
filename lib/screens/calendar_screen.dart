@@ -6,6 +6,8 @@ import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_network_image.dart';
 import 'booking_detail_sheet.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -86,7 +88,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
 
   DateTime _monthEnd(DateTime d) {
-    final nextMonth = (d.month == 12) ? DateTime(d.year + 1, 1, 1) : DateTime(d.year, d.month + 1, 1);
+    final nextMonth = (d.month == 12)
+        ? DateTime(d.year + 1, 1, 1)
+        : DateTime(d.year, d.month + 1, 1);
     return nextMonth.subtract(const Duration(seconds: 1));
   }
 
@@ -139,7 +143,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  List<UserBooking> _eventsForDay(DateTime day) => _eventsByDay[_dayKey(day)] ?? const [];
+  List<UserBooking> _eventsForDay(DateTime day) =>
+      _eventsByDay[_dayKey(day)] ?? const [];
 
   String _formatHm(DateTime d) {
     final hh = d.hour.toString().padLeft(2, '0');
@@ -155,35 +160,23 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _bootstrap,
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
-        ),
+      return AppEmptyState(
+        icon: Icons.error_outline,
+        message: _error!,
+        onRetry: _bootstrap,
       );
     }
 
     if (_selectedDay == null) {
-      return const Center(child: Text('Выберите день'));
+      return const AppEmptyState(icon: AppIcons.date, message: 'Выберите день');
     }
 
     final items = _eventsForDay(_selectedDay!);
     if (items.isEmpty) {
-      return const Center(child: Text('На этот день событий нет'));
+      return const AppEmptyState(
+        icon: AppIcons.date,
+        message: 'На этот день событий нет',
+      );
     }
 
     return ListView.separated(
@@ -215,67 +208,63 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }
             },
             child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: imageUrl != null
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => ColoredBox(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  imageUrl != null
+                      ? AppNetworkImage(
+                          url: imageUrl,
+                          width: 52,
+                          height: 52,
+                          borderRadius: 10,
+                          errorIcon: AppIcons.locationPin,
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: ColoredBox(
                               color: cs.primaryContainer,
                               child: AppIcon(
                                 AppIcons.locationPin,
                                 color: cs.onPrimaryContainer,
                               ),
                             ),
-                          )
-                        : ColoredBox(
-                            color: cs.primaryContainer,
-                            child: AppIcon(
-                              AppIcons.locationPin,
-                              color: cs.onPrimaryContainer,
-                            ),
                           ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitleParts.join(' • '),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                      ),
-                      if ((b.description ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          b.description!.trim(),
-                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          subtitleParts.join(' • '),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.outline,
+                              ),
+                        ),
+                        if ((b.description ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            b.description!.trim(),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           ),
         );
       },
@@ -351,7 +340,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: Container(
-                        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: 0.55),
                         alignment: Alignment.center,
                         child: const CircularProgressIndicator(),
                       ),
