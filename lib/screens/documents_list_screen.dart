@@ -4,6 +4,8 @@ import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../utils/document_payload_utils.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import 'document_detail_screen.dart';
 
 class DocumentsListScreen extends StatefulWidget {
@@ -91,8 +93,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e is ApiException ? e.message : 'Не удалось загрузить документы';
+        _errorMessage = e is ApiException
+            ? e.message
+            : 'Не удалось загрузить документы';
       });
     }
   }
@@ -106,10 +109,12 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     } catch (e) {
       if (!mounted) return false;
       setState(() => _isVerifying = false);
-      final message = e is ApiException ? e.message : 'Не удалось отправить код';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось отправить код';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       return false;
     }
 
@@ -132,10 +137,12 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     } catch (e) {
       if (!mounted) return false;
       setState(() => _isVerifying = false);
-      final message = e is ApiException ? e.message : 'Не удалось проверить код';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось проверить код';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
       return false;
     }
   }
@@ -171,8 +178,8 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
               Text(
                 'На вашу почту отправлен 4‑значный код. Введите его, чтобы открыть документы.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -185,7 +192,8 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 maxLength: 4,
                 autofocus: true,
                 textInputAction: TextInputAction.done,
-                onSubmitted: (_) => Navigator.pop(context, controller.text.trim()),
+                onSubmitted: (_) =>
+                    Navigator.pop(context, controller.text.trim()),
               ),
               Align(
                 alignment: Alignment.centerLeft,
@@ -198,16 +206,19 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                       );
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Код отправлен повторно')),
+                          const SnackBar(
+                            content: Text('Код отправлен повторно'),
+                          ),
                         );
                       }
                     } catch (e) {
                       if (!context.mounted) return;
-                      final message =
-                          e is ApiException ? e.message : 'Не удалось отправить код';
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(message)),
-                      );
+                      final message = e is ApiException
+                          ? e.message
+                          : 'Не удалось отправить код';
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(message)));
                     }
                   },
                   child: const Text('Отправить снова'),
@@ -289,12 +300,11 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     setState(_selectedGuids.clear);
   }
 
-  List<Map<String, dynamic>> get _selectedDocuments => _documents
-      .where((document) {
+  List<Map<String, dynamic>> get _selectedDocuments =>
+      _documents.where((document) {
         final guid = DocumentPayloadUtils.guid(document);
         return guid != null && _selectedGuids.contains(guid);
-      })
-      .toList();
+      }).toList();
 
   Future<void> _bulkAccept() async {
     if (_isSubmitting || !_selectionMode) return;
@@ -306,9 +316,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('$_acceptActionLabel документы?'),
-        content: Text(
-          'Будет обработано документов: ${selected.length}.',
-        ),
+        content: Text('Будет обработано документов: ${selected.length}.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -357,9 +365,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       final message = e is ApiException
           ? e.message
           : 'Не удалось выполнить массовое действие';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -417,9 +425,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         onChanged: onChanged,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
     );
   }
@@ -449,61 +455,26 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingIndicator(size: 32);
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => _loadDocuments(
-                  forceSigningCode: widget.service.isSigningService,
-                ),
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
-        ),
+      return AppEmptyState(
+        icon: Icons.error_outline,
+        message: _errorMessage!,
+        onRetry: () =>
+            _loadDocuments(forceSigningCode: widget.service.isSigningService),
       );
     }
 
     if (_documents.isEmpty) {
       return RefreshIndicator(
         onRefresh: () => _loadDocuments(),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            const SizedBox(height: 120),
-            Icon(
-              Icons.inbox_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              widget.service.isSigningService
-                  ? 'Нет документов на подписание'
-                  : 'Нет документов на согласование',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
+        child: AppEmptyState(
+          icon: Icons.inbox_outlined,
+          message: widget.service.isSigningService
+              ? 'Нет документов на подписание'
+              : 'Нет документов на согласование',
         ),
       );
     }
@@ -521,10 +492,10 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         itemBuilder: (context, index) {
           final document = _documents[index];
           final guid = DocumentPayloadUtils.guid(document);
-          final title = DocumentPayloadUtils.datalist(document) ??
+          final title =
+              DocumentPayloadUtils.datalist(document) ??
               DocumentPayloadUtils.title(document);
-          final selected =
-              guid != null && _selectedGuids.contains(guid);
+          final selected = guid != null && _selectedGuids.contains(guid);
 
           return InkWell(
             onTap: () {

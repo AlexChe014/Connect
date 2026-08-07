@@ -5,6 +5,8 @@ import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../utils/document_payload_utils.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 
 class DocumentDetailScreen extends StatefulWidget {
   const DocumentDetailScreen({
@@ -74,8 +76,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e is ApiException ? e.message : 'Не удалось загрузить документ';
+        _errorMessage = e is ApiException
+            ? e.message
+            : 'Не удалось загрузить документ';
       });
     }
   }
@@ -151,9 +154,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         number: DocumentPayloadUtils.number(_displayDocument),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Документ отклонён')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Документ отклонён')));
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
@@ -165,12 +168,14 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   void _showError(String fallback, Object error) {
     final message = error is ApiException ? error.message : fallback;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  List<MapEntry<String, String>> _summaryEntries(Map<String, dynamic> document) {
+  List<MapEntry<String, String>> _summaryEntries(
+    Map<String, dynamic> document,
+  ) {
     const order = [
       ('task', 'Задача'),
       ('title', 'Комментарий'),
@@ -212,10 +217,12 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = DocumentPayloadUtils.datalist(_displayDocument) ??
+    final title =
+        DocumentPayloadUtils.datalist(_displayDocument) ??
         DocumentPayloadUtils.title(_displayDocument);
-    final actionLabel =
-        widget.service.isSigningService ? 'Подписать' : 'Согласовать';
+    final actionLabel = widget.service.isSigningService
+        ? 'Подписать'
+        : 'Согласовать';
 
     return Scaffold(
       appBar: AppBar(
@@ -277,25 +284,14 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppLoadingIndicator(size: 32);
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_errorMessage!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _loadDetails,
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
-        ),
+      return AppEmptyState(
+        icon: Icons.error_outline,
+        message: _errorMessage!,
+        onRetry: _loadDetails,
       );
     }
 
@@ -313,9 +309,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             child: Text(
               DocumentPayloadUtils.datalist(document) ??
                   DocumentPayloadUtils.title(document),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -323,9 +319,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           const SizedBox(height: 12),
           Text(
             'Детали',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Card(
@@ -346,9 +342,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           const SizedBox(height: 12),
           Text(
             'Стороны',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Card(
@@ -369,9 +365,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           const SizedBox(height: 12),
           Text(
             'Файлы',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Card(
@@ -380,10 +376,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                 for (var i = 0; i < files.length; i++) ...[
                   if (i > 0) const Divider(height: 1),
                   ListTile(
-                            leading: const AppIcon(AppIcons.attachment),
-                    title: Text(
-                      files[i]['namefile']?.toString() ?? 'Файл',
-                    ),
+                    leading: const AppIcon(AppIcons.attachment),
+                    title: Text(files[i]['namefile']?.toString() ?? 'Файл'),
                   ),
                 ],
               ],
@@ -394,9 +388,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           const SizedBox(height: 12),
           Text(
             'Согласующие',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Card(
@@ -409,8 +403,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                       DocumentPayloadUtils.labelForAcceptor(_acceptors[i]),
                     ),
                     subtitle: () {
-                      final status =
-                          DocumentPayloadUtils.acceptorStatus(_acceptors[i]);
+                      final status = DocumentPayloadUtils.acceptorStatus(
+                        _acceptors[i],
+                      );
                       return status == null ? null : Text(status);
                     }(),
                   ),
