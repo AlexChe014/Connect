@@ -1,4 +1,5 @@
 import 'package:connect/config/api_config.dart';
+import 'package:connect/utils/html_text_utils.dart';
 
 class NewsItem {
   final String id;
@@ -74,7 +75,7 @@ class NewsItem {
     final title = (json['title'] as String?)?.trim() ?? '';
 
     final rawText = (json['text'] as String?) ?? (json['content'] as String?) ?? '';
-    final content = _stripHtml(rawText).trim();
+    final content = HtmlTextUtils.toPlainText(rawText).trim();
 
     final rawDate = (json['created_at'] as String?) ?? (json['date'] as String?) ?? '';
     final date = _parseBackendDate(rawDate) ?? DateTime.now();
@@ -175,10 +176,6 @@ class NewsItem {
     final year = int.tryParse(parts[2]);
     if (day == null || month == null || year == null) return null;
     return DateTime(year, month, day);
-  }
-
-  static String _stripHtml(String s) {
-    return s.replaceAll(RegExp(r'<[^>]*>'), '');
   }
 
   static int _parseInt(Object? v) {

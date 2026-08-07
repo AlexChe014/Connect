@@ -148,6 +148,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Widget _buildBottom() {
+    if (_isLoading) {
+      // Спиннер уже рисуется поверх (Positioned.fill в build()) — здесь
+      // не показываем пустой стейт, чтобы текст не лежал под спиннером.
+      return const SizedBox.shrink();
+    }
+
     if (_error != null) {
       return Center(
         child: Padding(
