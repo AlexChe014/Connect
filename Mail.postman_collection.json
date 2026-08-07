@@ -1,0 +1,1582 @@
+{
+  "info": {
+    "_postman_id": "169442ac-6e37-45dd-9b97-1d331214bf1d",
+    "name": "Mail",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "28885021",
+    "_collection_link": "https://go.postman.co/collection/28885021-169442ac-6e37-45dd-9b97-1d331214bf1d?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Emails",
+      "item": [
+        {
+          "name": "Get by user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "service",
+                  "value": "yandex",
+                  "type": "text",
+                  "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+                },
+                {
+                  "key": "email",
+                  "value": "i.am.alexandr@yandex.ru",
+                  "type": "text",
+                  "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+                },
+                {
+                  "key": "username",
+                  "value": "i.am.alexandr",
+                  "type": "text",
+                  "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+                },
+                {
+                  "key": "password",
+                  "value": "nqmanxwfzzwfapbj",
+                  "type": "text",
+                  "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+                },
+                {
+                  "key": "service",
+                  "value": "other",
+                  "type": "text",
+                  "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+                  "disabled": true
+                },
+                {
+                  "key": "username",
+                  "value": "am.chervonenko",
+                  "type": "text",
+                  "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+                  "disabled": true
+                },
+                {
+                  "key": "password",
+                  "value": "21072025!Q",
+                  "type": "text",
+                  "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_host",
+                  "value": "mail.scb.su",
+                  "type": "text",
+                  "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_port",
+                  "value": "993",
+                  "type": "text",
+                  "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_encryption",
+                  "value": "ssl",
+                  "type": "text",
+                  "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{test_domen}}/mail/get/user/1",
+              "host": [
+                "{{test_domen}}"
+              ],
+              "path": [
+                "mail",
+                "get",
+                "user",
+                "1"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Get by service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "service",
+                  "value": "yandex",
+                  "type": "text",
+                  "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+                },
+                {
+                  "key": "email",
+                  "value": "i.am.alexandr@yandex.ru",
+                  "type": "text",
+                  "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+                },
+                {
+                  "key": "username",
+                  "value": "i.am.alexandr",
+                  "type": "text",
+                  "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+                },
+                {
+                  "key": "password",
+                  "value": "nqmanxwfzzwfapbj",
+                  "type": "text",
+                  "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+                },
+                {
+                  "key": "service",
+                  "value": "other",
+                  "type": "text",
+                  "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+                  "disabled": true
+                },
+                {
+                  "key": "username",
+                  "value": "am.chervonenko",
+                  "type": "text",
+                  "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+                  "disabled": true
+                },
+                {
+                  "key": "password",
+                  "value": "21072025!Q",
+                  "type": "text",
+                  "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_host",
+                  "value": "mail.scb.su",
+                  "type": "text",
+                  "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_port",
+                  "value": "993",
+                  "type": "text",
+                  "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_encryption",
+                  "value": "ssl",
+                  "type": "text",
+                  "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{test_domen}}/mail/get/service/27",
+              "host": [
+                "{{test_domen}}"
+              ],
+              "path": [
+                "mail",
+                "get",
+                "service",
+                "27"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Get by folder",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "service",
+                  "value": "yandex",
+                  "type": "text",
+                  "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+                },
+                {
+                  "key": "email",
+                  "value": "i.am.alexandr@yandex.ru",
+                  "type": "text",
+                  "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+                },
+                {
+                  "key": "username",
+                  "value": "i.am.alexandr",
+                  "type": "text",
+                  "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+                },
+                {
+                  "key": "password",
+                  "value": "nqmanxwfzzwfapbj",
+                  "type": "text",
+                  "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+                },
+                {
+                  "key": "service",
+                  "value": "other",
+                  "type": "text",
+                  "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+                  "disabled": true
+                },
+                {
+                  "key": "username",
+                  "value": "am.chervonenko",
+                  "type": "text",
+                  "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+                  "disabled": true
+                },
+                {
+                  "key": "password",
+                  "value": "21072025!Q",
+                  "type": "text",
+                  "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_host",
+                  "value": "mail.scb.su",
+                  "type": "text",
+                  "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_port",
+                  "value": "993",
+                  "type": "text",
+                  "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_encryption",
+                  "value": "ssl",
+                  "type": "text",
+                  "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{domen}}/mail/get/folder/1/70",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "get",
+                "folder",
+                "1",
+                "70"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Get mailboxes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "service",
+                  "value": "yandex",
+                  "type": "text",
+                  "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+                },
+                {
+                  "key": "email",
+                  "value": "i.am.alexandr@yandex.ru",
+                  "type": "text",
+                  "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+                },
+                {
+                  "key": "username",
+                  "value": "i.am.alexandr",
+                  "type": "text",
+                  "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+                },
+                {
+                  "key": "password",
+                  "value": "nqmanxwfzzwfapbj",
+                  "type": "text",
+                  "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+                },
+                {
+                  "key": "service",
+                  "value": "other",
+                  "type": "text",
+                  "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+                  "disabled": true
+                },
+                {
+                  "key": "username",
+                  "value": "am.chervonenko",
+                  "type": "text",
+                  "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+                  "disabled": true
+                },
+                {
+                  "key": "password",
+                  "value": "21072025!Q",
+                  "type": "text",
+                  "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_host",
+                  "value": "mail.scb.su",
+                  "type": "text",
+                  "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_port",
+                  "value": "993",
+                  "type": "text",
+                  "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_encryption",
+                  "value": "ssl",
+                  "type": "text",
+                  "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{test_domen}}/mail/get/mailboxes/48",
+              "host": [
+                "{{test_domen}}"
+              ],
+              "path": [
+                "mail",
+                "get",
+                "mailboxes",
+                "48"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Get message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "service",
+                  "value": "yandex",
+                  "type": "text",
+                  "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+                },
+                {
+                  "key": "email",
+                  "value": "i.am.alexandr@yandex.ru",
+                  "type": "text",
+                  "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+                },
+                {
+                  "key": "username",
+                  "value": "i.am.alexandr",
+                  "type": "text",
+                  "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+                },
+                {
+                  "key": "password",
+                  "value": "nqmanxwfzzwfapbj",
+                  "type": "text",
+                  "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+                },
+                {
+                  "key": "service",
+                  "value": "other",
+                  "type": "text",
+                  "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+                  "disabled": true
+                },
+                {
+                  "key": "username",
+                  "value": "am.chervonenko",
+                  "type": "text",
+                  "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+                  "disabled": true
+                },
+                {
+                  "key": "password",
+                  "value": "21072025!Q",
+                  "type": "text",
+                  "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_host",
+                  "value": "mail.scb.su",
+                  "type": "text",
+                  "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_port",
+                  "value": "993",
+                  "type": "text",
+                  "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_encryption",
+                  "value": "ssl",
+                  "type": "text",
+                  "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{test_domen}}/mail/get/message/27/34232",
+              "host": [
+                "{{test_domen}}"
+              ],
+              "path": [
+                "mail",
+                "get",
+                "message",
+                "27",
+                "34232"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Move to folder",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            },
+            "url": {
+              "raw": "{{domen}}/mail/move/1/30661/67",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "move",
+                "1",
+                "30661",
+                "67"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            },
+            "url": {
+              "raw": "{{test_domen}}/mail/delete/27/34234",
+              "host": [
+                "{{test_domen}}"
+              ],
+              "path": [
+                "mail",
+                "delete",
+                "27",
+                "34234"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Get attachment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "service",
+                  "value": "yandex",
+                  "type": "text",
+                  "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+                },
+                {
+                  "key": "email",
+                  "value": "i.am.alexandr@yandex.ru",
+                  "type": "text",
+                  "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+                },
+                {
+                  "key": "username",
+                  "value": "i.am.alexandr",
+                  "type": "text",
+                  "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+                },
+                {
+                  "key": "password",
+                  "value": "nqmanxwfzzwfapbj",
+                  "type": "text",
+                  "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+                },
+                {
+                  "key": "service",
+                  "value": "other",
+                  "type": "text",
+                  "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+                  "disabled": true
+                },
+                {
+                  "key": "username",
+                  "value": "am.chervonenko",
+                  "type": "text",
+                  "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+                  "disabled": true
+                },
+                {
+                  "key": "password",
+                  "value": "21072025!Q",
+                  "type": "text",
+                  "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_host",
+                  "value": "mail.scb.su",
+                  "type": "text",
+                  "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_port",
+                  "value": "993",
+                  "type": "text",
+                  "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+                  "disabled": true
+                },
+                {
+                  "key": "custom_imap_encryption",
+                  "value": "ssl",
+                  "type": "text",
+                  "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{domen}}/mail/attachments/35/5636/IMG_4083.HEIC",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "attachments",
+                "35",
+                "5636",
+                "IMG_4083.HEIC"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Smtp",
+      "item": [
+        {
+          "name": "Send",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "to",
+                  "value": "am.chervonenko@scb.su",
+                  "type": "text",
+                  "uuid": "c9d719d8-3cb7-45bb-bc2b-ca93bca2087a"
+                },
+                {
+                  "key": "subject",
+                  "value": "Test",
+                  "type": "text",
+                  "uuid": "a03f93bc-2311-4ff6-a066-60d2b3f1902a"
+                },
+                {
+                  "key": "attachments[]",
+                  "type": "file",
+                  "uuid": "d6310852-abc0-43aa-8189-6234b8581277",
+                  "src": "postman-cloud:///1efc4f58-83a5-42d0-8874-a3f418c1af70"
+                },
+                {
+                  "key": "attachments[]",
+                  "type": "file",
+                  "uuid": "9c5c5315-f650-46bf-b54e-a362f1df295b",
+                  "src": "postman-cloud:///1f019bce-f689-4540-8f0d-44d644fa9a1a"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{domen}}/mail/smtp/send",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "smtp",
+                "send"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload attachment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "uuid": "a9fd62d4-3c99-4394-a803-15cc51945424",
+                  "src": "postman-cloud:///1f019bce-f689-4540-8f0d-44d644fa9a1a"
+                },
+                {
+                  "key": "filename",
+                  "value": "Test",
+                  "type": "text",
+                  "uuid": "45ee32a3-e6ca-4eaa-9f69-a1ca7348c70a"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{domen}}/mail/smtp/attachment",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "smtp",
+                "attachment"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Conections",
+      "item": [
+        {
+          "name": "Get by user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            },
+            "url": {
+              "raw": "{{domen}}/mail/connection/get/user/1",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "connection",
+                "get",
+                "user",
+                "1"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Update",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "password",
+                  "value": "11012026!Q",
+                  "type": "text",
+                  "uuid": "aa8f5351-19e6-40d1-ad8e-71b4678bfe5f"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{test_domen}}/mail/connection/update/27",
+              "host": [
+                "{{test_domen}}"
+              ],
+              "path": [
+                "mail",
+                "connection",
+                "update",
+                "27"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        },
+        {
+          "name": "Get by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "accept": true
+            }
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            },
+            "url": {
+              "raw": "{{domen}}/mail/connection/get/1",
+              "host": [
+                "{{domen}}"
+              ],
+              "path": [
+                "mail",
+                "connection",
+                "get",
+                "1"
+              ]
+            },
+            "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Create connection",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "service",
+              "value": "yandex",
+              "type": "text",
+              "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+            },
+            {
+              "key": "email",
+              "value": "i.am.alexandr@yandex.ru",
+              "type": "text",
+              "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+            },
+            {
+              "key": "username",
+              "value": "i.am.alexandr",
+              "type": "text",
+              "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+            },
+            {
+              "key": "password",
+              "value": "nqmanxwfzzwfapbj",
+              "type": "text",
+              "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+            },
+            {
+              "key": "service",
+              "value": "other",
+              "type": "text",
+              "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+              "disabled": true
+            },
+            {
+              "key": "email",
+              "value": "am.chervonenko@scb.su",
+              "type": "text",
+              "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+              "disabled": true
+            },
+            {
+              "key": "username",
+              "value": "am.chervonenko",
+              "type": "text",
+              "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+              "disabled": true
+            },
+            {
+              "key": "password",
+              "value": "21072025!Q",
+              "type": "text",
+              "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+              "disabled": true
+            },
+            {
+              "key": "custom_imap_host",
+              "value": "mail.scb.su",
+              "type": "text",
+              "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349",
+              "disabled": true
+            },
+            {
+              "key": "custom_imap_port",
+              "value": "993",
+              "type": "text",
+              "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac",
+              "disabled": true
+            },
+            {
+              "key": "custom_imap_encryption",
+              "value": "ssl",
+              "type": "text",
+              "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32",
+              "disabled": true
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{domen}}/user/mail/connection/create",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "user",
+            "mail",
+            "connection",
+            "create"
+          ]
+        },
+        "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+      },
+      "response": []
+    },
+    {
+      "name": "Create connection Copy",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "service",
+              "value": "Custom",
+              "type": "text",
+              "uuid": "0eba20cd-c907-430a-a3a2-3530a09dff1b"
+            },
+            {
+              "key": "email",
+              "value": "am.chervonenko@scb.su",
+              "type": "text",
+              "uuid": "a54f6d00-9f0a-40cd-9276-d3484c34d416"
+            },
+            {
+              "key": "username",
+              "value": "am.chervonenko",
+              "type": "text",
+              "uuid": "6522ee91-7ec5-46d4-911b-1b677b6dc7f1"
+            },
+            {
+              "key": "password",
+              "value": "11012026!Q",
+              "type": "text",
+              "uuid": "45e0cc76-55a1-428b-85ad-bb4b4d7543cc"
+            },
+            {
+              "key": "service",
+              "value": "other",
+              "type": "text",
+              "uuid": "5a801adc-6037-47c4-b9ab-e0ee18bc187f",
+              "disabled": true
+            },
+            {
+              "key": "email",
+              "value": "am.chervonenko@scb.su",
+              "type": "text",
+              "uuid": "405807d3-8964-43a4-ba50-c32a0ef421a5",
+              "disabled": true
+            },
+            {
+              "key": "username",
+              "value": "am.chervonenko",
+              "type": "text",
+              "uuid": "943f2402-345c-4c85-82fc-f544b8c33fbe",
+              "disabled": true
+            },
+            {
+              "key": "password",
+              "value": "21072025!Q",
+              "type": "text",
+              "uuid": "09dcb195-0ae2-4bd5-90cb-737e03bb0ec8",
+              "disabled": true
+            },
+            {
+              "key": "custom_imap_host",
+              "value": "mail.scb.su",
+              "type": "text",
+              "uuid": "08bab14a-16b2-4e4f-acda-83d36649e349"
+            },
+            {
+              "key": "custom_imap_port",
+              "value": "993",
+              "type": "text",
+              "uuid": "62e756df-a948-46ba-931d-b16cfe8996ac"
+            },
+            {
+              "key": "custom_imap_encryption",
+              "value": "ssl",
+              "type": "text",
+              "uuid": "a5bfdad5-dca3-46b4-b259-dcbdaef2cc32"
+            },
+            {
+              "key": "name",
+              "value": "Custom",
+              "type": "text",
+              "uuid": "1ea42159-5787-4cc7-a08d-bb2d3c069434"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{test_domen}}/mail/connection/create",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "mail",
+            "connection",
+            "create"
+          ]
+        },
+        "description": "This is a GET request and it is used to \"get\" data from an endpoint. There is no request body for a GET request, but you can use query parameters to help specify the resource you want data on (e.g., in this request, we have `id=1`).\n\nA successful GET response will have a `200 OK` status, and should include some kind of response body - for example, HTML web content or JSON data."
+      },
+      "response": []
+    }
+  ]
+}

@@ -1,0 +1,969 @@
+{
+  "info": {
+    "_postman_id": "518cb277-988b-476b-aea6-d7fb6a4d867a",
+    "name": "Booking",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "28885021",
+    "_collection_link": "https://go.postman.co/collection/28885021-518cb277-988b-476b-aea6-d7fb6a4d867a?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Create",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "theme",
+              "value": "тетстстстстстст",
+              "type": "text"
+            },
+            {
+              "key": "users[]",
+              "value": "3",
+              "type": "text"
+            },
+            {
+              "key": "model_type",
+              "value": "6",
+              "type": "text"
+            },
+            {
+              "key": "model_id",
+              "value": "1",
+              "type": "text"
+            },
+            {
+              "key": "datetime_start",
+              "value": "1768215600",
+              "type": "text"
+            },
+            {
+              "key": "datetime_end",
+              "value": "1768217400",
+              "type": "text"
+            },
+            {
+              "key": "recurring[type]",
+              "value": "custom",
+              "type": "text",
+              "uuid": "b3493fc4-0502-486f-9811-9c2d687cf74a"
+            },
+            {
+              "key": "recurring[end_date]",
+              "value": "2026-02-05",
+              "type": "text",
+              "uuid": "edd974e3-69c7-46b1-a67a-119ee2b9d123"
+            },
+            {
+              "key": "recurring[days_of_week][]",
+              "value": "2",
+              "type": "text",
+              "uuid": "d5057ae8-3617-41c6-ab5f-a54e1e8d2286"
+            },
+            {
+              "key": "recurring[days_of_week][]",
+              "value": "4",
+              "type": "text",
+              "uuid": "acad4fa6-4349-4d66-9536-9f12f298c56c"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{domen}}/booking/create",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "create"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Copy",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "theme",
+              "value": "Тест",
+              "type": "text"
+            },
+            {
+              "key": "users[]",
+              "value": "3",
+              "type": "text",
+              "disabled": true
+            },
+            {
+              "key": "model_type",
+              "value": "1",
+              "type": "text"
+            },
+            {
+              "key": "model_id",
+              "value": "16",
+              "type": "text"
+            },
+            {
+              "key": "datetime_start",
+              "value": "1778824800",
+              "type": "text"
+            },
+            {
+              "key": "datetime_end",
+              "value": "1778838000",
+              "type": "text"
+            },
+            {
+              "key": "recurring[type]",
+              "value": "custom",
+              "type": "text",
+              "uuid": "b3493fc4-0502-486f-9811-9c2d687cf74a"
+            },
+            {
+              "key": "recurring[end_date]",
+              "value": "2026-05-20",
+              "type": "text",
+              "uuid": "edd974e3-69c7-46b1-a67a-119ee2b9d123"
+            },
+            {
+              "key": "recurring[days_of_week][]",
+              "value": "2",
+              "type": "text",
+              "uuid": "d5057ae8-3617-41c6-ab5f-a54e1e8d2286",
+              "disabled": true
+            },
+            {
+              "key": "recurring[days_of_week][]",
+              "value": "4",
+              "type": "text",
+              "uuid": "acad4fa6-4349-4d66-9536-9f12f298c56c",
+              "disabled": true
+            },
+            {
+              "key": "add[1]",
+              "value": "10",
+              "type": "text",
+              "uuid": "4f5f9a52-1b83-4611-ad36-6b184129e6ba",
+              "disabled": true
+            },
+            {
+              "key": "add[2]",
+              "value": "15",
+              "type": "text",
+              "uuid": "dd713500-9517-46d6-afb5-4931194d9d78",
+              "disabled": true
+            },
+            {
+              "key": "link",
+              "value": "http://test.ru",
+              "type": "text",
+              "uuid": "c41c3798-c749-4c77-a9ba-4ac28749edfe",
+              "disabled": true
+            },
+            {
+              "key": "generateLink",
+              "value": "1",
+              "type": "text",
+              "uuid": "483da483-8b9d-43af-ad84-b4de4d0770e5",
+              "disabled": true
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{test_domen}}/booking/create",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "create"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{test_domen}}/booking/get",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "get"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get free",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{test_domen}}/booking/get-free?model_type=1&datetime_start=1771410618&datetime_end=1771410618&space=15&capacity=10&equipment[]=2&equipment[]=4",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "get-free"
+          ],
+          "query": [
+            {
+              "key": "model_type",
+              "value": "1"
+            },
+            {
+              "key": "datetime_start",
+              "value": "1771410618"
+            },
+            {
+              "key": "datetime_end",
+              "value": "1771410618"
+            },
+            {
+              "key": "space",
+              "value": "15"
+            },
+            {
+              "key": "capacity",
+              "value": "10"
+            },
+            {
+              "key": "equipment[]",
+              "value": "2"
+            },
+            {
+              "key": "equipment[]",
+              "value": "4"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get by ID",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{test_domen}}/booking/get/972",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "get",
+            "972"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get by user",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{test_domen}}/booking/get/{{user_id}}/user",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "get",
+            "{{user_id}}",
+            "user"
+          ],
+          "query": [
+            {
+              "key": "datetime_start",
+              "value": "1754038800",
+              "disabled": true
+            },
+            {
+              "key": "datetime_end",
+              "value": "1755248400",
+              "disabled": true
+            },
+            {
+              "key": "model_type[]",
+              "value": "1",
+              "disabled": true
+            },
+            {
+              "key": "model_type[]",
+              "value": "6",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get by object",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{domen}}/booking/get-object/?model_id=5&model_type=1&datetime_start=1763413200&datetime_end=1764018000",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "get-object",
+            ""
+          ],
+          "query": [
+            {
+              "key": "model_id",
+              "value": "5"
+            },
+            {
+              "key": "model_type",
+              "value": "1"
+            },
+            {
+              "key": "datetime_start",
+              "value": "1763413200"
+            },
+            {
+              "key": "datetime_end",
+              "value": "1764018000"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get by filter",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{domen}}/booking/filter/?datetime_start=1746046800",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "filter",
+            ""
+          ],
+          "query": [
+            {
+              "key": "datetime_start",
+              "value": "1746046800"
+            },
+            {
+              "key": "datetime_end",
+              "value": "1748638800",
+              "disabled": true
+            },
+            {
+              "key": "q",
+              "value": "gkh.valeeva@scb.su",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get by date",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{domen}}/booking/date/?date=2026-01-13&model_type=1&model_id=1",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "date",
+            ""
+          ],
+          "query": [
+            {
+              "key": "date",
+              "value": "2026-01-13"
+            },
+            {
+              "key": "model_type",
+              "value": "1"
+            },
+            {
+              "key": "model_id",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "theme",
+              "value": "Переговоры34345",
+              "type": "text"
+            },
+            {
+              "key": "description",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "link",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "users[]",
+              "value": "10",
+              "type": "text"
+            },
+            {
+              "key": "users[]",
+              "value": "3",
+              "type": "text",
+              "disabled": true
+            },
+            {
+              "key": "update_all",
+              "value": "1",
+              "type": "text",
+              "uuid": "365f8851-d15d-48bf-8eba-5eb13e02dd9c"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{domen}}/booking/update/673",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "update",
+            "673"
+          ],
+          "query": [
+            {
+              "key": "theme",
+              "value": "Тема 2",
+              "disabled": true
+            },
+            {
+              "key": "description",
+              "value": "описание 2",
+              "disabled": true
+            },
+            {
+              "key": "link",
+              "value": "",
+              "disabled": true
+            },
+            {
+              "key": "users[]",
+              "value": "8",
+              "disabled": true
+            },
+            {
+              "key": "add[2]",
+              "value": "5",
+              "disabled": true
+            },
+            {
+              "key": "add[4]",
+              "value": "2",
+              "disabled": true
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Delete",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true,
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "delete_all",
+              "value": "1",
+              "type": "text",
+              "uuid": "4e7cbaa8-68ac-47b7-8b73-3cfa7b58f921"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{test_domen}}/booking/delete/1001",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "delete",
+            "1001"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Check",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "theme",
+              "value": "Тема",
+              "type": "text"
+            },
+            {
+              "key": "description",
+              "value": "Описание",
+              "type": "text"
+            },
+            {
+              "key": "link",
+              "value": "https://test.ru",
+              "type": "text"
+            },
+            {
+              "key": "model",
+              "value": "1",
+              "type": "text"
+            },
+            {
+              "key": "model_id",
+              "value": "11",
+              "type": "text"
+            },
+            {
+              "key": "datetime_start",
+              "value": "1737374400",
+              "type": "text"
+            },
+            {
+              "key": "datetime_end",
+              "value": "1737381600",
+              "type": "text"
+            },
+            {
+              "key": "owner_id",
+              "value": "10",
+              "type": "text"
+            },
+            {
+              "key": "users[]",
+              "value": "1",
+              "type": "text",
+              "disabled": true
+            },
+            {
+              "key": "users[]",
+              "value": "10",
+              "type": "text"
+            },
+            {
+              "key": "add[black_tea]",
+              "value": "2",
+              "type": "text"
+            },
+            {
+              "key": "add[sweets]",
+              "value": "3",
+              "type": "text"
+            },
+            {
+              "key": "is_private",
+              "value": "1",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{domen}}/booking/check",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "check"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "External accept",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{domen}}/booking/external/accept/d02c8c29-6610-41eb-8d6a-3ca82178f890",
+          "host": [
+            "{{domen}}"
+          ],
+          "path": [
+            "booking",
+            "external",
+            "accept",
+            "d02c8c29-6610-41eb-8d6a-3ca82178f890"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Accept",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {
+          "accept": true
+        }
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{test_domen}}/booking/accept/939",
+          "host": [
+            "{{test_domen}}"
+          ],
+          "path": [
+            "booking",
+            "accept",
+            "939"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
