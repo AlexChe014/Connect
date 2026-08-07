@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_icons.dart';
 import '../models/bookings/user_booking.dart';
@@ -152,6 +153,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return '$hh:$mm';
   }
 
+  /// Возвращает описание, если это ссылка на встречу (http/https), иначе null.
+  String? _meetingLinkOrNull(String description) {
+    if (!description.startsWith('http://') &&
+        !description.startsWith('https://')) {
+      return null;
+    }
+    return Uri.tryParse(description) != null ? description : null;
+  }
+
   Widget _buildBottom() {
     if (_isLoading) {
       // Спиннер уже рисуется поверх (Positioned.fill в build()) — здесь
@@ -182,7 +192,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final b = items[index];
         final title = b.theme;
@@ -193,6 +203,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ];
 
         final imageUrl = b.objectImageUrl;
+        final description = b.description?.trim() ?? '';
+        final meetingLink = _meetingLinkOrNull(description);
         final cs = Theme.of(context).colorScheme;
 
         return Card(
@@ -208,27 +220,28 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }
             },
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   imageUrl != null
                       ? AppNetworkImage(
                           url: imageUrl,
-                          width: 52,
-                          height: 52,
+                          width: 40,
+                          height: 40,
                           borderRadius: 10,
                           errorIcon: AppIcons.locationPin,
                         )
                       : ClipRRect(
                           borderRadius: BorderRadius.circular(10),
                           child: SizedBox(
-                            width: 52,
-                            height: 52,
+                            width: 40,
+                            height: 40,
                             child: ColoredBox(
                               color: cs.primaryContainer,
                               child: AppIcon(
                                 AppIcons.locationPin,
+                                size: 18,
                                 color: cs.onPrimaryContainer,
                               ),
                             ),
@@ -241,22 +254,30 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       children: [
                         Text(
                           title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         Text(
                           subtitleParts.join(' • '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
-                        if ((b.description ?? '').trim().isNotEmpty) ...[
+                        if (meetingLink != null) ...[
                           const SizedBox(height: 8),
+                          _JoinMeetingChip(url: meetingLink),
+                        ] else if (description.isNotEmpty) ...[
+                          const SizedBox(height: 6),
                           Text(
-                            b.description!.trim(),
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                         ],
                       ],
@@ -352,6 +373,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _JoinMeetingChip extends StatelessWidget {
+  const _JoinMeetingChip({required this.url});
+
+  final String url;
+
+  Future<void> _open() async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: _open,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppIcon(
+              AppIcons.videoMeeting,
+              size: 16,
+              color: cs.onPrimaryContainer,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Подключиться',
+              style: TextStyle(
+                color: cs.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
