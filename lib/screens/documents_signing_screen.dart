@@ -268,6 +268,13 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
   }
 
   Widget _buildResults() {
+    return RefreshIndicator(
+      onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
+      child: _buildResultsContent(),
+    );
+  }
+
+  Widget _buildResultsContent() {
     if (_isLoading || _isAuthenticating) {
       return const AppSkeletonList(hasLeading: false);
     }
@@ -283,25 +290,22 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        itemCount: _services.length,
-        separatorBuilder: (context, index) => Divider(
-          height: 1,
-          thickness: 1,
-          color: Theme.of(context).colorScheme.outline,
-        ),
-        itemBuilder: (context, index) {
-          final service = _services[index];
-          return _ServiceTile(
-            service: service,
-            onTap: () => _openDocuments(service),
-            onEdit: () => _showServiceActions(service),
-          );
-        },
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      itemCount: _services.length,
+      separatorBuilder: (context, index) => Divider(
+        height: 1,
+        thickness: 1,
+        color: Theme.of(context).colorScheme.outline,
       ),
+      itemBuilder: (context, index) {
+        final service = _services[index];
+        return _ServiceTile(
+          service: service,
+          onTap: () => _openDocuments(service),
+          onEdit: () => _showServiceActions(service),
+        );
+      },
     );
   }
 

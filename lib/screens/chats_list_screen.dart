@@ -3,6 +3,8 @@ import 'package:connect/models/chat.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -35,10 +37,13 @@ String _formatLastMessageTime(DateTime d) {
     return _weekdayShort[local.weekday - 1];
   }
   final formatted = DateFormat('d MMM', 'ru_RU').format(local);
-  return formatted.endsWith('.') ? formatted.substring(0, formatted.length - 1) : formatted;
+  return formatted.endsWith('.')
+      ? formatted.substring(0, formatted.length - 1)
+      : formatted;
 }
 
-Widget _chatAvatar(BuildContext context, Chat c) => ChatAvatar(chat: c, radius: 22);
+Widget _chatAvatar(BuildContext context, Chat c) =>
+    ChatAvatar(chat: c, radius: 22);
 
 class ChatsListScreen extends StatefulWidget {
   const ChatsListScreen({super.key});
@@ -76,42 +81,19 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
 
   Widget _buildBody(BuildContext context) {
     if (_chat.isLoading && _chat.chats.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppSkeletonList();
     }
 
     if (_chat.error != null && _chat.chats.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          const SizedBox(height: 120),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: [
-                Text(
-                  _chat.error!,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _chat.refreshChats,
-                  child: const Text('Повторить'),
-                ),
-              ],
-            ),
-          ),
-        ],
+      return AppEmptyState(
+        icon: Icons.error_outline,
+        message: _chat.error!,
+        onRetry: _chat.refreshChats,
       );
     }
 
     if (_chat.chats.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 120),
-          Center(child: Text('Нет чатов')),
-        ],
-      );
+      return const AppEmptyState(icon: AppIcons.chat, message: 'Нет чатов');
     }
 
     return ListView.separated(
@@ -126,7 +108,9 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         final c = _chat.chats[index];
         return _ChatRow(
           chat: c,
-          time: c.lastMessageAt != null ? _formatLastMessageTime(c.lastMessageAt!) : '',
+          time: c.lastMessageAt != null
+              ? _formatLastMessageTime(c.lastMessageAt!)
+              : '',
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -185,7 +169,9 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                 ),
               ),
               ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.55),
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+                ),
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: contacts.length,
@@ -194,7 +180,9 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     thickness: 0.6,
                     indent: 76,
                     endIndent: 12,
-                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.20),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.20),
                   ),
                   itemBuilder: (context, i) {
                     final ct = contacts[i];
@@ -279,11 +267,7 @@ class ChatContactChoice {
 }
 
 class _ChatRow extends StatelessWidget {
-  const _ChatRow({
-    required this.chat,
-    required this.time,
-    required this.onTap,
-  });
+  const _ChatRow({required this.chat, required this.time, required this.onTap});
 
   final Chat chat;
   final String time;

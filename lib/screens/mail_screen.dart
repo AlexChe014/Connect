@@ -132,6 +132,13 @@ class _MailScreenState extends State<MailScreen> {
   }
 
   Widget _buildResults() {
+    return RefreshIndicator(
+      onRefresh: _loadConnections,
+      child: _buildResultsContent(),
+    );
+  }
+
+  Widget _buildResultsContent() {
     if (_isLoading) {
       return const AppSkeletonList();
     }
@@ -145,28 +152,25 @@ class _MailScreenState extends State<MailScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadConnections,
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        itemCount: _connections.length,
-        itemBuilder: (context, index) {
-          final connection = _connections[index];
-          return _ConnectionTile(
-            connection: connection,
-            onTap: () => _openInbox(connection),
-            onEditPassword: () async {
-              final updated = await Navigator.of(context).push<bool>(
-                MaterialPageRoute<bool>(
-                  builder: (context) =>
-                      MailConnectionFormScreen(existing: connection),
-                ),
-              );
-              if (updated == true) await _loadConnections();
-            },
-          );
-        },
-      ),
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      itemCount: _connections.length,
+      itemBuilder: (context, index) {
+        final connection = _connections[index];
+        return _ConnectionTile(
+          connection: connection,
+          onTap: () => _openInbox(connection),
+          onEditPassword: () async {
+            final updated = await Navigator.of(context).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (context) =>
+                    MailConnectionFormScreen(existing: connection),
+              ),
+            );
+            if (updated == true) await _loadConnections();
+          },
+        );
+      },
     );
   }
 

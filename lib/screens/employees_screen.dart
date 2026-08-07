@@ -186,6 +186,17 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Widget _buildResults() {
+    return RefreshIndicator(
+      onRefresh: () async {
+        _debounce?.cancel();
+        _appliedQ = _qController.text.trim();
+        await _loadFirstPage();
+      },
+      child: _buildResultsContent(),
+    );
+  }
+
+  Widget _buildResultsContent() {
     if (_isInitialLoading) {
       return const AppSkeletonList();
     }
@@ -199,39 +210,32 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        _debounce?.cancel();
-        _appliedQ = _qController.text.trim();
-        await _loadFirstPage();
-      },
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        itemCount: _items.length + 1,
-        itemBuilder: (context, index) {
-          if (index < _items.length) {
-            final user = _items[index];
-            return _EmployeeTile(
-              user: user,
-              onTap: () {
-                Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (context) => EmployeeDetailScreen(user: user),
-                  ),
-                );
-              },
-              onChat: () => _openChat(user),
-            );
-          }
-
-          if (!_isLoadingMore) return const SizedBox(height: 24);
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: AppLoadingIndicator(size: 20),
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      itemCount: _items.length + 1,
+      itemBuilder: (context, index) {
+        if (index < _items.length) {
+          final user = _items[index];
+          return _EmployeeTile(
+            user: user,
+            onTap: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (context) => EmployeeDetailScreen(user: user),
+                ),
+              );
+            },
+            onChat: () => _openChat(user),
           );
-        },
-      ),
+        }
+
+        if (!_isLoadingMore) return const SizedBox(height: 24);
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: AppLoadingIndicator(size: 20),
+        );
+      },
     );
   }
 
