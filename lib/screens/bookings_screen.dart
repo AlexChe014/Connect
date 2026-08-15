@@ -16,9 +16,14 @@ import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
 
 class BookingsScreen extends StatefulWidget {
-  const BookingsScreen({super.key, this.showAppBar = true});
+  const BookingsScreen({super.key, this.showAppBar = true, this.initialDate});
 
   final bool showAppBar;
+
+  /// Дата, с которой открыть фильтры (например, при переходе из Календаря).
+  /// Если задана, фильтры сразу разворачиваются, чтобы пользователь
+  /// не тратил лишний тап на их раскрытие.
+  final DateTime? initialDate;
 
   @override
   State<BookingsScreen> createState() => _BookingsScreenState();
@@ -30,7 +35,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   String? _bootError;
   String? _resultsError;
 
-  bool _filtersExpanded = false;
+  late bool _filtersExpanded = widget.initialDate != null;
 
   List<Building> _buildings = const [];
   List<Space> _spaces = const [];
@@ -48,6 +53,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
   final TextEditingController _capacityController = TextEditingController();
 
   List<BookableObject> _results = const [];
+
+  /// Индекс получасового слота на 09:00 — стартовое время по умолчанию
+  /// для дат, отличных от сегодняшней (когда "ближайший слот" не применим).
+  static const _defaultWorkdayStartIndex = 18;
 
   @override
   void initState() {
@@ -96,15 +105,22 @@ class _BookingsScreenState extends State<BookingsScreen> {
       final equipment = await InfrastructureRepository.instance
           .getActiveEquipment(selectedBuilding.id);
 
-      _selectedDate = DateTime.now();
-      final slots = BookingTimeUtils.slotsForDate(_selectedDate);
       final now = DateTime.now();
+      _selectedDate = widget.initialDate ?? now;
+      final slots = BookingTimeUtils.slotsForDate(_selectedDate);
       final lastIndex = slots.length - 1;
-      _startSlotIndex = BookingTimeUtils.nearestSlotIndex(
-        slots,
-        now,
-        floorToPrevious: false,
-      ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
+      final isToday = BookingTimeUtils.isSameDay(_selectedDate, now);
+      final rawStartIndex = isToday
+          ? BookingTimeUtils.nearestSlotIndex(
+              slots,
+              now,
+              floorToPrevious: false,
+            )
+          : _defaultWorkdayStartIndex;
+      _startSlotIndex = rawStartIndex.clamp(
+        0,
+        (lastIndex - 1).clamp(0, lastIndex),
+      );
       _endSlotIndex = _startSlotIndex + 1;
 
       if (!mounted) return;

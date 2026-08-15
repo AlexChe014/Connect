@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_network_image.dart';
 import 'booking_detail_sheet.dart';
+import 'bookings_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -96,6 +97,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  Future<void> _quickBook() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => BookingsScreen(
+          showAppBar: true,
+          initialDate: _selectedDay ?? DateTime.now(),
+        ),
+      ),
+    );
+    // Бронь могла быть создана на предыдущем экране — обновляем месяц
+    // в любом случае, чтобы не тащить через несколько экранов bool-флаг.
+    if (mounted) await _loadMonth(_focusedDay);
+  }
 
   Future<void> _loadMonth(DateTime focusedDay) async {
     final userId = _userId;
@@ -299,6 +314,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
         title: const Text('Календарь'),
         centerTitle: true,
         elevation: 0,
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _quickBook,
+        tooltip: 'Забронировать',
+        child: const AppIcon(AppIcons.profileAdd, size: 22),
       ),
       body: Column(
         children: [
