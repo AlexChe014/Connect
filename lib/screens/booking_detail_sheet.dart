@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/bookings/booking_detail.dart';
 import '../models/staff_user.dart';
@@ -21,6 +23,7 @@ class BookingDetailSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: CupertinoColors.systemGroupedBackground,
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -168,78 +171,117 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     return '$dd.$mm.${d.year}';
   }
 
-  Widget _infoRow(String label, String value) {
-    if (value.trim().isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(value, style: Theme.of(context).textTheme.bodyLarge),
-        ],
+  /// Возвращает описание, если это ссылка на встречу (http/https), иначе null.
+  String? _meetingLinkOrNull(String description) {
+    if (!description.startsWith('http://') &&
+        !description.startsWith('https://')) {
+      return null;
+    }
+    return Uri.tryParse(description) != null ? description : null;
+  }
+
+  Future<void> _openLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 29,
+      height: 29,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(7),
       ),
+      child: Icon(icon, size: 17, color: CupertinoColors.white),
+    );
+  }
+
+  Widget _valueRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+  }) {
+    return CupertinoListTile(
+      leading: _iconBadge(icon, color),
+      title: Text(label),
+      additionalInfo: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 180),
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _textRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+  }) {
+    return CupertinoListTile(
+      leading: _iconBadge(icon, color),
+      title: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          color: CupertinoColors.secondaryLabel,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          value,
+          style: const TextStyle(color: CupertinoColors.label),
+        ),
+      ),
+    );
+  }
+
+  Widget _linkRow(String url) {
+    return CupertinoListTile(
+      leading: _iconBadge(
+        CupertinoIcons.video_camera_solid,
+        CupertinoColors.systemBlue,
+      ),
+      title: const Text('Ссылка на встречу'),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          url,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: CupertinoColors.systemBlue),
+        ),
+      ),
+      trailing: const CupertinoListTileChevron(),
+      onTap: () => _openLink(url),
     );
   }
 
   Widget _participantsSection(List<StaffUser> users) {
     if (users.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Участники',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+    return CupertinoListSection.insetGrouped(
+      header: const Text('Участники'),
+      children: users.map((user) {
+        return CupertinoListTile(
+          leading: MemberAvatar(
+            displayName: user.fullName,
+            avatarUrl: user.avatarUrl,
+            radius: 16,
           ),
-        ),
-        const SizedBox(height: 8),
-        ...users.map((user) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                MemberAvatar(
-                  displayName: user.fullName,
-                  avatarUrl: user.avatarUrl,
-                  radius: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.fullName,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if ((user.email ?? '').isNotEmpty)
-                        Text(
-                          user.email!,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
+          title: Text(user.fullName),
+          subtitle: (user.email ?? '').isNotEmpty ? Text(user.email!) : null,
+        );
+      }).toList(),
     );
   }
 
@@ -252,7 +294,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxHeight),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          padding: const EdgeInsets.only(bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -263,66 +305,131 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                   child: AppLoadingIndicator(size: 32),
                 )
               else if (_error != null)
-                AppEmptyState(
-                  icon: Icons.error_outline,
-                  message: _error!,
-                  onRetry: _load,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: AppEmptyState(
+                    icon: Icons.error_outline,
+                    message: _error!,
+                    onRetry: _load,
+                  ),
                 )
               else if (detail != null) ...[
-                Text(
-                  detail.displayObjectName,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                if (detail.object != null)
-                  BookableObjectPreview(object: detail.object!, compact: true),
-                const SizedBox(height: 16),
-                _infoRow('Тема', detail.theme),
-                _infoRow(
-                  'Дата и время',
-                  '${_formatDate(detail.datetimeStart)}, '
-                      '${_formatHm(detail.datetimeStart)}—${_formatHm(detail.datetimeEnd)}',
-                ),
-                if (detail.isPrivate) _infoRow('Доступ', 'Приватное'),
-                if ((detail.description ?? '').trim().isNotEmpty)
-                  _infoRow('Описание', detail.description!.trim()),
-                if ((detail.link ?? '').trim().isNotEmpty)
-                  _infoRow('Ссылка', detail.link!.trim()),
-                if (detail.isRecurring) ...[
-                  _infoRow('Повторение', detail.recurring?.type ?? 'да'),
-                  if ((detail.recurring?.endDate ?? '').isNotEmpty)
-                    _infoRow('Повторять до', detail.recurring!.endDate!),
-                ],
-                _participantsSection(detail.participants),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: detail.isPassed ? null : _openEdit,
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Изменить'),
-                      ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                  child: Text(
+                    detail.theme,
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      color: CupertinoColors.label,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: detail.isPassed || _isDeleting
-                            ? null
-                            : _delete,
-                        icon: _isDeleting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.delete_outline),
-                        label: const Text('Удалить'),
+                  ),
+                ),
+                if (detail.object != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: BookableObjectPreview(
+                      object: detail.object!,
+                      compact: true,
+                    ),
+                  ),
+                CupertinoListSection.insetGrouped(
+                  children: [
+                    _valueRow(
+                      icon: CupertinoIcons.clock_fill,
+                      color: CupertinoColors.systemOrange,
+                      label: 'Дата и время',
+                      value:
+                          '${_formatDate(detail.datetimeStart)}, '
+                          '${_formatHm(detail.datetimeStart)}—${_formatHm(detail.datetimeEnd)}',
+                    ),
+                    _valueRow(
+                      icon: CupertinoIcons.location_solid,
+                      color: CupertinoColors.systemRed,
+                      label: 'Объект',
+                      value: detail.displayObjectName,
+                    ),
+                    if (detail.isPrivate)
+                      _valueRow(
+                        icon: CupertinoIcons.lock_fill,
+                        color: CupertinoColors.systemGrey,
+                        label: 'Доступ',
+                        value: 'Приватное',
                       ),
+                    if (detail.isRecurring) ...[
+                      _valueRow(
+                        icon: CupertinoIcons.repeat,
+                        color: CupertinoColors.systemPurple,
+                        label: 'Повторение',
+                        value: detail.recurring?.type ?? 'да',
+                      ),
+                      if ((detail.recurring?.endDate ?? '').isNotEmpty)
+                        _valueRow(
+                          icon: CupertinoIcons.calendar,
+                          color: CupertinoColors.systemPurple,
+                          label: 'Повторять до',
+                          value: detail.recurring!.endDate!,
+                        ),
+                    ],
+                  ],
+                ),
+                if ((detail.description ?? '').trim().isNotEmpty ||
+                    (detail.link ?? '').trim().isNotEmpty)
+                  CupertinoListSection.insetGrouped(
+                    children: [
+                      if ((detail.description ?? '').trim().isNotEmpty)
+                        if (_meetingLinkOrNull(detail.description!.trim())
+                            case final link?)
+                          _linkRow(link)
+                        else
+                          _textRow(
+                            icon: CupertinoIcons.doc_text_fill,
+                            color: CupertinoColors.systemGrey,
+                            label: 'Описание',
+                            value: detail.description!.trim(),
+                          ),
+                      if ((detail.link ?? '').trim().isNotEmpty)
+                        _linkRow(detail.link!.trim()),
+                    ],
+                  ),
+                _participantsSection(detail.participants),
+                CupertinoListSection.insetGrouped(
+                  children: [
+                    CupertinoListTile(
+                      leading: _iconBadge(
+                        CupertinoIcons.pencil,
+                        CupertinoColors.systemBlue,
+                      ),
+                      title: Text(
+                        'Изменить',
+                        style: TextStyle(
+                          color: detail.isPassed
+                              ? CupertinoColors.systemGrey
+                              : CupertinoColors.systemBlue,
+                        ),
+                      ),
+                      trailing: detail.isPassed
+                          ? null
+                          : const CupertinoListTileChevron(),
+                      onTap: detail.isPassed ? null : _openEdit,
+                    ),
+                    CupertinoListTile(
+                      leading: _iconBadge(
+                        CupertinoIcons.delete_solid,
+                        CupertinoColors.systemRed,
+                      ),
+                      title: Text(
+                        'Удалить',
+                        style: TextStyle(
+                          color: detail.isPassed
+                              ? CupertinoColors.systemGrey
+                              : CupertinoColors.systemRed,
+                        ),
+                      ),
+                      trailing: _isDeleting
+                          ? const CupertinoActivityIndicator()
+                          : null,
+                      onTap: detail.isPassed || _isDeleting ? null : _delete,
                     ),
                   ],
                 ),
