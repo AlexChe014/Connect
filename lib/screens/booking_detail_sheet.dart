@@ -251,7 +251,10 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
         CupertinoIcons.video_camera_solid,
         CupertinoColors.systemBlue,
       ),
-      title: const Text('Ссылка на встречу'),
+      title: const Text(
+        'Ссылка на встречу',
+        style: TextStyle(fontSize: 13, color: CupertinoColors.secondaryLabel),
+      ),
       subtitle: (host == null || host.isEmpty)
           ? null
           : Padding(
@@ -260,10 +263,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                 host,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: CupertinoColors.secondaryLabel,
-                ),
+                style: const TextStyle(color: CupertinoColors.label),
               ),
             ),
       trailing: const CupertinoListTileChevron(),
@@ -368,27 +368,21 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                           value: detail.recurring!.endDate!,
                         ),
                     ],
+                    if ((detail.description ?? '').trim().isNotEmpty)
+                      if (_meetingLinkOrNull(detail.description!.trim())
+                          case final link?)
+                        _linkRow(link)
+                      else
+                        _textRow(
+                          icon: CupertinoIcons.doc_text_fill,
+                          color: CupertinoColors.systemGrey,
+                          label: 'Описание',
+                          value: detail.description!.trim(),
+                        ),
+                    if ((detail.link ?? '').trim().isNotEmpty)
+                      _linkRow(detail.link!.trim()),
                   ],
                 ),
-                if ((detail.description ?? '').trim().isNotEmpty ||
-                    (detail.link ?? '').trim().isNotEmpty)
-                  CupertinoListSection.insetGrouped(
-                    children: [
-                      if ((detail.description ?? '').trim().isNotEmpty)
-                        if (_meetingLinkOrNull(detail.description!.trim())
-                            case final link?)
-                          _linkRow(link)
-                        else
-                          _textRow(
-                            icon: CupertinoIcons.doc_text_fill,
-                            color: CupertinoColors.systemGrey,
-                            label: 'Описание',
-                            value: detail.description!.trim(),
-                          ),
-                      if ((detail.link ?? '').trim().isNotEmpty)
-                        _linkRow(detail.link!.trim()),
-                    ],
-                  ),
                 _participantsSection(detail.participants),
                 CupertinoListSection.insetGrouped(
                   children: [
