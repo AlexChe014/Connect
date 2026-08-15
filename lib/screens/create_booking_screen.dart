@@ -472,7 +472,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                 'Нет доступных дополнений',
 
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               )
             else
@@ -505,7 +505,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                                       ?.copyWith(
                                         color: Theme.of(
                                           context,
-                                        ).colorScheme.outline,
+                                        ).colorScheme.onSurfaceVariant,
                                       ),
                                 ),
                             ],
@@ -631,7 +631,7 @@ class _TimeSlotField extends StatelessWidget {
                           title: Text(
                             BookingTimeUtils.formatHm(slots[i]),
                             style: TextStyle(
-                              color: enabled ? null : cs.outline,
+                              color: enabled ? null : cs.onSurfaceVariant,
                             ),
                           ),
                           trailing: i == index

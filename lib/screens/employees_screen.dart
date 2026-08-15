@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../config/api_config.dart';
 import '../config/app_icons.dart';
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../screens/chat_conversation_screen.dart';
@@ -334,7 +335,7 @@ class _EmployeeTile extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: user.isOnline
                             ? const Color(0xFF34C759)
-                            : theme.colorScheme.outline,
+                            : AppColors.outlineStrong,
                         shape: BoxShape.circle,
                         border: Border.all(color: theme.cardColor, width: 2),
                       ),

@@ -61,7 +61,7 @@ class BookableObjectPreview extends StatelessWidget {
                 Text(
                   'Вместимость: до ${object.capacity} чел.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],

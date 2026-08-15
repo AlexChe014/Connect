@@ -626,7 +626,9 @@ class _FiltersCard extends StatelessWidget {
                         title: Text(
                           labelOf(option),
                           style: TextStyle(
-                            color: enabled ? null : colorScheme.outline,
+                            color: enabled
+                                ? null
+                                : colorScheme.onSurfaceVariant,
                           ),
                         ),
                         trailing: selected
@@ -822,7 +824,9 @@ class _FiltersCard extends StatelessWidget {
                             ? 'Нет доступного оборудования'
                             : 'Выберите оборудование',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: equipment.isEmpty ? colorScheme.outline : null,
+                          color: equipment.isEmpty
+                              ? colorScheme.onSurfaceVariant
+                              : null,
                         ),
                       )
                     : Wrap(

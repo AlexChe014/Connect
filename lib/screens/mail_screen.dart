@@ -295,7 +295,10 @@ class _ConnectionTile extends StatelessWidget {
                 onPressed: onEditPassword,
                 icon: const Icon(Icons.vpn_key_outlined),
               ),
-              Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+              Icon(
+                Icons.chevron_right,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),

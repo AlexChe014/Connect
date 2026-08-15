@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../widgets/chat_avatar.dart';
 
@@ -63,7 +64,7 @@ class EmployeeDetailScreen extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: user.isOnline
                         ? const Color(0xFF34C759)
-                        : theme.colorScheme.outline,
+                        : AppColors.outlineStrong,
                   ),
                 ),
                 const SizedBox(width: 8),

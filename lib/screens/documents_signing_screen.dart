@@ -389,7 +389,10 @@ class _ServiceTile extends StatelessWidget {
               tooltip: 'Действия',
               onPressed: onEdit,
             ),
-            Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+            Icon(
+              Icons.chevron_right,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),

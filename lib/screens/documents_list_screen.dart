@@ -528,7 +528,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                   if (!_selectionMode)
                     Icon(
                       Icons.chevron_right,
-                      color: Theme.of(context).colorScheme.outline,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                 ],
               ),
