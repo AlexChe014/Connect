@@ -7,7 +7,6 @@ import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
-import '../widgets/bookable_object_preview.dart';
 import '../widgets/chat_avatar.dart';
 import 'edit_booking_screen.dart';
 
@@ -246,21 +245,27 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
   }
 
   Widget _linkRow(String url) {
+    final host = Uri.tryParse(url)?.host;
     return CupertinoListTile(
       leading: _iconBadge(
         CupertinoIcons.video_camera_solid,
         CupertinoColors.systemBlue,
       ),
       title: const Text('Ссылка на встречу'),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          url,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: CupertinoColors.systemBlue),
-        ),
-      ),
+      subtitle: (host == null || host.isEmpty)
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                host,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: CupertinoColors.secondaryLabel,
+                ),
+              ),
+            ),
       trailing: const CupertinoListTileChevron(),
       onTap: () => _openLink(url),
     );
@@ -325,17 +330,9 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                     ),
                   ),
                 ),
-                if (detail.object != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    child: BookableObjectPreview(
-                      object: detail.object!,
-                      compact: true,
-                    ),
-                  ),
                 CupertinoListSection.insetGrouped(
                   children: [
-                    _valueRow(
+                    _textRow(
                       icon: CupertinoIcons.clock_fill,
                       color: CupertinoColors.systemOrange,
                       label: 'Дата и время',
@@ -343,7 +340,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                           '${_formatDate(detail.datetimeStart)}, '
                           '${_formatHm(detail.datetimeStart)}—${_formatHm(detail.datetimeEnd)}',
                     ),
-                    _valueRow(
+                    _textRow(
                       icon: CupertinoIcons.location_solid,
                       color: CupertinoColors.systemRed,
                       label: 'Объект',
