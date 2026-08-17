@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../config/api_config.dart';
-import '../config/app_icons.dart';
 import '../config/app_theme.dart';
 import '../models/news_comment.dart';
 import '../models/news_item.dart';
@@ -16,6 +18,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
+import '../widgets/chat_message_text.dart';
 import '../widgets/news_people_sheet.dart';
 
 class NewsDetailScreen extends StatefulWidget {
@@ -138,7 +141,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
             wasLiked ? 'Не удалось убрать лайк' : 'Не удалось поставить лайк',
@@ -179,7 +182,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _commentsLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось загрузить комментарии')),
       );
     }
@@ -215,7 +218,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       await _loadComments();
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось отправить комментарий')),
       );
     } finally {
@@ -225,198 +228,276 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final hasImage =
         _news.imageUrl != null && _news.imageUrl!.trim().isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Новость'), centerTitle: true),
-      body: Column(
-        children: [
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await Future.wait([_refreshNews(), _loadComments()]);
-              },
-              child: ListView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                children: [
-                  VisibilityDetector(
-                    key: Key('news-detail-${_news.id}'),
-                    onVisibilityChanged: _onNewsFullyVisible,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (_news.author != null) ...[
-                          _AuthorHeader(
-                            authorName: _news.author!.fullName,
-                            avatarUrl: _news.author!.avatarUrl,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('Новость'),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: () => Navigator.pop(context),
+          child: const Icon(CupertinoIcons.back, size: 26),
+        ),
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    await Future.wait([_refreshNews(), _loadComments()]);
+                  },
+                  child: ListView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    children: [
+                      VisibilityDetector(
+                        key: Key('news-detail-${_news.id}'),
+                        onVisibilityChanged: _onNewsFullyVisible,
+                        child: Container(
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemBackground
+                                .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: AppColors.cardPhotoShadow,
                           ),
-                          const SizedBox(height: 10),
-                        ],
-                        Text(
-                          _formatDate(_news.date),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _news.title,
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 16),
-                        if (hasImage) ...[
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: AppColors.cardPhotoShadow,
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: AspectRatio(
-                                aspectRatio: 16 / 9,
-                                // Фото целиком (contain) + блюр-копия того же
-                                // снимка по краям — портретные фото не
-                                // обрезаются, но карточка остаётся 16:9.
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ImageFiltered(
-                                      imageFilter: ImageFilter.blur(
-                                        sigmaX: 24,
-                                        sigmaY: 24,
-                                      ),
-                                      child: AppNetworkImage(
-                                        url: _news.imageUrl,
-                                        width: double.infinity,
-                                        height: double.infinity,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    ColoredBox(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.18,
-                                      ),
-                                    ),
-                                    AppNetworkImage(
-                                      url: _news.imageUrl,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ],
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_news.author != null) ...[
+                                _AuthorHeader(
+                                  authorName: _news.author!.fullName,
+                                  avatarUrl: _news.author!.avatarUrl,
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                              Text(
+                                _formatDate(_news.date),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: CupertinoColors.secondaryLabel
+                                      .resolveFrom(context),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _news.title,
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.25,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              if (hasImage) ...[
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: AspectRatio(
+                                    aspectRatio: 16 / 9,
+                                    // Фото целиком (contain) + блюр-копия того же
+                                    // снимка по краям — портретные фото не
+                                    // обрезаются, но карточка остаётся 16:9.
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        ImageFiltered(
+                                          imageFilter: ImageFilter.blur(
+                                            sigmaX: 24,
+                                            sigmaY: 24,
+                                          ),
+                                          child: AppNetworkImage(
+                                            url: _news.imageUrl,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        ColoredBox(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.18,
+                                          ),
+                                        ),
+                                        AppNetworkImage(
+                                          url: _news.imageUrl,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              if (_news.contentHtml.trim().isNotEmpty ||
+                                  _news.content.trim().isNotEmpty)
+                                ChatMessageText(
+                                  text: _news.contentHtml.trim().isNotEmpty
+                                      ? _news.contentHtml
+                                      : _news.content,
+                                  fontSize: 16,
+                                  color:
+                                      CupertinoColors.label.resolveFrom(context),
+                                ),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  _StatChip(
+                                    icon: CupertinoIcons.eye,
+                                    label: '${_news.viewsCount}',
+                                    onTap: () => NewsPeopleSheet.show(
+                                      context,
+                                      newsId: _news.id,
+                                      kind: NewsPeopleKind.viewers,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  _LikeButton(
+                                    count: _news.likesCount,
+                                    isLiked: _news.isLiked,
+                                    isLoading: _likeInFlight,
+                                    onPressed: _toggleLike,
+                                    onCountTap: () => NewsPeopleSheet.show(
+                                      context,
+                                      newsId: _news.id,
+                                      kind: NewsPeopleKind.likers,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                        ],
-                        Text(
-                          _news.content,
-                          style: Theme.of(context).textTheme.bodyLarge,
                         ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            _StatChip(
-                              icon: AppIcons.eye,
-                              label: '${_news.viewsCount}',
-                              onTap: () => NewsPeopleSheet.show(
-                                context,
-                                newsId: _news.id,
-                                kind: NewsPeopleKind.viewers,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            _LikeButton(
-                              count: _news.likesCount,
-                              isLiked: _news.isLiked,
-                              isLoading: _likeInFlight,
-                              onPressed: _toggleLike,
-                              onCountTap: () => NewsPeopleSheet.show(
-                                context,
-                                newsId: _news.id,
-                                kind: NewsPeopleKind.likers,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Text(
-                    'Комментарии',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_commentsLoading)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: AppLoadingIndicator(),
-                    )
-                  else if (_comments.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: AppEmptyState(message: 'Пока нет комментариев'),
-                    )
-                  else
-                    ..._comments.map(
-                      (c) => _CommentTile(
-                        comment: c,
-                        dateLabel: _formatDate(c.date),
                       ),
-                    ),
-                  if (_commentsLoadingMore)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: AppLoadingIndicator(size: 20),
-                    ),
-                ],
+                      const SizedBox(height: 24),
+                      Text(
+                        'Комментарии',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_commentsLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: AppLoadingIndicator(),
+                        )
+                      else if (_comments.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: AppEmptyState(message: 'Пока нет комментариев'),
+                        )
+                      else
+                        ..._comments.map(
+                          (c) => _CommentTile(
+                            comment: c,
+                            dateLabel: _formatDate(c.date),
+                          ),
+                        ),
+                      if (_commentsLoadingMore)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: AppLoadingIndicator(size: 20),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              _CommentInputBar(
+                controller: _commentController,
+                isSending: _sendingComment,
+                onSend: _sendComment,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentInputBar extends StatelessWidget {
+  const _CommentInputBar({
+    required this.controller,
+    required this.isSending,
+    required this.onSend,
+  });
+
+  final TextEditingController controller;
+  final bool isSending;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        border: Border(
+          top: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 110),
+                child: CupertinoTextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  placeholder: 'Написать комментарий…',
+                  enabled: !isSending,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.secondarySystemBackground
+                        .resolveFrom(context),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  onSubmitted: (_) => onSend(),
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      minLines: 1,
-                      maxLines: 4,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'Написать комментарий…',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      enabled: !_sendingComment,
-                      onSubmitted: (_) => _sendComment(),
+            const SizedBox(width: 8),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: isSending ? null : onSend,
+              child: isSending
+                  ? const SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CupertinoActivityIndicator(),
+                    )
+                  : const Icon(
+                      CupertinoIcons.arrow_up_circle_fill,
+                      size: 30,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _sendingComment ? null : _sendComment,
-                    icon: _sendingComment
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const AppIcon(AppIcons.send, size: 20),
-                  ),
-                ],
-              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -430,7 +511,6 @@ class _CommentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final author = comment.author;
 
     return Padding(
@@ -445,33 +525,41 @@ class _CommentTile extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        author?.fullName ?? 'Пользователь',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: CupertinoColors.secondarySystemGroupedBackground
+                    .resolveFrom(context),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          author?.fullName ?? 'Пользователь',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      dateLabel,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
+                      Text(
+                        dateLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: CupertinoColors.secondaryLabel
+                              .resolveFrom(context),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  comment.text,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(comment.text, style: const TextStyle(fontSize: 14)),
+                ],
+              ),
             ),
           ),
         ],
@@ -489,34 +577,30 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
     final child = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppIcon(icon, size: 14, color: cs.onSurfaceVariant),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-          ),
+          Text(label, style: TextStyle(fontSize: 13, color: color)),
         ],
       ),
     );
 
     if (onTap == null) return child;
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: child,
     );
   }
 }
 
-class _LikeButton extends StatelessWidget {
+/// Кнопка лайка в стиле iOS: сердце с bounce-анимацией и haptic-откликом.
+class _LikeButton extends StatefulWidget {
   const _LikeButton({
     required this.count,
     required this.isLiked,
@@ -532,44 +616,76 @@ class _LikeButton extends StatelessWidget {
   final VoidCallback? onCountTap;
 
   @override
+  State<_LikeButton> createState() => _LikeButtonState();
+}
+
+class _LikeButtonState extends State<_LikeButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.35), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1.35, end: 1.0), weight: 1),
+  ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleTap() async {
+    if (widget.isLoading) return;
+    HapticFeedback.lightImpact();
+    unawaited(_controller.forward(from: 0));
+    await widget.onPressed();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final iconColor = isLiked ? cs.primary : cs.onSurfaceVariant;
+    final color = widget.isLiked
+        ? CupertinoColors.systemRed
+        : CupertinoColors.secondaryLabel.resolveFrom(context);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: isLoading
-              ? null
-              : () async {
-                  await onPressed();
-                },
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleTap,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 2, 4),
-            child: isLoading
-                ? SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: cs.onSurfaceVariant,
-                    ),
+            child: widget.isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CupertinoActivityIndicator(radius: 9),
                   )
-                : AppIcon(AppIcons.like, size: 14, color: iconColor),
+                : ScaleTransition(
+                    scale: _scale,
+                    child: Icon(
+                      widget.isLiked
+                          ? CupertinoIcons.heart_fill
+                          : CupertinoIcons.heart,
+                      size: 22,
+                      color: color,
+                    ),
+                  ),
           ),
         ),
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onCountTap,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onCountTap,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(2, 4, 4, 4),
             child: Text(
-              '$count',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              '${widget.count}',
+              style: TextStyle(
+                fontSize: 14,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
             ),
           ),
         ),
@@ -593,9 +709,7 @@ class _AuthorHeader extends StatelessWidget {
         Expanded(
           child: Text(
             authorName,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
         ),
       ],

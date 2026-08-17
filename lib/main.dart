@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/calendar_screen.dart';
@@ -61,6 +62,7 @@ class _ConnectAppState extends State<ConnectApp> {
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
       ],
       supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
       locale: const Locale('ru', 'RU'),

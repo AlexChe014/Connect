@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import '../config/app_icons.dart';
 import '../config/app_theme.dart';
 import '../config/api_config.dart';
 import '../models/news_item.dart';
@@ -15,6 +17,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
+import '../widgets/chat_message_text.dart';
 import '../widgets/news_people_sheet.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
@@ -184,7 +187,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     final current = index >= 0 ? _news[index] : item;
 
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => NewsDetailScreen(news: current)),
+      CupertinoPageRoute(builder: (_) => NewsDetailScreen(news: current)),
     );
     if (!mounted) return;
     // Обновляем карточку после возврата (лайки / просмотры могли измениться).
@@ -196,9 +199,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   }
 
   Future<void> _openCreate() async {
-    final created = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const NewsCreateScreen()));
+    final created = await Navigator.of(context).push<bool>(
+      CupertinoPageRoute(builder: (_) => const NewsCreateScreen()),
+    );
     if (created == true && mounted) {
       await _loadFirstPage();
     }
@@ -246,12 +249,8 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       return true;
     } catch (_) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            wasLiked ? 'Не удалось убрать лайк' : 'Не удалось поставить лайк',
-          ),
-        ),
+      _showCupertinoSnack(
+        wasLiked ? 'Не удалось убрать лайк' : 'Не удалось поставить лайк',
       );
       return false;
     } finally {
@@ -259,6 +258,12 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         setState(() => _likeInFlight.remove(id));
       }
     }
+  }
+
+  void _showCupertinoSnack(String message) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _addView(NewsItem item) async {
@@ -297,78 +302,42 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
   }
 
-  Widget _buildBody() {
+  Widget _buildSliverBody() {
     if (_isInitialLoading) {
-      return ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-        itemCount: 3,
-        itemBuilder: (context, index) => const _NewsCardSkeleton(),
+      return SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+        sliver: SliverList.builder(
+          itemCount: 3,
+          itemBuilder: (context, index) => const _NewsCardSkeleton(),
+        ),
       );
     }
 
     if (_news.isEmpty) {
-      return AppEmptyState(
-        icon: AppIcons.dashboard,
-        message: 'Пока нет новостей',
-        onRetry: _loadFirstPage,
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: AppEmptyState(
+          icon: CupertinoIcons.news,
+          message: 'Пока нет новостей',
+          onRetry: _loadFirstPage,
+        ),
       );
     }
 
-    final showInlineTitle = !widget.showAppBar;
-
-    return RefreshIndicator(
-      onRefresh: _loadFirstPage,
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 16, 16, 88),
-        itemCount: _news.length + 1 + (showInlineTitle ? 1 : 0),
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+      sliver: SliverList.separated(
+        itemCount: _news.length + (_isLoadingMore ? 1 : 0),
+        separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.lg),
         itemBuilder: (context, index) {
-          if (showInlineTitle && index == 0) {
-            final theme = Theme.of(context);
-            final appBarTheme = theme.appBarTheme;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: appBarTheme.backgroundColor ?? AppColors.surfaceElevated,
-                border: const Border(
-                  bottom: BorderSide(color: AppColors.outline),
-                ),
-              ),
-              child: SafeArea(
-                bottom: false,
-                child: SizedBox(
-                  height: kToolbarHeight,
-                  child: Center(
-                    child: Text(
-                      'Лента',
-                      style:
-                          appBarTheme.titleTextStyle ??
-                          theme.textTheme.titleLarge,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          final realIndex = index - (showInlineTitle ? 1 : 0);
-
-          if (realIndex >= _news.length) {
-            if (!_isLoadingMore) return const SizedBox(height: 24);
+          if (index >= _news.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
+              child: Center(child: CupertinoActivityIndicator()),
             );
           }
 
-          final news = _news[realIndex];
+          final news = _news[index];
           return VisibilityDetector(
             key: Key('news-card-${news.id}'),
             onVisibilityChanged: (info) => _onCardVisibilityChanged(news, info),
@@ -397,22 +366,33 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final fab = FloatingActionButton(
-      onPressed: _openCreate,
-      child: const AppIcon(AppIcons.profileAdd, size: 22),
-    );
-
-    if (!widget.showAppBar) {
-      return Scaffold(body: _buildBody(), floatingActionButton: fab);
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Лента'),
-        centerTitle: true,
-        elevation: 0,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _loadFirstPage,
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              CupertinoSliverNavigationBar(
+                largeTitle: const Text('Лента'),
+                backgroundColor:
+                    CupertinoColors.systemGroupedBackground.withValues(alpha: 0.9),
+                border: null,
+                trailing: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  onPressed: _openCreate,
+                  child: const Icon(CupertinoIcons.square_pencil, size: 26),
+                ),
+              ),
+              _buildSliverBody(),
+            ],
+          ),
+        ),
       ),
-      body: _buildBody(),
-      floatingActionButton: fab,
     );
   }
 }
@@ -440,17 +420,23 @@ class _NewsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasImage = news.imageUrl != null && news.imageUrl!.trim().isNotEmpty;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        boxShadow: hasImage ? AppColors.cardPhotoShadow : null,
+    return DefaultTextStyle(
+      style: TextStyle(
+        fontFamily: '.SF Pro Text',
+        decoration: TextDecoration.none,
+        color: CupertinoColors.label.resolveFrom(context),
+        fontSize: 15,
       ),
-      child: Card(
-        margin: EdgeInsets.zero,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: CupertinoColors.systemBackground.resolveFrom(context),
+          boxShadow: AppColors.cardPhotoShadow,
+        ),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
+        child: GestureDetector(
           onTap: onOpen,
+          behavior: HitTestBehavior.opaque,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -495,53 +481,56 @@ class _NewsCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 10),
                         ],
-                        AppIcon(
-                          AppIcons.date,
-                          size: 14,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        Icon(
+                          CupertinoIcons.calendar,
+                          size: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(context),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           dateLabel,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       news.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        height: 1.25,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      news.content,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    if (news.contentHtml.trim().isNotEmpty ||
+                        news.content.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      ChatMessageText(
+                        text: news.contentHtml.trim().isNotEmpty
+                            ? news.contentHtml
+                            : news.content,
+                        maxLines: 3,
+                        fontSize: 15,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         _StatChip(
-                          icon: AppIcons.eye,
+                          icon: CupertinoIcons.eye,
                           label: '${news.viewsCount}',
                           onTap: onShowViewers,
                         ),
-                        const SizedBox(width: 10),
+                        const Spacer(),
                         _LikeButton(
                           count: news.likesCount,
                           isLiked: news.isLiked,
                           isLoading: isLikeInFlight,
-                          onPressed: () async {
-                            await onLike();
-                          },
+                          onPressed: onLike,
                           onCountTap: onShowLikers,
                         ),
                       ],
@@ -566,38 +555,36 @@ class _NewsCardSkeleton extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.lg),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppColors.radius),
+        borderRadius: BorderRadius.circular(18),
+        color: CupertinoColors.systemBackground.resolveFrom(context),
         boxShadow: AppColors.cardPhotoShadow,
       ),
-      child: Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const AspectRatio(
-              aspectRatio: 16 / 9,
-              child: AppSkeletonBox(borderRadius: 0),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AspectRatio(
+            aspectRatio: 16 / 9,
+            child: AppSkeletonBox(borderRadius: 0),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeletonBox(width: 160, height: 12, borderRadius: 6),
+                const SizedBox(height: AppSpacing.md),
+                const AppSkeletonBox(height: 16, borderRadius: 6),
+                const SizedBox(height: AppSpacing.sm),
+                AppSkeletonBox(
+                  width: MediaQuery.sizeOf(context).width * 0.6,
+                  height: 16,
+                  borderRadius: 6,
+                ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppSkeletonBox(width: 160, height: 12, borderRadius: 6),
-                  const SizedBox(height: AppSpacing.md),
-                  const AppSkeletonBox(height: 16, borderRadius: 6),
-                  const SizedBox(height: AppSpacing.sm),
-                  AppSkeletonBox(
-                    width: MediaQuery.sizeOf(context).width * 0.6,
-                    height: 16,
-                    borderRadius: 6,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -612,34 +599,30 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
     final child = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppIcon(icon, size: 14, color: cs.onSurfaceVariant),
+          Icon(icon, size: 16, color: color),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-          ),
+          Text(label, style: TextStyle(fontSize: 13, color: color)),
         ],
       ),
     );
 
     if (onTap == null) return child;
-    return InkWell(
-      borderRadius: BorderRadius.circular(999),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: child,
     );
   }
 }
 
-class _LikeButton extends StatelessWidget {
+/// Кнопка лайка в стиле iOS: сердце с bounce-анимацией и haptic-откликом.
+class _LikeButton extends StatefulWidget {
   const _LikeButton({
     required this.count,
     required this.isLiked,
@@ -651,48 +634,80 @@ class _LikeButton extends StatelessWidget {
   final int count;
   final bool isLiked;
   final bool isLoading;
-  final Future<void> Function() onPressed;
+  final Future<bool> Function() onPressed;
   final VoidCallback? onCountTap;
 
   @override
+  State<_LikeButton> createState() => _LikeButtonState();
+}
+
+class _LikeButtonState extends State<_LikeButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.35), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1.35, end: 1.0), weight: 1),
+  ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleTap() async {
+    if (widget.isLoading) return;
+    HapticFeedback.lightImpact();
+    unawaited(_controller.forward(from: 0));
+    await widget.onPressed();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final iconColor = isLiked ? cs.primary : cs.onSurfaceVariant;
+    final color = widget.isLiked
+        ? CupertinoColors.systemRed
+        : CupertinoColors.secondaryLabel.resolveFrom(context);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: isLoading
-              ? null
-              : () async {
-                  await onPressed();
-                },
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleTap,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 2, 4),
-            child: isLoading
-                ? SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: cs.onSurfaceVariant,
-                    ),
+            child: widget.isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CupertinoActivityIndicator(radius: 8),
                   )
-                : AppIcon(AppIcons.like, size: 14, color: iconColor),
+                : ScaleTransition(
+                    scale: _scale,
+                    child: Icon(
+                      widget.isLiked
+                          ? CupertinoIcons.heart_fill
+                          : CupertinoIcons.heart,
+                      size: 20,
+                      color: color,
+                    ),
+                  ),
           ),
         ),
-        InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onCountTap,
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onCountTap,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(2, 4, 4, 4),
             child: Text(
-              '$count',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              '${widget.count}',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
             ),
           ),
         ),
@@ -709,22 +724,21 @@ class _AuthorChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         MemberAvatar(displayName: authorName, avatarUrl: avatarUrl, radius: 10),
         const SizedBox(width: 6),
         ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 180),
+          constraints: const BoxConstraints(maxWidth: 160),
           child: Text(
             authorName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
           ),
         ),
       ],

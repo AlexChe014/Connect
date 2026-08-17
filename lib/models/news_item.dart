@@ -5,6 +5,7 @@ class NewsItem {
   final String id;
   final String title;
   final String content;
+  final String contentHtml;
   final DateTime date;
   final String? imageUrl;
   final List<String> imageUrls;
@@ -21,6 +22,7 @@ class NewsItem {
     required this.id,
     required this.title,
     required this.content,
+    this.contentHtml = '',
     required this.date,
     this.imageUrl,
     this.imageUrls = const [],
@@ -38,6 +40,7 @@ class NewsItem {
     String? id,
     String? title,
     String? content,
+    String? contentHtml,
     DateTime? date,
     String? imageUrl,
     List<String>? imageUrls,
@@ -54,6 +57,7 @@ class NewsItem {
       id: id ?? this.id,
       title: title ?? this.title,
       content: content ?? this.content,
+      contentHtml: contentHtml ?? this.contentHtml,
       date: date ?? this.date,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
@@ -76,6 +80,7 @@ class NewsItem {
 
     final rawText = (json['text'] as String?) ?? (json['content'] as String?) ?? '';
     final content = HtmlTextUtils.toPlainText(rawText).trim();
+    final contentHtml = rawText.trim();
 
     final rawDate = (json['created_at'] as String?) ?? (json['date'] as String?) ?? '';
     final date = _parseBackendDate(rawDate) ?? DateTime.now();
@@ -135,6 +140,7 @@ class NewsItem {
       id: id,
       title: title,
       content: content,
+      contentHtml: contentHtml,
       date: date,
       imageUrl: imageUrl,
       imageUrls: imageUrls,
