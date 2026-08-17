@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/utils/user_display_name.dart';
 import 'package:flutter/foundation.dart';
@@ -107,13 +108,16 @@ class _ChatAvatarState extends State<ChatAvatar> {
     if (!_imageFailed) {
       final url = chatAvatarBestUrl(widget.chat);
       if (url != null) {
-        return CircleAvatar(
-          radius: widget.radius,
-          backgroundColor: Colors.transparent,
-          backgroundImage: NetworkImage(url),
-          onBackgroundImageError: (error, stackTrace) {
-            if (mounted) setState(() => _imageFailed = true);
-          },
+        final size = widget.radius * 2;
+        return ClipOval(
+          child: CachedNetworkImage(
+            imageUrl: url,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => _fallback(),
+            errorWidget: (context, url, error) => _fallback(),
+          ),
         );
       }
 
@@ -135,7 +139,7 @@ class _ChatAvatarState extends State<ChatAvatar> {
 }
 
 /// Аватар участника по имени и URL.
-class MemberAvatar extends StatefulWidget {
+class MemberAvatar extends StatelessWidget {
   const MemberAvatar({
     super.key,
     required this.displayName,
@@ -147,37 +151,29 @@ class MemberAvatar extends StatefulWidget {
   final String? avatarUrl;
   final double radius;
 
-  @override
-  State<MemberAvatar> createState() => _MemberAvatarState();
-}
-
-class _MemberAvatarState extends State<MemberAvatar> {
-  bool _imageFailed = false;
-
-  @override
-  void didUpdateWidget(MemberAvatar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.avatarUrl != widget.avatarUrl) _imageFailed = false;
-  }
+  Widget _fallback() => _InitialsAvatar(
+    initials: userInitials(displayName),
+    backgroundColor: chatAvatarColor(displayName),
+    radius: radius,
+  );
 
   @override
   Widget build(BuildContext context) {
-    final url = widget.avatarUrl?.trim();
-    if (!_imageFailed && url != null && url.isNotEmpty) {
-      return CircleAvatar(
-        radius: widget.radius,
-        backgroundColor: Colors.transparent,
-        backgroundImage: NetworkImage(url),
-        onBackgroundImageError: (error, stackTrace) {
-          if (mounted) setState(() => _imageFailed = true);
-        },
-      );
-    }
+    final url = avatarUrl?.trim();
+    if (url == null || url.isEmpty) return _fallback();
 
-    return _InitialsAvatar(
-      initials: userInitials(widget.displayName),
-      backgroundColor: chatAvatarColor(widget.displayName),
-      radius: widget.radius,
+    // Плейсхолдер — сразу инициалы (не пустой круг), пока грузится/кэшируется
+    // фото: без него аватар на миг мигает пустотой при первом появлении.
+    final size = radius * 2;
+    return ClipOval(
+      child: CachedNetworkImage(
+        imageUrl: url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => _fallback(),
+        errorWidget: (context, url, error) => _fallback(),
+      ),
     );
   }
 }
