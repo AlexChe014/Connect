@@ -53,6 +53,14 @@ class StaffUser {
   /// Числовой id для API (`users[]`).
   int? get idAsInt => int.tryParse(id.trim());
 
+  /// `true`, если сегодня день рождения (год не учитывается).
+  bool get isBirthdayToday {
+    final b = birthday;
+    if (b == null) return false;
+    final now = DateTime.now();
+    return b.month == now.month && b.day == now.day;
+  }
+
   String get initials {
     final parts = <String>[];
     for (final t in [surname, name]) {
