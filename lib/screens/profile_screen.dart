@@ -225,49 +225,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final phone = _optionalField('phone', altKeys: ['mobile', 'tel', 'telephone']);
     final position = _optionalField('position');
     final status = _statusLabel;
+    final contactTiles = <Widget>[
+      if (birthday != null)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.gift_fill, CupertinoColors.systemPink),
+          title: const Text('Дата рождения'),
+          additionalInfo: Text(DateFormat('dd.MM.yyyy').format(birthday)),
+        ),
+      if ((email ?? '').isNotEmpty)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.mail_solid, CupertinoColors.systemBlue),
+          title: const Text('Email'),
+          additionalInfo: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(
+              email!,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      if ((phone ?? '').isNotEmpty)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.phone_fill, CupertinoColors.systemGreen),
+          title: const Text('Телефон'),
+          additionalInfo: Text(phone!),
+        ),
+      if ((status ?? '').isNotEmpty)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.person_badge_plus_fill, CupertinoColors.systemGrey),
+          title: const Text('Статус'),
+          additionalInfo: Text(status!),
+        ),
+    ];
 
     return SliverPadding(
       padding: const EdgeInsets.only(top: 4, bottom: 32),
       sliver: SliverList.list(
         children: [
           _ProfileHeaderCard(avatarUrl: _avatarUrl, displayName: _displayName, position: position),
-          const SizedBox(height: 20),
-          CupertinoListSection.insetGrouped(
-            children: [
-              if (birthday != null)
-                CupertinoListTile(
-                  leading: _iconBadge(CupertinoIcons.gift_fill, CupertinoColors.systemPink),
-                  title: const Text('Дата рождения'),
-                  additionalInfo: Text(DateFormat('dd.MM.yyyy').format(birthday)),
-                ),
-              if ((email ?? '').isNotEmpty)
-                CupertinoListTile(
-                  leading: _iconBadge(CupertinoIcons.mail_solid, CupertinoColors.systemBlue),
-                  title: const Text('Email'),
-                  additionalInfo: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 180),
-                    child: Text(
-                      email!,
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              if ((phone ?? '').isNotEmpty)
-                CupertinoListTile(
-                  leading: _iconBadge(CupertinoIcons.phone_fill, CupertinoColors.systemGreen),
-                  title: const Text('Телефон'),
-                  additionalInfo: Text(phone!),
-                ),
-              if ((status ?? '').isNotEmpty)
-                CupertinoListTile(
-                  leading: _iconBadge(CupertinoIcons.person_badge_plus_fill, CupertinoColors.systemGrey),
-                  title: const Text('Статус'),
-                  additionalInfo: Text(status!),
-                ),
-            ],
-          ),
+          if (contactTiles.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            CupertinoListSection.insetGrouped(
+              header: const Text('Контакты'),
+              children: contactTiles,
+            ),
+          ],
           if (_bookingsLoading) ...[
             const SizedBox(height: 20),
             const Center(child: CupertinoActivityIndicator()),

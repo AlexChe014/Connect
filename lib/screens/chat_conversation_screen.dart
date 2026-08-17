@@ -24,8 +24,9 @@ String _formatMsgTime(DateTime d) {
 bool _sameChatAuthor(ChatMessage a, ChatMessage b) {
   if (a.isSystem || b.isSystem) return false;
   if (a.isOutgoing && b.isOutgoing) return true;
-  if (!a.isOutgoing && !b.isOutgoing && a.authorName == b.authorName)
+  if (!a.isOutgoing && !b.isOutgoing && a.authorName == b.authorName) {
     return true;
+  }
   return false;
 }
 

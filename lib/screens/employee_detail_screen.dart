@@ -105,6 +105,56 @@ class EmployeeDetailScreen extends StatelessWidget {
     final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
     final hasPhone = (user.phone ?? '').trim().isNotEmpty;
     final hasEmail = (user.email ?? '').trim().isNotEmpty;
+    final infoTiles = <Widget>[
+      if (hasEmail)
+        _infoRow(
+          context,
+          icon: CupertinoIcons.mail_solid,
+          color: CupertinoColors.systemBlue,
+          label: 'Email',
+          value: user.email!.trim(),
+        ),
+      if (hasPhone)
+        _infoRow(
+          context,
+          icon: CupertinoIcons.phone_fill,
+          color: CupertinoColors.systemGreen,
+          label: 'Телефон',
+          value: user.phone!.trim(),
+        ),
+      if (birthdayLabel != null)
+        _infoRow(
+          context,
+          icon: CupertinoIcons.gift_fill,
+          color: CupertinoColors.systemPink,
+          label: 'День рождения',
+          value: birthdayLabel,
+        ),
+      if ((user.department ?? '').trim().isNotEmpty)
+        _infoRow(
+          context,
+          icon: CupertinoIcons.building_2_fill,
+          color: CupertinoColors.systemIndigo,
+          label: 'Отдел',
+          value: user.department!.trim(),
+        ),
+      if ((user.workStatus ?? '').trim().isNotEmpty)
+        _infoRow(
+          context,
+          icon: CupertinoIcons.person_badge_plus_fill,
+          color: CupertinoColors.systemGrey,
+          label: 'Рабочий статус',
+          value: user.workStatus!.trim(),
+        ),
+      if (_isAdmin && rolesText != null)
+        _infoRow(
+          context,
+          icon: CupertinoIcons.star_fill,
+          color: CupertinoColors.systemOrange,
+          label: 'Роли',
+          value: rolesText,
+        ),
+    ];
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
@@ -242,61 +292,11 @@ class EmployeeDetailScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 28),
-              CupertinoListSection.insetGrouped(
-                children: [
-                  if (hasEmail)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.mail_solid,
-                      color: CupertinoColors.systemBlue,
-                      label: 'Email',
-                      value: user.email!.trim(),
-                    ),
-                  if (hasPhone)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.phone_fill,
-                      color: CupertinoColors.systemGreen,
-                      label: 'Телефон',
-                      value: user.phone!.trim(),
-                    ),
-                  if (birthdayLabel != null)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.gift_fill,
-                      color: CupertinoColors.systemPink,
-                      label: 'День рождения',
-                      value: birthdayLabel,
-                    ),
-                  if ((user.department ?? '').trim().isNotEmpty)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.building_2_fill,
-                      color: CupertinoColors.systemIndigo,
-                      label: 'Отдел',
-                      value: user.department!.trim(),
-                    ),
-                  if ((user.workStatus ?? '').trim().isNotEmpty)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.person_badge_plus_fill,
-                      color: CupertinoColors.systemGrey,
-                      label: 'Рабочий статус',
-                      value: user.workStatus!.trim(),
-                    ),
-                  // Роли — служебная информация, полезна только для
-                  // администраторов; обычным пользователям всегда покажет
-                  // одно и то же ("Пользователь") и просто шумит на экране.
-                  if (_isAdmin && rolesText != null)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.star_fill,
-                      color: CupertinoColors.systemOrange,
-                      label: 'Роли',
-                      value: rolesText,
-                    ),
-                ],
-              ),
+              if (infoTiles.isNotEmpty)
+                CupertinoListSection.insetGrouped(
+                  header: const Text('Информация'),
+                  children: infoTiles,
+                ),
             ],
           ),
         ),

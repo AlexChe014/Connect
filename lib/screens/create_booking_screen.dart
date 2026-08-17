@@ -296,8 +296,9 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
               decoration: _decoration(context, 'Тема *'),
 
               validator: (v) {
-                if ((v ?? '').trim().isEmpty)
+                if ((v ?? '').trim().isEmpty) {
                   return 'Укажите тему бронирования';
+                }
 
                 return null;
               },
