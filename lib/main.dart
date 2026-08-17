@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
@@ -279,43 +280,40 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceElevated,
-          border: Border(top: BorderSide(color: AppColors.outline)),
-        ),
-        child: NavigationBar(
-          selectedIndex: _currentIndex,
-          onDestinationSelected: (index) {
-            if (index == 0) {
-              _scaffoldKey.currentState?.openDrawer();
-              return;
-            }
-            setState(() => _currentIndex = index);
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: _LogoNavIcon(selected: false),
-              selectedIcon: _LogoNavIcon(selected: true),
-              label: '',
-            ),
-            NavigationDestination(
-              icon: AppIcon(AppIcons.calendar),
-              selectedIcon: AppIcon(AppIcons.calendar),
-              label: '',
-            ),
-            NavigationDestination(
-              icon: AppIcon(AppIcons.chat),
-              selectedIcon: AppIcon(AppIcons.chat),
-              label: '',
-            ),
-            NavigationDestination(
-              icon: AppIcon(AppIcons.user),
-              selectedIcon: AppIcon(AppIcons.user),
-              label: '',
-            ),
-          ],
-        ),
+      bottomNavigationBar: CupertinoTabBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          if (index == 0) {
+            _scaffoldKey.currentState?.openDrawer();
+            return;
+          }
+          setState(() => _currentIndex = index);
+        },
+        backgroundColor: CupertinoColors.systemGroupedBackground
+            .resolveFrom(context)
+            .withValues(alpha: 0.94),
+        activeColor: CupertinoColors.activeBlue,
+        inactiveColor: CupertinoColors.systemGrey,
+        iconSize: 26,
+        items: const [
+          BottomNavigationBarItem(
+            icon: _LogoNavIcon(selected: false),
+            activeIcon: _LogoNavIcon(selected: true),
+            label: 'Лента',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.calendar),
+            label: 'Календарь',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chat_bubble_2),
+            label: 'Чаты',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.person_crop_circle),
+            label: 'Профиль',
+          ),
+        ],
       ),
     );
   }
