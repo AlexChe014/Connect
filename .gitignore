@@ -46,3 +46,6 @@ app.*.map.json
 
 # Локальные секреты (ключ шифрования чата и др.)
 dart_defines.json
+
+# Claude Code local state
+.claude/

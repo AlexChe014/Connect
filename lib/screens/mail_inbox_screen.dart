@@ -6,6 +6,8 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import 'compose_mail_screen.dart';
 import 'mail_message_screen.dart';
 
@@ -34,7 +36,9 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   Future<void> _loadFolders() async {
     setState(() => _isLoadingFolders = true);
     try {
-      final folders = await MailRepository.instance.getMailboxes(widget.connection.id);
+      final folders = await MailRepository.instance.getMailboxes(
+        widget.connection.id,
+      );
       if (!mounted) return;
       setState(() {
         _folders = folders;
@@ -60,7 +64,9 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
           folderId: folder.id,
         );
       } else {
-        items = await MailRepository.instance.getMessagesByService(widget.connection.id);
+        items = await MailRepository.instance.getMessagesByService(
+          widget.connection.id,
+        );
       }
       if (!mounted) return;
       setState(() {
@@ -79,10 +85,8 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   Future<void> _openCompose({MailMessage? replyTo}) async {
     final sent = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (context) => ComposeMailScreen(
-          connection: widget.connection,
-          replyTo: replyTo,
-        ),
+        builder: (context) =>
+            ComposeMailScreen(connection: widget.connection, replyTo: replyTo),
       ),
     );
     if (sent == true) await _loadMessages();
@@ -166,7 +170,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         child: const AppIcon(AppIcons.compose),
       ),
       body: _isLoadingFolders && _isLoadingMessages
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingIndicator(size: 32)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -205,9 +209,12 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                     child: Text(
                                       widget.connection.lastError ??
                                           'Почтовое подключение неактивно',
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: theme.colorScheme.onErrorContainer,
-                                      ),
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onErrorContainer,
+                                          ),
                                     ),
                                   ),
                                 ],
@@ -217,24 +224,11 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                         if (_messages.isEmpty && !_isLoadingMessages)
                           SizedBox(
                             height: MediaQuery.sizeOf(context).height * 0.35,
-                            child: Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.inbox_outlined,
-                                    size: 48,
-                                    color: theme.colorScheme.outline,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _selectedFolder != null
-                                        ? 'В папке «${_selectedFolder!.name}» нет писем'
-                                        : 'Нет писем',
-                                    style: theme.textTheme.bodyLarge,
-                                  ),
-                                ],
-                              ),
+                            child: AppEmptyState(
+                              icon: Icons.inbox_outlined,
+                              message: _selectedFolder != null
+                                  ? 'В папке «${_selectedFolder!.name}» нет писем'
+                                  : 'Нет писем',
                             ),
                           )
                         else ...[
@@ -249,13 +243,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                           if (_isLoadingMessages)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              ),
+                              child: AppLoadingIndicator(size: 20),
                             ),
                         ],
                       ],
@@ -313,9 +301,13 @@ class _MessageTile extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            message.from.isEmpty ? 'Неизвестный отправитель' : message.from,
+                            message.from.isEmpty
+                                ? 'Неизвестный отправитель'
+                                : message.from,
                             style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: isUnread
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -334,7 +326,9 @@ class _MessageTile extends StatelessWidget {
                     Text(
                       message.subject,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: isUnread ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: isUnread
+                            ? FontWeight.w600
+                            : FontWeight.w400,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

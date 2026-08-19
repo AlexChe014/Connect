@@ -5,6 +5,8 @@ import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import 'mail_connection_form_screen.dart';
 import 'mail_inbox_screen.dart';
 
@@ -118,9 +120,9 @@ class _MailScreenState extends State<MailScreen> {
               Text(
                 'Добавить почтовый ящик',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -129,109 +131,95 @@ class _MailScreenState extends State<MailScreen> {
     );
   }
 
-  Widget _buildListContent({required bool showInlineTitle}) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final headerCount = (showInlineTitle ? 1 : 0) + 1;
-    final itemCount = headerCount + (_connections.isEmpty ? 1 : _connections.length);
-
+  Widget _buildResults() {
     return RefreshIndicator(
       onRefresh: _loadConnections,
-      child: ListView.builder(
-        padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
-        itemCount: itemCount,
-        itemBuilder: (context, index) {
-          if (showInlineTitle && index == 0) {
-            final theme = Theme.of(context);
-            final cs = theme.colorScheme;
-            final appBarTheme = theme.appBarTheme;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: appBarTheme.backgroundColor ?? cs.surface,
-              child: SafeArea(
-                bottom: false,
-                child: SizedBox(
-                  height: kToolbarHeight,
-                  child: Center(
-                    child: Text(
-                      'Почта',
-                      style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-                    ),
+      child: _buildResultsContent(),
+    );
+  }
+
+  Widget _buildResultsContent() {
+    if (_isLoading) {
+      return const AppSkeletonList();
+    }
+
+    if (_connections.isEmpty) {
+      return AppEmptyState(
+        icon: AppIcons.mailAt,
+        message: _userId == null
+            ? 'Не удалось определить пользователя'
+            : 'Почтовые ящики не подключены\nПодключите Yandex, Gmail или свой IMAP-сервер',
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      itemCount: _connections.length,
+      itemBuilder: (context, index) {
+        final connection = _connections[index];
+        return _ConnectionTile(
+          connection: connection,
+          onTap: () => _openInbox(connection),
+          onEditPassword: () async {
+            final updated = await Navigator.of(context).push<bool>(
+              MaterialPageRoute<bool>(
+                builder: (context) =>
+                    MailConnectionFormScreen(existing: connection),
+              ),
+            );
+            if (updated == true) await _loadConnections();
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader({required bool showInlineTitle}) {
+    final theme = Theme.of(context);
+    final appBarTheme = theme.appBarTheme;
+
+    return Container(
+      color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            if (showInlineTitle)
+              SizedBox(
+                height: kToolbarHeight,
+                child: Center(
+                  child: Text(
+                    'Почта',
+                    style:
+                        appBarTheme.titleTextStyle ??
+                        theme.textTheme.titleLarge,
                   ),
                 ),
               ),
-            );
-          }
-
-          final base = showInlineTitle ? 1 : 0;
-          final afterHeader = index - base;
-
-          if (afterHeader == 0) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: widget.showAppBar ? 0 : 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: _buildAddButton(context),
-            );
-          }
-
-          if (_connections.isEmpty) {
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  children: [
-                    AppIcon(
-                      AppIcons.mailAt,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _userId == null
-                          ? 'Не удалось определить пользователя'
-                          : 'Почтовые ящики не подключены',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Подключите Yandex, Gmail или свой IMAP-сервер',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final connection = _connections[afterHeader - 1];
-          return _ConnectionTile(
-            connection: connection,
-            onTap: () => _openInbox(connection),
-            onEditPassword: () async {
-              final updated = await Navigator.of(context).push<bool>(
-                MaterialPageRoute<bool>(
-                  builder: (context) => MailConnectionFormScreen(
-                    existing: connection,
-                  ),
-                ),
-              );
-              if (updated == true) await _loadConnections();
-            },
-          );
-        },
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildBody({required bool showInlineTitle}) {
+    return Column(
+      children: [
+        _buildHeader(showInlineTitle: showInlineTitle),
+        const Divider(height: 1),
+        Expanded(child: _buildResults()),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (!widget.showAppBar) {
-      return _buildListContent(showInlineTitle: true);
+      return _buildBody(showInlineTitle: true);
     }
     return Scaffold(
       appBar: AppBar(
@@ -239,7 +227,7 @@ class _MailScreenState extends State<MailScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: _buildListContent(showInlineTitle: false),
+      body: _buildBody(showInlineTitle: false),
     );
   }
 }
@@ -309,7 +297,7 @@ class _ConnectionTile extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right,
-                color: theme.colorScheme.outline,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ],
           ),

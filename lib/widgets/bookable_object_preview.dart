@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/app_icons.dart';
 import '../models/bookings/bookable_object.dart';
+import 'app_network_image.dart';
 
 /// Фото и краткая информация об объекте бронирования.
 class BookableObjectPreview extends StatelessWidget {
@@ -22,29 +23,27 @@ class BookableObjectPreview extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: imageSize,
-          height: imageSize,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: imageUrl == null
-              ? AppIcon(
+        imageUrl == null
+            ? Container(
+                width: imageSize,
+                height: imageSize,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: AppIcon(
                   AppIcons.locationPin,
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
                   size: compact ? 26 : 32,
-                )
-              : Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Icon(
-                    Icons.broken_image_outlined,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
                 ),
-        ),
+              )
+            : AppNetworkImage(
+                url: imageUrl,
+                width: imageSize,
+                height: imageSize,
+                borderRadius: 12,
+              ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -54,16 +53,16 @@ class BookableObjectPreview extends StatelessWidget {
                 Text(
                   object.name,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               if (object.capacity > 0) ...[
                 SizedBox(height: compact ? 0 : 6),
                 Text(
                   'Вместимость: до ${object.capacity} чел.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
               if ((object.description ?? '').trim().isNotEmpty) ...[
@@ -73,8 +72,8 @@ class BookableObjectPreview extends StatelessWidget {
                   maxLines: compact ? 2 : 4,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ],

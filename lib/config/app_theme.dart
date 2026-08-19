@@ -18,6 +18,28 @@ abstract final class AppColors {
 
   static const double radius = 12;
   static const double buttonRadius = 12;
+
+  /// Мягкая тень для карточек с фото (комнаты, новости) — там плоский
+  /// стиль (elevation 0 + outline-бордер) выглядит невыразительно.
+  static List<BoxShadow> get cardPhotoShadow => [
+        BoxShadow(
+          color: onSurface.withValues(alpha: 0.08),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+      ];
+}
+
+/// Единая шкала отступов, чтобы padding/gap не подбирались на глаз по экрану.
+abstract final class AppSpacing {
+  AppSpacing._();
+
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
 }
 
 abstract final class AppTheme {
@@ -64,8 +86,33 @@ abstract final class AppTheme {
       scaffoldBackgroundColor: AppColors.background,
       canvasColor: AppColors.background,
       textTheme: const TextTheme(
-        bodyMedium: TextStyle(color: AppColors.onSurface),
-        bodySmall: TextStyle(color: AppColors.onSurfaceVariant),
+        headlineSmall: TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          height: 1.25,
+        ),
+        titleLarge: TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+        ),
+        titleMedium: TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        ),
+        titleSmall: TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+        ),
+        bodyLarge: TextStyle(color: AppColors.onSurface, fontSize: 16, height: 1.4),
+        bodyMedium: TextStyle(color: AppColors.onSurface, height: 1.4),
+        bodySmall: TextStyle(color: AppColors.onSurfaceVariant, height: 1.4),
         labelMedium: TextStyle(color: AppColors.onSurfaceVariant),
         labelSmall: TextStyle(color: AppColors.onSurfaceVariant),
       ),
@@ -197,7 +244,9 @@ abstract final class AppTheme {
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.onPrimary,
-        elevation: 0,
+        // Ненулевая тень нужна, чтобы FAB читался как элемент "над" списком,
+        // а не сливался с карточкой контента под ним при скролле.
+        elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(16)),
         ),

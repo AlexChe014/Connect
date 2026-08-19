@@ -1,6 +1,7 @@
 import 'package:connect/config/app_icons.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/material.dart';
 
@@ -69,12 +70,18 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           children: [
             TextField(
               controller: titleCtrl,
-              decoration: const InputDecoration(labelText: 'Название', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Название',
+                isDense: true,
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: descCtrl,
-              decoration: const InputDecoration(labelText: 'Описание', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Описание',
+                isDense: true,
+              ),
               maxLines: 3,
             ),
           ],
@@ -84,7 +91,10 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             style: TextButton.styleFrom(
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
@@ -93,7 +103,10 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             style: FilledButton.styleFrom(
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Сохранить'),
@@ -153,7 +166,10 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Добавить участников',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
@@ -270,7 +286,9 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить чат?'),
-        content: const Text('Чат будет помечен как удалённый для всех участников.'),
+        content: const Text(
+          'Чат будет помечен как удалённый для всех участников.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -294,9 +312,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            _service.lastActionError ?? 'Не удалось удалить чат',
-          ),
+          content: Text(_service.lastActionError ?? 'Не удалось удалить чат'),
         ),
       );
       return;
@@ -310,11 +326,9 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     final selfId = _service.selfUserId;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Настройки чата'),
-      ),
+      appBar: AppBar(title: const Text('Настройки чата')),
       body: _busy
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingIndicator(size: 32)
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -357,8 +371,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                 const SizedBox(height: 8),
                 ..._chat.members.map((m) {
                   final isCreator = m.userId == _chat.creatorId;
-                  final canRemove = m.userId == selfId ||
-                      (_canManage && !isCreator);
+                  final canRemove =
+                      m.userId == selfId || (_canManage && !isCreator);
                   return ListTile(
                     leading: MemberAvatar(
                       displayName: m.displayName,

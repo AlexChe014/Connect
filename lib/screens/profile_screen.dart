@@ -1,13 +1,15 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../config/app_icons.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/push_notification_service.dart';
 import '../utils/media_url_utils.dart';
+import '../widgets/app_network_image.dart';
+import '../widgets/chat_avatar.dart';
 import 'booking_detail_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -80,9 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         datetimeEndSeconds: weekEnd.millisecondsSinceEpoch ~/ 1000,
       );
 
-      final upcoming = items
-          .where((b) => !b.datetimeEnd.isBefore(now))
-          .toList()
+      final upcoming = items.where((b) => !b.datetimeEnd.isBefore(now)).toList()
         ..sort((a, b) => a.datetimeStart.compareTo(b.datetimeStart));
 
       if (!mounted) return;
@@ -100,22 +100,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String? get _avatarUrl => MediaUrlUtils.normalizeFirstUrl(_profile?['media']);
-
-  String get _initials {
-    final p = _profile;
-    if (p == null) return '?';
-    final parts = <String>[];
-    for (final key in ['surname', 'name']) {
-      final t = (p[key] ?? '').toString().trim();
-      if (t.isNotEmpty) parts.add(t.substring(0, 1));
-    }
-    if (parts.isEmpty) {
-      final e = (p['email'] ?? '').toString().trim();
-      if (e.isNotEmpty) return e[0].toUpperCase();
-      return '?';
-    }
-    return parts.take(2).join().toUpperCase();
-  }
 
   String get _displayName {
     final p = _profile;
@@ -218,284 +202,259 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '$hh:$mm';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Профиль'),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadProfile,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _ProfileHeader(
-                    avatarUrl: _avatarUrl,
-                    initials: _initials,
-                    displayName: _displayName,
-                    position: _optionalField('position'),
-                    birthday: _parseBirthday(),
-                    email: _optionalField('email', altKeys: ['mail']),
-                    phone: _optionalField('phone', altKeys: ['mobile', 'tel', 'telephone']),
-                    status: _statusLabel,
-                  ),
-                  if (_bookingsLoading)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_upcomingBookings.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    Text(
-                      'Ближайшие брони',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 12),
-                    ..._upcomingBookings.map(
-                      (b) => _UpcomingBookingTile(
-                        booking: b,
-                        timeLabel:
-                            '${DateFormat('dd.MM').format(b.datetimeStart)} • '
-                            '${_formatHm(b.datetimeStart)}—${_formatHm(b.datetimeEnd)}',
-                        onTap: () async {
-                          final changed = await BookingDetailSheet.show(
-                            context,
-                            bookingId: b.id,
-                          );
-                          if (changed == true && mounted) {
-                            await _loadUpcomingBookings();
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  OutlinedButton.icon(
-                    onPressed: _logout,
-                    icon: AppIcon(
-                      AppIcons.logout,
-                      size: 20,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    label: const Text('Выйти из аккаунта'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                      side: BorderSide(color: Theme.of(context).colorScheme.error),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 29,
+      height: 29,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
+      child: Icon(icon, size: 17, color: CupertinoColors.white),
     );
   }
-}
 
-class _ProfileHeader extends StatelessWidget {
-  final String? avatarUrl;
-  final String initials;
-  final String displayName;
-  final String? position;
-  final DateTime? birthday;
-  final String? email;
-  final String? phone;
-  final String? status;
+  Widget _buildSliverBody(BuildContext context) {
+    if (_isLoading) {
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(child: CupertinoActivityIndicator(radius: 14)),
+      );
+    }
 
-  const _ProfileHeader({
-    required this.avatarUrl,
-    required this.initials,
-    required this.displayName,
-    this.position,
-    this.birthday,
-    this.email,
-    this.phone,
-    this.status,
-  });
+    final birthday = _parseBirthday();
+    final email = _optionalField('email', altKeys: ['mail']);
+    final phone = _optionalField('phone', altKeys: ['mobile', 'tel', 'telephone']);
+    final position = _optionalField('position');
+    final status = _statusLabel;
+    final contactTiles = <Widget>[
+      if (birthday != null)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.gift_fill, CupertinoColors.systemPink),
+          title: const Text('Дата рождения'),
+          additionalInfo: Text(DateFormat('dd.MM.yyyy').format(birthday)),
+        ),
+      if ((email ?? '').isNotEmpty)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.mail_solid, CupertinoColors.systemBlue),
+          title: const Text('Email'),
+          additionalInfo: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Text(
+              email!,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+      if ((phone ?? '').isNotEmpty)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.phone_fill, CupertinoColors.systemGreen),
+          title: const Text('Телефон'),
+          additionalInfo: Text(phone!),
+        ),
+      if ((status ?? '').isNotEmpty)
+        CupertinoListTile(
+          leading: _iconBadge(CupertinoIcons.person_badge_plus_fill, CupertinoColors.systemGrey),
+          title: const Text('Статус'),
+          additionalInfo: Text(status!),
+        ),
+    ];
+
+    return SliverPadding(
+      padding: const EdgeInsets.only(top: 4, bottom: 32),
+      sliver: SliverList.list(
+        children: [
+          _ProfileHeaderCard(avatarUrl: _avatarUrl, displayName: _displayName, position: position),
+          if (contactTiles.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            CupertinoListSection.insetGrouped(
+              header: const Text('Контакты'),
+              children: contactTiles,
+            ),
+          ],
+          if (_bookingsLoading) ...[
+            const SizedBox(height: 20),
+            const Center(child: CupertinoActivityIndicator()),
+          ] else if (_upcomingBookings.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            CupertinoListSection.insetGrouped(
+              header: const Text('Ближайшие брони'),
+              children: _upcomingBookings.map((b) {
+                final timeLabel =
+                    '${DateFormat('dd.MM').format(b.datetimeStart)} • '
+                    '${_formatHm(b.datetimeStart)}—${_formatHm(b.datetimeEnd)}';
+                final subtitleParts = <String>[
+                  timeLabel,
+                  if ((b.objectName ?? '').trim().isNotEmpty) b.objectName!.trim(),
+                ];
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () async {
+                    final changed = await BookingDetailSheet.show(context, bookingId: b.id);
+                    if (changed == true && mounted) {
+                      await _loadUpcomingBookings();
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: DefaultTextStyle(
+                      style: TextStyle(
+                        fontFamily: '.SF Pro Text',
+                        decoration: TextDecoration.none,
+                        color: CupertinoColors.label.resolveFrom(context),
+                        fontSize: 16,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          b.objectImageUrl != null
+                              ? AppNetworkImage(
+                                  url: b.objectImageUrl,
+                                  width: 29,
+                                  height: 29,
+                                  borderRadius: 7,
+                                  errorIcon: CupertinoIcons.location_solid,
+                                )
+                              : _iconBadge(CupertinoIcons.location_solid, CupertinoColors.systemRed),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  b.theme,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    subtitleParts.join(' • '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Icon(
+                              CupertinoIcons.chevron_forward,
+                              size: 16,
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 20),
+          CupertinoListSection.insetGrouped(
+            children: [
+              CupertinoListTile(
+                title: const Center(
+                  child: Text(
+                    'Выйти из аккаунта',
+                    style: TextStyle(
+                      color: CupertinoColors.systemRed,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                onTap: _logout,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final hasAvatar = (avatarUrl ?? '').trim().isNotEmpty;
-    final initialsStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
-          color: cs.onPrimaryContainer,
-          fontWeight: FontWeight.w600,
-        );
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 88,
-              height: 88,
-              child: CircleAvatar(
-                radius: 44,
-                backgroundColor: cs.primaryContainer,
-                child: hasAvatar
-                    ? ClipOval(
-                        child: Image.network(
-                          avatarUrl!,
-                          width: 88,
-                          height: 88,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Text(initials, style: initialsStyle),
-                        ),
-                      )
-                    : Text(initials, style: initialsStyle),
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _loadProfile,
+          child: CustomScrollView(
+            slivers: [
+              const CupertinoSliverNavigationBar(
+                largeTitle: Text('Профиль'),
+                backgroundColor: CupertinoColors.systemGroupedBackground,
+                border: null,
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  if ((position ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      position!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  if (birthday != null)
-                    _InfoIconRow(
-                      icon: const AppIcon(AppIcons.birthdayCake, size: 18),
-                      text: DateFormat('dd.MM.yyyy').format(birthday!),
-                    ),
-                  if ((email ?? '').isNotEmpty)
-                    _InfoIconRow(
-                      icon: const AppIcon(AppIcons.profileMail, size: 18),
-                      text: email!,
-                    ),
-                  if ((phone ?? '').isNotEmpty)
-                    _InfoIconRow(
-                      icon: const AppIcon(AppIcons.phone, size: 18),
-                      text: phone!,
-                    ),
-                  if ((status ?? '').isNotEmpty)
-                    _InfoIconRow(
-                      icon: Icon(Icons.badge_outlined, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      text: status!,
-                    ),
-                ],
-              ),
-            ),
-          ],
+              _buildSliverBody(context),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _InfoIconRow extends StatelessWidget {
-  final Widget icon;
-  final String text;
-
-  const _InfoIconRow({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          IconTheme(
-            data: IconThemeData(color: cs.onSurfaceVariant, size: 18),
-            child: icon,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _UpcomingBookingTile extends StatelessWidget {
-  final UserBooking booking;
-  final String timeLabel;
-  final VoidCallback onTap;
-
-  const _UpcomingBookingTile({
-    required this.booking,
-    required this.timeLabel,
-    required this.onTap,
+class _ProfileHeaderCard extends StatelessWidget {
+  const _ProfileHeaderCard({
+    required this.avatarUrl,
+    required this.displayName,
+    this.position,
   });
 
+  final String? avatarUrl;
+  final String displayName;
+  final String? position;
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      booking.theme,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      timeLabel,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurface,
-                            fontWeight: FontWeight.w500,
-                          ),
-                    ),
-                    if ((booking.objectName ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 1),
-                      Text(
-                        booking.objectName!.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: cs.onSurface,
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                    ],
-                  ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          children: [
+            MemberAvatar(displayName: displayName, avatarUrl: avatarUrl, radius: 44),
+            const SizedBox(height: 12),
+            Text(
+              displayName,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: '.SF Pro Text',
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            if ((position ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                position!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: '.SF Pro Text',
+                  fontSize: 14,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
               ),
-              Icon(Icons.chevron_right, size: 20, color: cs.onSurfaceVariant),
             ],
-          ),
+          ],
         ),
       ),
     );

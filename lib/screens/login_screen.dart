@@ -108,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: maxFormWidth,
-                    minHeight: constraints.maxHeight - 48,
+                    minHeight: (constraints.maxHeight - 48).clamp(0.0, double.infinity),
                   ),
                   child: Form(
                     key: _formKey,

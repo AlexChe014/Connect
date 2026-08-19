@@ -6,6 +6,9 @@ import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/utils/html_text_utils.dart';
+import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_loading.dart';
+import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
 import 'package:file_picker/file_picker.dart';
@@ -21,7 +24,9 @@ String _formatMsgTime(DateTime d) {
 bool _sameChatAuthor(ChatMessage a, ChatMessage b) {
   if (a.isSystem || b.isSystem) return false;
   if (a.isOutgoing && b.isOutgoing) return true;
-  if (!a.isOutgoing && !b.isOutgoing && a.authorName == b.authorName) return true;
+  if (!a.isOutgoing && !b.isOutgoing && a.authorName == b.authorName) {
+    return true;
+  }
   return false;
 }
 
@@ -107,7 +112,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {});
-      WidgetsBinding.instance.addPostFrameCallback((_) => _performInitialScroll());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _performInitialScroll(),
+      );
     });
   }
 
@@ -116,7 +123,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
     final ctx = _scrollTargetKey.currentContext;
     if (ctx == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _performInitialScroll());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _performInitialScroll(),
+      );
       return;
     }
 
@@ -138,7 +147,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final loadError = _service.messagesError(widget.chat.id);
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFEFEFF4), // Telegram-like light chat background
+      backgroundColor: const Color(
+        0xFFEFEFF4,
+      ), // Telegram-like light chat background
       appBar: AppBar(
         titleSpacing: 0,
         title: Row(
@@ -163,7 +174,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     _c.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (_c.isGroup && _c.memberNames.isNotEmpty)
                     Text(
@@ -185,78 +199,67 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         children: [
           Expanded(
             child: loading && list.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? const AppLoadingIndicator(size: 32)
                 : loadError != null && list.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(loadError, textAlign: TextAlign.center),
-                              const SizedBox(height: 16),
-                              FilledButton(
-                                onPressed: () => _service.loadMessages(
-                                  widget.chat.id,
-                                  force: true,
-                                ),
-                                child: const Text('Повторить'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : list.isEmpty
-                        ? const Center(
-                            child: Text('Пока нет сообщений — напишите первым'),
-                          )
-                        : ListView.builder(
-                            reverse: true,
-                            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                            itemCount: list.length,
-                            itemBuilder: (context, i) {
-                              final chronologicalIndex = list.length - 1 - i;
-                              final m = list[chronologicalIndex];
-                              final previous = chronologicalIndex > 0
-                                  ? list[chronologicalIndex - 1]
-                                  : null;
-                              final next = chronologicalIndex < list.length - 1
-                                  ? list[chronologicalIndex + 1]
-                                  : null;
-                              final showAuthorHeader = !m.isOutgoing &&
-                                  !m.isSystem &&
-                                  (previous == null || !_sameChatAuthor(previous, m));
-                              final tile = _MessageTile(
-                                m: m,
-                                showAuthorHeader: showAuthorHeader,
-                                showAvatarInHeader: _c.isGroup && showAuthorHeader,
-                                showTime: _showMessageTime(m, next),
-                                onLongMenu: (action) {
-                                  if (action == _MsgAction.reply) {
-                                    setState(() {
-                                      _replyingTo = _refFromMessage(m);
-                                      _focus.requestFocus();
-                                    });
-                                  } else if (action == _MsgAction.forward) {
-                                    _openForwardTarget(m);
-                                  } else if (action == _MsgAction.edit) {
-                                    _editMessage(m);
-                                  } else if (action == _MsgAction.delete) {
-                                    _deleteMessage(m);
-                                  }
-                                },
-                              );
-                              if (i == _scrollToReversedIndex) {
-                                return KeyedSubtree(
-                                  key: _scrollTargetKey,
-                                  child: tile,
-                                );
-                              }
-                              return tile;
-                            },
-                          ),
+                ? AppEmptyState(
+                    icon: Icons.error_outline,
+                    message: loadError,
+                    onRetry: () =>
+                        _service.loadMessages(widget.chat.id, force: true),
+                  )
+                : list.isEmpty
+                ? const AppEmptyState(
+                    message: 'Пока нет сообщений — напишите первым',
+                  )
+                : ListView.builder(
+                    reverse: true,
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                    itemCount: list.length,
+                    itemBuilder: (context, i) {
+                      final chronologicalIndex = list.length - 1 - i;
+                      final m = list[chronologicalIndex];
+                      final previous = chronologicalIndex > 0
+                          ? list[chronologicalIndex - 1]
+                          : null;
+                      final next = chronologicalIndex < list.length - 1
+                          ? list[chronologicalIndex + 1]
+                          : null;
+                      final showAuthorHeader =
+                          !m.isOutgoing &&
+                          !m.isSystem &&
+                          (previous == null || !_sameChatAuthor(previous, m));
+                      final tile = _MessageTile(
+                        m: m,
+                        showAuthorHeader: showAuthorHeader,
+                        showAvatarInHeader: _c.isGroup && showAuthorHeader,
+                        showTime: _showMessageTime(m, next),
+                        onLongMenu: (action) {
+                          if (action == _MsgAction.reply) {
+                            setState(() {
+                              _replyingTo = _refFromMessage(m);
+                              _focus.requestFocus();
+                            });
+                          } else if (action == _MsgAction.forward) {
+                            _openForwardTarget(m);
+                          } else if (action == _MsgAction.edit) {
+                            _editMessage(m);
+                          } else if (action == _MsgAction.delete) {
+                            _deleteMessage(m);
+                          }
+                        },
+                      );
+                      if (i == _scrollToReversedIndex) {
+                        return KeyedSubtree(key: _scrollTargetKey, child: tile);
+                      }
+                      return tile;
+                    },
+                  ),
           ),
-          if (_replyingTo != null) _ReplyBanner(ref: _replyingTo!, onClose: () => setState(() => _replyingTo = null)),
+          if (_replyingTo != null)
+            _ReplyBanner(
+              ref: _replyingTo!,
+              onClose: () => setState(() => _replyingTo = null),
+            ),
           _Composer(
             textCtrl: _textCtrl,
             focus: _focus,
@@ -297,18 +300,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final t = _textCtrl.text;
     if (t.trim().isEmpty) return;
     try {
-      await _service.sendText(
-        widget.chat.id,
-        t,
-        replyTo: _replyingTo,
-      );
+      await _service.sendText(widget.chat.id, t, replyTo: _replyingTo);
       _textCtrl.clear();
       if (mounted) setState(() => _replyingTo = null);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось отправить: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось отправить: $e')));
     }
   }
 
@@ -333,7 +332,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             children: [
               const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('Переслать в…', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                child: Text(
+                  'Переслать в…',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                ),
               ),
               ConstrainedBox(
                 constraints: BoxConstraints(
@@ -358,11 +360,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       },
     );
     if (id == null) return;
-    _service.forwardMessage(
-      id,
-      m,
-      sourceChatId: widget.chat.id,
-    );
+    _service.forwardMessage(id, m, sourceChatId: widget.chat.id);
   }
 
   Future<void> _openAttachMenu() async {
@@ -471,7 +469,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             style: TextButton.styleFrom(
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
@@ -480,7 +481,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             style: FilledButton.styleFrom(
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Сохранить'),
@@ -557,47 +561,47 @@ class _ReplyBanner extends StatelessWidget {
           border: Border(bottom: BorderSide(color: scheme.outline)),
         ),
         child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: 40,
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    ref.authorName,
-                    style: TextStyle(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      ref.authorName,
+                      style: TextStyle(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  Text(
-                    ref.textPreview,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ],
+                    Text(
+                      ref.textPreview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: onClose,
-              icon: const AppIcon(AppIcons.close),
-            ),
-          ],
+              IconButton(
+                onPressed: onClose,
+                icon: const AppIcon(AppIcons.close),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -657,7 +661,10 @@ class _Composer extends StatelessWidget {
                       hintText: 'Сообщение',
                       border: InputBorder.none,
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                     ),
                     onSubmitted: (_) => onSend(),
                   ),
@@ -673,7 +680,11 @@ class _Composer extends StatelessWidget {
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: onSend,
-                    child: const AppIcon(AppIcons.send, size: 20, color: Colors.white),
+                    child: const AppIcon(
+                      AppIcons.send,
+                      size: 20,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -716,7 +727,9 @@ class _MessageTile extends StatelessWidget {
       );
     }
 
-    final align = m.isOutgoing ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final align = m.isOutgoing
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start;
     final scheme = Theme.of(context).colorScheme;
     final bubble = m.isOutgoing ? const Color(0xFF1677FF) : Colors.white;
     final onBubble = m.isOutgoing ? Colors.white : const Color(0xFF111111);
@@ -768,9 +781,14 @@ class _MessageTile extends StatelessWidget {
                           ListTile(
                             dense: true,
                             visualDensity: VisualDensity.compact,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
                             leading: const AppIcon(AppIcons.reply, size: 22),
-                            title: const Text('Ответить', style: TextStyle(fontSize: 15)),
+                            title: const Text(
+                              'Ответить',
+                              style: TextStyle(fontSize: 15),
+                            ),
                             onTap: () {
                               Navigator.pop(context);
                               onLongMenu(_MsgAction.reply);
@@ -779,9 +797,14 @@ class _MessageTile extends StatelessWidget {
                           ListTile(
                             dense: true,
                             visualDensity: VisualDensity.compact,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
                             leading: const AppIcon(AppIcons.share, size: 22),
-                            title: const Text('Переслать', style: TextStyle(fontSize: 15)),
+                            title: const Text(
+                              'Переслать',
+                              style: TextStyle(fontSize: 15),
+                            ),
                             onTap: () {
                               Navigator.pop(context);
                               onLongMenu(_MsgAction.forward);
@@ -793,9 +816,17 @@ class _MessageTile extends StatelessWidget {
                             ListTile(
                               dense: true,
                               visualDensity: VisualDensity.compact,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                              leading: const Icon(Icons.edit_outlined, size: 22),
-                              title: const Text('Редактировать', style: TextStyle(fontSize: 15)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              leading: const Icon(
+                                Icons.edit_outlined,
+                                size: 22,
+                              ),
+                              title: const Text(
+                                'Редактировать',
+                                style: TextStyle(fontSize: 15),
+                              ),
                               onTap: () {
                                 Navigator.pop(context);
                                 onLongMenu(_MsgAction.edit);
@@ -804,7 +835,9 @@ class _MessageTile extends StatelessWidget {
                             ListTile(
                               dense: true,
                               visualDensity: VisualDensity.compact,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               leading: Icon(
                                 Icons.delete_outline,
                                 size: 22,
@@ -831,7 +864,10 @@ class _MessageTile extends StatelessWidget {
                 );
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: bubble,
                   borderRadius: BorderRadius.only(
@@ -853,7 +889,8 @@ class _MessageTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (m.forwardOf != null) _ForwardBlock(ref: m.forwardOf!, onBubble: onBubble),
+                      if (m.forwardOf != null)
+                        _ForwardBlock(ref: m.forwardOf!, onBubble: onBubble),
                       if (m.replyTo != null)
                         _ReplyBlock(ref: m.replyTo!, isOutgoing: m.isOutgoing),
                       if (m.attachmentKind == ChatAttachmentKind.image &&
@@ -871,17 +908,13 @@ class _MessageTile extends StatelessWidget {
                         )
                       else if (m.attachmentKind == ChatAttachmentKind.image &&
                           m.remoteMediaUrl != null)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            m.remoteMediaUrl!,
-                            width: 220,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.broken_image),
-                          ),
+                        AppNetworkImage(
+                          url: m.remoteMediaUrl,
+                          width: 220,
+                          borderRadius: 8,
                         )
-                      else if (m.attachmentKind == ChatAttachmentKind.image && kIsWeb)
+                      else if (m.attachmentKind == ChatAttachmentKind.image &&
+                          kIsWeb)
                         const Padding(
                           padding: EdgeInsets.all(8),
                           child: Text('(изображение)'),
@@ -893,10 +926,7 @@ class _MessageTile extends StatelessWidget {
                             const Icon(Icons.play_circle_outline, size: 28),
                             const SizedBox(width: 8),
                             Flexible(
-                              child: Text(
-                                m.fileName ?? 'Видео',
-                                maxLines: 2,
-                              ),
+                              child: Text(m.fileName ?? 'Видео', maxLines: 2),
                             ),
                           ],
                         ),
@@ -907,10 +937,7 @@ class _MessageTile extends StatelessWidget {
                             const Icon(Icons.insert_drive_file, size: 24),
                             const SizedBox(width: 8),
                             Flexible(
-                              child: Text(
-                                m.fileName ?? 'Файл',
-                                maxLines: 2,
-                              ),
+                              child: Text(m.fileName ?? 'Файл', maxLines: 2),
                             ),
                           ],
                         ),
@@ -1014,9 +1041,7 @@ class _ReplyBlock extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: fill,
-          border: Border(
-            left: BorderSide(color: accent, width: 3),
-          ),
+          border: Border(left: BorderSide(color: accent, width: 3)),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Column(

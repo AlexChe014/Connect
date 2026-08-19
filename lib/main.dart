@@ -1,5 +1,9 @@
+import 'dart:ui';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/calendar_screen.dart';
@@ -59,23 +63,24 @@ class _ConnectAppState extends State<ConnectApp> {
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
+        FlutterQuillLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('ru', 'RU'),
-        Locale('en', 'US'),
-      ],
+      supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
       locale: const Locale('ru', 'RU'),
       initialRoute: AuthService.instance.isAuthenticated ? '/home' : '/login',
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-          final initialIndex =
-              args is Map ? (args['initialIndex'] as int?) : null;
-          final homeSection =
-              args is Map ? (args['homeSection'] as String?) : null;
-          final openNewsId =
-              args is Map ? (args['openNewsId'] as String?) : null;
+          final initialIndex = args is Map
+              ? (args['initialIndex'] as int?)
+              : null;
+          final homeSection = args is Map
+              ? (args['homeSection'] as String?)
+              : null;
+          final openNewsId = args is Map
+              ? (args['openNewsId'] as String?)
+              : null;
           return MainNavigationScreen(
             initialIndex: initialIndex ?? 0,
             initialHomeSection: homeSection,
@@ -109,6 +114,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   late int _currentIndex;
   late _HomeSection _homeSection;
+  bool _isDrawerOpen = false;
 
   @override
   void initState() {
@@ -133,10 +139,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _homeBody() {
     switch (_homeSection) {
       case _HomeSection.news:
-        return NewsFeedScreen(
-          showAppBar: false,
-          openNewsId: widget.openNewsId,
-        );
+        return NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId);
       case _HomeSection.bookings:
         return const BookingsScreen(showAppBar: false);
       case _HomeSection.employees:
@@ -159,6 +162,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
+      drawerScrimColor: Colors.transparent,
+      onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
         child: SafeArea(
           child: ListView(
@@ -166,16 +171,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                child: Column(
-                  children: [
-                    BrandingLoginLogo(height: 56),
-                  ],
-                ),
+                child: Column(children: [BrandingLoginLogo(height: 56)]),
               ),
               ListTileTheme(
                 data: const ListTileThemeData(
                   tileColor: Colors.transparent,
-                  selectedTileColor: Colors.transparent, // no background in menu
+                  selectedTileColor:
+                      Colors.transparent, // no background in menu
+                  dense: true,
+                  visualDensity: VisualDensity(horizontal: 0, vertical: -3),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
                 ),
                 child: Column(
                   children: [
@@ -246,59 +251,69 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         ),
       ),
-      body: SafeArea(
-        top: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final content = body;
-            if (constraints.maxWidth < 900) return content;
-            return Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: content,
+      body: Stack(
+        children: [
+          SafeArea(
+            top: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final content = body;
+                if (constraints.maxWidth < 900) return content;
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: content,
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_isDrawerOpen)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(color: Colors.black.withValues(alpha: 0.05)),
+                ),
               ),
-            );
-          },
-        ),
+            ),
+        ],
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceElevated,
-          border: Border(top: BorderSide(color: AppColors.outline)),
-        ),
-        child: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
+      bottomNavigationBar: CupertinoTabBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
           if (index == 0) {
             _scaffoldKey.currentState?.openDrawer();
             return;
           }
           setState(() => _currentIndex = index);
         },
-        destinations: const [
-          NavigationDestination(
+        backgroundColor: CupertinoColors.systemGroupedBackground
+            .resolveFrom(context)
+            .withValues(alpha: 0.94),
+        activeColor: CupertinoColors.activeBlue,
+        inactiveColor: CupertinoColors.systemGrey,
+        iconSize: 26,
+        items: const [
+          BottomNavigationBarItem(
             icon: _LogoNavIcon(selected: false),
-            selectedIcon: _LogoNavIcon(selected: true),
-            label: '',
+            activeIcon: _LogoNavIcon(selected: true),
+            label: 'Лента',
           ),
-          NavigationDestination(
-            icon: AppIcon(AppIcons.calendar),
-            selectedIcon: AppIcon(AppIcons.calendar),
-            label: '',
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.calendar),
+            label: 'Календарь',
           ),
-          NavigationDestination(
-            icon: AppIcon(AppIcons.chat),
-            selectedIcon: AppIcon(AppIcons.chat),
-            label: '',
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chat_bubble_2),
+            label: 'Чаты',
           ),
-          NavigationDestination(
-            icon: AppIcon(AppIcons.user),
-            selectedIcon: AppIcon(AppIcons.user),
-            label: '',
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.person_crop_circle),
+            label: 'Профиль',
           ),
         ],
-      ),
       ),
     );
   }
@@ -312,9 +327,15 @@ class _LogoNavIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final border = selected ? scheme.primary : scheme.outline.withValues(alpha: 0.45);
-    final fill = selected ? scheme.primary.withValues(alpha: 0.10) : Colors.transparent;
-    final fg = selected ? scheme.primary : scheme.onSurface.withValues(alpha: 0.70);
+    final border = selected
+        ? scheme.primary
+        : scheme.outline.withValues(alpha: 0.45);
+    final fill = selected
+        ? scheme.primary.withValues(alpha: 0.10)
+        : Colors.transparent;
+    final fg = selected
+        ? scheme.primary
+        : scheme.onSurface.withValues(alpha: 0.70);
 
     return Container(
       width: 30,

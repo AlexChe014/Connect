@@ -51,8 +51,8 @@ class _SelectedStaffFieldState extends State<SelectedStaffField> {
                 ? Text(
                     'Не выбраны',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   )
                 : const SizedBox.shrink(),
           ),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import 'documents_list_screen.dart';
 
 class DocumentsSigningScreen extends StatefulWidget {
@@ -50,9 +52,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
 
   void _showError(String fallback, Object error) {
     final message = error is ApiException ? error.message : fallback;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _requestPersonalAccessCode() async {
@@ -110,7 +112,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
 
   Future<void> _logoutService(DocumentService service) async {
     try {
-      final removed = await DocumentsRepository.instance.logoutService(service.id);
+      final removed = await DocumentsRepository.instance.logoutService(
+        service.id,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -138,7 +142,10 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          title: Text(
+            title,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          ),
           titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
           actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -150,8 +157,8 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
                 Text(
                   subtitle,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 10),
               ],
@@ -164,7 +171,8 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
                 ),
                 autofocus: true,
                 textInputAction: TextInputAction.done,
-                onSubmitted: (_) => Navigator.pop(context, controller.text.trim()),
+                onSubmitted: (_) =>
+                    Navigator.pop(context, controller.text.trim()),
               ),
             ],
           ),
@@ -172,8 +180,14 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
             TextButton(
               style: TextButton.styleFrom(
                 minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               onPressed: () => Navigator.pop(context),
               child: const Text('Отмена'),
@@ -181,8 +195,14 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
             FilledButton(
               style: FilledButton.styleFrom(
                 minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               onPressed: () => Navigator.pop(context, controller.text.trim()),
               child: const Text('Продолжить'),
@@ -207,7 +227,10 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Text(
                   service.displayName,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               ListTile(
@@ -244,88 +267,54 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     );
   }
 
-  Widget _buildListContent({required bool showInlineTitle}) {
-    if (_isLoading || _isAuthenticating) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
+  Widget _buildResults() {
     return RefreshIndicator(
       onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
-      child: _services.isEmpty
-          ? ListView(
-              padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
-              children: [
-                if (showInlineTitle) _buildInlineTitle(context),
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.vpn_key_outlined,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Нет доступных сервисов',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Введите личный код доступа, чтобы получить список сервисов 1С',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: _requestPersonalAccessCode,
-                        icon: const Icon(Icons.vpn_key_outlined),
-                        label: const Text('Ввести код доступа'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          : ListView.separated(
-              padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
-              itemCount: (showInlineTitle ? 1 : 0) + _services.length,
-              separatorBuilder: (context, index) {
-                if (showInlineTitle && index == 0) {
-                  return const SizedBox.shrink();
-                }
-                return Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: Theme.of(context).colorScheme.outline,
-                );
-              },
-              itemBuilder: (context, index) {
-                if (showInlineTitle && index == 0) {
-                  return _buildInlineTitle(context);
-                }
-                final serviceIndex = index - (showInlineTitle ? 1 : 0);
-                final service = _services[serviceIndex];
-                return _ServiceTile(
-                  service: service,
-                  onTap: () => _openDocuments(service),
-                  onEdit: () => _showServiceActions(service),
-                );
-              },
-            ),
+      child: _buildResultsContent(),
     );
   }
 
-  Widget _buildInlineTitle(BuildContext context) {
+  Widget _buildResultsContent() {
+    if (_isLoading || _isAuthenticating) {
+      return const AppSkeletonList(hasLeading: false);
+    }
+
+    if (_services.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.vpn_key_outlined,
+        message:
+            'Нет доступных сервисов\n'
+            'Введите личный код доступа, чтобы получить список сервисов 1С',
+        onRetry: _requestPersonalAccessCode,
+        retryLabel: 'Ввести код доступа',
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      itemCount: _services.length,
+      separatorBuilder: (context, index) => Divider(
+        height: 1,
+        thickness: 1,
+        color: Theme.of(context).colorScheme.outline,
+      ),
+      itemBuilder: (context, index) {
+        final service = _services[index];
+        return _ServiceTile(
+          service: service,
+          onTap: () => _openDocuments(service),
+          onEdit: () => _showServiceActions(service),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeader({required bool showInlineTitle}) {
+    if (!showInlineTitle) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     final appBarTheme = theme.appBarTheme;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: appBarTheme.backgroundColor ?? cs.surface,
+      color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
       child: SafeArea(
         bottom: false,
         child: SizedBox(
@@ -341,10 +330,20 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     );
   }
 
+  Widget _buildBody({required bool showInlineTitle}) {
+    return Column(
+      children: [
+        _buildHeader(showInlineTitle: showInlineTitle),
+        if (showInlineTitle) const Divider(height: 1),
+        Expanded(child: _buildResults()),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.showAppBar) {
-      return _buildListContent(showInlineTitle: true);
+      return _buildBody(showInlineTitle: true);
     }
     return Scaffold(
       appBar: AppBar(
@@ -352,7 +351,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         centerTitle: true,
         elevation: 0,
       ),
-      body: _buildListContent(showInlineTitle: false),
+      body: _buildBody(showInlineTitle: false),
     );
   }
 }
@@ -392,7 +391,7 @@ class _ServiceTile extends StatelessWidget {
             ),
             Icon(
               Icons.chevron_right,
-              color: theme.colorScheme.outline,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ],
         ),

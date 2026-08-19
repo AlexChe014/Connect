@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../config/api_config.dart';
-import '../config/app_icons.dart';
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/chat_service.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/chat_avatar.dart';
 import 'employee_detail_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
@@ -110,7 +113,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isInitialLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось загрузить сотрудников')),
       );
     }
@@ -138,7 +141,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Future<void> _openChat(StaffUser user) async {
     final peerId = user.idAsInt;
     if (peerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось определить пользователя')),
       );
       return;
@@ -151,113 +154,65 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     );
     if (!mounted) return;
     if (chat == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть чат')),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('Не удалось открыть чат')));
       return;
     }
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
+      CupertinoPageRoute<void>(
         builder: (context) => ChatConversationScreen(chat: chat),
       ),
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
-    return TextField(
-      controller: _qController,
-      textInputAction: TextInputAction.search,
-      style: const TextStyle(fontSize: 14),
-      decoration: const InputDecoration(
-        isDense: true,
-        hintText: 'Фамилия, имя, отчество или почта',
-        prefixIcon: AppIcon(AppIcons.search, size: 20),
-        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+  void _openDetail(StaffUser user) {
+    Navigator.of(context).push<void>(
+      CupertinoPageRoute<void>(
+        builder: (context) => EmployeeDetailScreen(user: user),
       ),
-      onSubmitted: (_) {
-        _debounce?.cancel();
-        _appliedQ = _qController.text.trim();
-        _loadFirstPage();
-      },
     );
   }
 
-  Widget _buildListContent({required bool showInlineTitle}) {
+  Widget _buildResultsSliver() {
     if (_isInitialLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        sliver: SliverList.separated(
+          itemCount: 6,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) => const _EmployeeTileSkeleton(),
+        ),
+      );
     }
 
-    final headerCount = (showInlineTitle ? 1 : 0) + 1;
-    final itemCount = headerCount + _items.length + 1;
+    if (_items.isEmpty) {
+      return SliverAppEmptyState(
+        icon: CupertinoIcons.person_2,
+        message: _appliedQ.isEmpty
+            ? 'Пока нет сотрудников'
+            : 'Никого не нашлось по запросу «$_appliedQ»',
+      );
+    }
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        _debounce?.cancel();
-        _appliedQ = _qController.text.trim();
-        await _loadFirstPage();
-      },
-      child: ListView.builder(
-        controller: _scrollController,
-        padding: EdgeInsets.fromLTRB(16, showInlineTitle ? 0 : 8, 16, 16),
-        itemCount: itemCount,
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      sliver: SliverList.separated(
+        itemCount: _items.length + (_isLoadingMore ? 1 : 0),
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          if (showInlineTitle && index == 0) {
-            final theme = Theme.of(context);
-            final appBarTheme = theme.appBarTheme;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
-              child: SafeArea(
-                bottom: false,
-                child: SizedBox(
-                  height: kToolbarHeight,
-                  child: Center(
-                    child: Text(
-                      'Сотрудники',
-                      style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-                    ),
-                  ),
-                ),
-              ),
+          if (index >= _items.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CupertinoActivityIndicator()),
             );
           }
 
-          final base = showInlineTitle ? 1 : 0;
-          final afterHeader = index - base;
-
-          if (afterHeader == 0) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: widget.showAppBar ? 0 : 12),
-              child: _buildSearchBar(context),
-            );
-          }
-
-          final listIndex = afterHeader - 1;
-          if (listIndex < _items.length) {
-            final user = _items[listIndex];
-            return _EmployeeTile(
-              user: user,
-              onTap: () {
-                Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (context) => EmployeeDetailScreen(user: user),
-                  ),
-                );
-              },
-              onChat: () => _openChat(user),
-            );
-          }
-
-          if (!_isLoadingMore) return const SizedBox(height: 24);
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
+          final user = _items[index];
+          return _EmployeeTile(
+            user: user,
+            onTap: () => _openDetail(user),
+            onChat: () => _openChat(user),
           );
         },
       ),
@@ -266,15 +221,44 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.showAppBar) {
-      return _buildListContent(showInlineTitle: true);
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Сотрудники'),
-        centerTitle: true,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            _debounce?.cancel();
+            _appliedQ = _qController.text.trim();
+            await _loadFirstPage();
+          },
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              const CupertinoSliverNavigationBar(
+                largeTitle: Text('Сотрудники'),
+                backgroundColor: CupertinoColors.systemGroupedBackground,
+                border: null,
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: CupertinoSearchTextField(
+                    controller: _qController,
+                    placeholder: 'Фамилия, имя, отчество или почта',
+                    onSubmitted: (_) {
+                      _debounce?.cancel();
+                      _appliedQ = _qController.text.trim();
+                      _loadFirstPage();
+                    },
+                  ),
+                ),
+              ),
+              _buildResultsSliver(),
+            ],
+          ),
+        ),
       ),
-      body: _buildListContent(showInlineTitle: false),
     );
   }
 }
@@ -292,13 +276,14 @@ class _EmployeeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasAvatar = user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context),
+        borderRadius: BorderRadius.circular(12),
+      ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -307,30 +292,10 @@ class _EmployeeTile extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  CircleAvatar(
+                  MemberAvatar(
+                    displayName: user.fullName,
+                    avatarUrl: user.avatarUrl,
                     radius: 24,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: hasAvatar
-                        ? ClipOval(
-                            child: Image.network(
-                              user.avatarUrl!,
-                              width: 48,
-                              height: 48,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Text(
-                                user.initials,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  color: theme.colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ),
-                          )
-                        : Text(
-                            user.initials,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                          ),
                   ),
                   Positioned(
                     right: -2,
@@ -339,31 +304,84 @@ class _EmployeeTile extends StatelessWidget {
                       width: 14,
                       height: 14,
                       decoration: BoxDecoration(
-                        color: user.isOnline ? const Color(0xFF34C759) : theme.colorScheme.outline,
+                        color: user.isOnline
+                            ? const Color(0xFF34C759)
+                            : AppColors.outlineStrong,
                         shape: BoxShape.circle,
-                        border: Border.all(color: theme.cardColor, width: 2),
+                        border: Border.all(
+                          color: CupertinoColors.secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
+                  if (user.isBirthdayToday)
+                    Positioned(
+                      left: -4,
+                      bottom: -4,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.secondarySystemGroupedBackground
+                              .resolveFrom(context),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Text('🎂', style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   user.fullName,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontFamily: '.SF Pro Text',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              IconButton(
-                tooltip: 'Написать',
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
                 onPressed: onChat,
-                icon: const AppIcon(AppIcons.chat, size: 22),
+                child: const Icon(
+                  CupertinoIcons.bubble_left,
+                  size: 22,
+                  color: CupertinoColors.systemBlue,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                CupertinoIcons.chevron_forward,
+                size: 16,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EmployeeTileSkeleton extends StatelessWidget {
+  const _EmployeeTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context),
+        borderRadius: BorderRadius.circular(12),
       ),
     );
   }

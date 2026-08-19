@@ -8,6 +8,8 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/mail_body_content.dart';
 import 'compose_mail_screen.dart';
 
@@ -51,7 +53,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       final resolved = !message.hasBody && initial != null && initial.hasBody
           ? MailMessage(
               id: message.id,
-              subject: message.subject != '(без темы)' ? message.subject : initial.subject,
+              subject: message.subject != '(без темы)'
+                  ? message.subject
+                  : initial.subject,
               from: message.from.isNotEmpty ? message.from : initial.from,
               to: message.to ?? initial.to,
               body: initial.body,
@@ -93,7 +97,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Удалить письмо?'),
-        content: const Text('Письмо будет удалено без возможности восстановления.'),
+        content: const Text(
+          'Письмо будет удалено без возможности восстановления.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -128,9 +134,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
 
   Future<void> _moveToFolder() async {
     if (widget.folders.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Список папок пуст')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Список папок пуст')));
       return;
     }
 
@@ -190,9 +196,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       final file = File('${dir.path}/${attachment.filename}');
       await file.writeAsBytes(bytes);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Сохранено: ${file.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Сохранено: ${file.path}')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -206,10 +212,8 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     if (message == null) return;
     final sent = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (context) => ComposeMailScreen(
-          connection: widget.connection,
-          replyTo: message,
-        ),
+        builder: (context) =>
+            ComposeMailScreen(connection: widget.connection, replyTo: message),
       ),
     );
     if (sent == true && mounted) Navigator.of(context).pop(true);
@@ -252,60 +256,60 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppLoadingIndicator(size: 32)
           : message == null
-              ? const Center(child: Text('Письмо не найдено'))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      message.subject,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _MetaRow(label: 'От', value: message.from),
-                    if ((message.to ?? '').isNotEmpty)
-                      _MetaRow(label: 'Кому', value: message.to!),
-                    if (message.date != null)
-                      _MetaRow(
-                        label: 'Дата',
-                        value: dateFormat.format(message.date!.toLocal()),
-                      ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: MailBodyContent(message: message),
-                      ),
-                    ),
-                    if (message.attachments.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Вложения',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...message.attachments.map(
-                        (attachment) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: const AppIcon(AppIcons.attachment),
-                            title: Text(attachment.filename),
-                            subtitle: attachment.size != null
-                                ? Text('${attachment.size} байт')
-                                : null,
-                            trailing: const AppIcon(AppIcons.download),
-                            onTap: () => _downloadAttachment(attachment),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+          ? const AppEmptyState(message: 'Письмо не найдено')
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  message.subject,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
+                const SizedBox(height: 16),
+                _MetaRow(label: 'От', value: message.from),
+                if ((message.to ?? '').isNotEmpty)
+                  _MetaRow(label: 'Кому', value: message.to!),
+                if (message.date != null)
+                  _MetaRow(
+                    label: 'Дата',
+                    value: dateFormat.format(message.date!.toLocal()),
+                  ),
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: MailBodyContent(message: message),
+                  ),
+                ),
+                if (message.attachments.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Вложения',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...message.attachments.map(
+                    (attachment) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const AppIcon(AppIcons.attachment),
+                        title: Text(attachment.filename),
+                        subtitle: attachment.size != null
+                            ? Text('${attachment.size} байт')
+                            : null,
+                        trailing: const AppIcon(AppIcons.download),
+                        onTap: () => _downloadAttachment(attachment),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -333,12 +337,7 @@ class _MetaRow extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.bodyMedium,
-            ),
-          ),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );

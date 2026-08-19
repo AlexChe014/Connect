@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_icons.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../widgets/app_empty_state.dart';
+import '../widgets/app_network_image.dart';
 import 'booking_detail_sheet.dart';
+import 'bookings_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -86,11 +90,27 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
 
   DateTime _monthEnd(DateTime d) {
-    final nextMonth = (d.month == 12) ? DateTime(d.year + 1, 1, 1) : DateTime(d.year, d.month + 1, 1);
+    final nextMonth = (d.month == 12)
+        ? DateTime(d.year + 1, 1, 1)
+        : DateTime(d.year, d.month + 1, 1);
     return nextMonth.subtract(const Duration(seconds: 1));
   }
 
   DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  Future<void> _quickBook() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (context) => BookingsScreen(
+          showAppBar: true,
+          initialDate: _selectedDay ?? DateTime.now(),
+        ),
+      ),
+    );
+    // Бронь могла быть создана на предыдущем экране — обновляем месяц
+    // в любом случае, чтобы не тащить через несколько экранов bool-флаг.
+    if (mounted) await _loadMonth(_focusedDay);
+  }
 
   Future<void> _loadMonth(DateTime focusedDay) async {
     final userId = _userId;
@@ -139,7 +159,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  List<UserBooking> _eventsForDay(DateTime day) => _eventsByDay[_dayKey(day)] ?? const [];
+  List<UserBooking> _eventsForDay(DateTime day) =>
+      _eventsByDay[_dayKey(day)] ?? const [];
 
   String _formatHm(DateTime d) {
     final hh = d.hour.toString().padLeft(2, '0');
@@ -147,43 +168,46 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return '$hh:$mm';
   }
 
+  /// Возвращает описание, если это ссылка на встречу (http/https), иначе null.
+  String? _meetingLinkOrNull(String description) {
+    if (!description.startsWith('http://') &&
+        !description.startsWith('https://')) {
+      return null;
+    }
+    return Uri.tryParse(description) != null ? description : null;
+  }
+
   Widget _buildBottom() {
+    if (_isLoading) {
+      // Спиннер уже рисуется поверх (Positioned.fill в build()) — здесь
+      // не показываем пустой стейт, чтобы текст не лежал под спиннером.
+      return const SizedBox.shrink();
+    }
+
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _bootstrap,
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
-        ),
+      return AppEmptyState(
+        icon: Icons.error_outline,
+        message: _error!,
+        onRetry: _bootstrap,
       );
     }
 
     if (_selectedDay == null) {
-      return const Center(child: Text('Выберите день'));
+      return const AppEmptyState(icon: AppIcons.date, message: 'Выберите день');
     }
 
     final items = _eventsForDay(_selectedDay!);
     if (items.isEmpty) {
-      return const Center(child: Text('На этот день событий нет'));
+      return const AppEmptyState(
+        icon: AppIcons.date,
+        message: 'На этот день событий нет',
+      );
     }
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final b = items[index];
         final title = b.theme;
@@ -194,6 +218,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
         ];
 
         final imageUrl = b.objectImageUrl;
+        final description = b.description?.trim() ?? '';
+        final meetingLink = _meetingLinkOrNull(description);
         final cs = Theme.of(context).colorScheme;
 
         return Card(
@@ -209,67 +235,72 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }
             },
             child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: imageUrl != null
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => ColoredBox(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  imageUrl != null
+                      ? AppNetworkImage(
+                          url: imageUrl,
+                          width: 40,
+                          height: 40,
+                          borderRadius: 10,
+                          errorIcon: AppIcons.locationPin,
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: ColoredBox(
                               color: cs.primaryContainer,
                               child: AppIcon(
                                 AppIcons.locationPin,
+                                size: 18,
                                 color: cs.onPrimaryContainer,
                               ),
                             ),
-                          )
-                        : ColoredBox(
-                            color: cs.primaryContainer,
-                            child: AppIcon(
-                              AppIcons.locationPin,
-                              color: cs.onPrimaryContainer,
-                            ),
                           ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitleParts.join(' • '),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.outline,
-                            ),
-                      ),
-                      if ((b.description ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          b.description!.trim(),
-                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitleParts.join(' • '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                        if (meetingLink != null) ...[
+                          const SizedBox(height: 8),
+                          _JoinMeetingChip(url: meetingLink),
+                        ] else if (description.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           ),
         );
       },
@@ -283,6 +314,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
         title: const Text('Календарь'),
         centerTitle: true,
         elevation: 0,
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _quickBook,
+        tooltip: 'Забронировать',
+        child: const AppIcon(AppIcons.profileAdd, size: 22),
       ),
       body: Column(
         children: [
@@ -345,7 +381,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: Container(
-                        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: 0.55),
                         alignment: Alignment.center,
                         child: const CircularProgressIndicator(),
                       ),
@@ -355,6 +393,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _JoinMeetingChip extends StatelessWidget {
+  const _JoinMeetingChip({required this.url});
+
+  final String url;
+
+  Future<void> _open() async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: _open,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppIcon(
+              AppIcons.videoMeeting,
+              size: 16,
+              color: cs.onPrimaryContainer,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Подключиться',
+              style: TextStyle(
+                color: cs.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
