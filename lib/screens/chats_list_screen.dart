@@ -1,4 +1,3 @@
-import 'package:connect/config/app_icons.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
@@ -6,6 +5,7 @@ import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -42,9 +42,6 @@ String _formatLastMessageTime(DateTime d) {
       : formatted;
 }
 
-Widget _chatAvatar(BuildContext context, Chat c) =>
-    ChatAvatar(chat: c, radius: 22);
-
 class ChatsListScreen extends StatefulWidget {
   const ChatsListScreen({super.key});
 
@@ -79,139 +76,141 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     });
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildSliverBody() {
     if (_chat.isLoading && _chat.chats.isEmpty) {
-      return const AppSkeletonList();
+      return SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        sliver: SliverList.separated(
+          itemCount: 6,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) => const AppSkeletonListTile(),
+        ),
+      );
     }
 
     if (_chat.error != null && _chat.chats.isEmpty) {
-      return AppEmptyState(
-        icon: Icons.error_outline,
-        message: _chat.error!,
-        onRetry: _chat.refreshChats,
+      return SliverFillRemaining(
+        child: AppEmptyState(
+          icon: CupertinoIcons.exclamationmark_triangle,
+          message: _chat.error!,
+          onRetry: _chat.refreshChats,
+        ),
       );
     }
 
     if (_chat.chats.isEmpty) {
-      return const AppEmptyState(icon: AppIcons.chat, message: 'Нет чатов');
+      return const SliverFillRemaining(
+        child: AppEmptyState(
+          icon: CupertinoIcons.chat_bubble_2,
+          message: 'Нет чатов',
+        ),
+      );
     }
 
-    return ListView.separated(
-      physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: _chat.chats.length,
-      separatorBuilder: (context, index) => Divider(
-        height: 1,
-        thickness: 1,
-        color: Theme.of(context).colorScheme.outline,
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      sliver: SliverList.separated(
+        itemCount: _chat.chats.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final c = _chat.chats[index];
+          return _ChatRow(
+            chat: c,
+            time: c.lastMessageAt != null
+                ? _formatLastMessageTime(c.lastMessageAt!)
+                : '',
+            onTap: () {
+              Navigator.of(context).push(
+                CupertinoPageRoute<void>(
+                  builder: (context) => ChatConversationScreen(chat: c),
+                ),
+              );
+            },
+          );
+        },
       ),
-      itemBuilder: (context, index) {
-        final c = _chat.chats[index];
-        return _ChatRow(
-          chat: c,
-          time: c.lastMessageAt != null
-              ? _formatLastMessageTime(c.lastMessageAt!)
-              : '',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (context) => ChatConversationScreen(chat: c),
-              ),
-            );
-          },
-        );
-      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Чаты'),
-        actions: [
-          IconButton(
-            tooltip: 'Новый диалог',
-            icon: const AppIcon(AppIcons.compose),
-            onPressed: _openNewDirect,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: RefreshIndicator(
+            onRefresh: _chat.refreshChats,
+            child: CustomScrollView(
+              slivers: [
+                CupertinoSliverNavigationBar(
+                  largeTitle: const Text('Чаты'),
+                  backgroundColor: CupertinoColors.systemGroupedBackground
+                      .withValues(alpha: 0.9),
+                  border: null,
+                  trailing: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    onPressed: _openComposeMenu,
+                    child: const Icon(CupertinoIcons.add_circled, size: 28),
+                  ),
+                ),
+                _buildSliverBody(),
+              ],
+            ),
           ),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _chat.refreshChats,
-        child: _buildBody(context),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openNewGroup,
-        icon: const AppIcon(AppIcons.users),
-        label: const Text('Группа'),
+        ),
       ),
     );
+  }
+
+  Future<void> _openComposeMenu() async {
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'direct'),
+            child: const Text('Новый диалог'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'group'),
+            child: const Text('Новая группа'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'direct') {
+      await _openNewDirect();
+    } else {
+      await _openNewGroup();
+    }
   }
 
   Future<void> _openNewDirect() async {
     final selected = await showModalBottomSheet<ChatContactChoice>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
       builder: (context) {
-        final contacts = _chat.contacts;
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Начать диалог',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: contacts.length,
-                  separatorBuilder: (context, i) => Divider(
-                    height: 1,
-                    thickness: 0.6,
-                    indent: 76,
-                    endIndent: 12,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.20),
-                  ),
-                  itemBuilder: (context, i) {
-                    final ct = contacts[i];
-                    final fakeChat = Chat(
-                      id: 'tmp',
-                      title: ct.fullName,
-                      isGroup: false,
-                      peerAvatarPath: ct.avatarPath,
-                      peerAvatarUrl: ct.avatarUrl,
-                    );
-                    return ListTile(
-                      leading: _chatAvatar(context, fakeChat),
-                      title: Text(ct.fullName),
-                      onTap: () => Navigator.pop(
-                        context,
-                        ChatContactChoice(
-                          userId: ct.userId,
-                          fullName: ct.fullName,
-                          avatarPath: ct.avatarPath,
-                          avatarUrl: ct.avatarUrl,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
+        return SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.7,
+          child: _NewDirectChatSheet(contacts: _chat.contacts),
         );
       },
     );
@@ -224,13 +223,11 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     );
     if (!mounted) return;
     if (c == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось создать диалог')),
-      );
+      _showMessage('Не удалось создать диалог');
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      CupertinoPageRoute<void>(
         builder: (context) => ChatConversationScreen(chat: c),
       ),
     );
@@ -238,15 +235,30 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
 
   Future<void> _openNewGroup() async {
     final created = await Navigator.of(context).push<Chat>(
-      MaterialPageRoute(
+      CupertinoPageRoute(
         builder: (context) => const CreateGroupChatScreen(),
         fullscreenDialog: true,
       ),
     );
     if (created == null || !mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      CupertinoPageRoute<void>(
         builder: (context) => ChatConversationScreen(chat: created),
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Ок'),
+          ),
+        ],
       ),
     );
   }
@@ -266,6 +278,120 @@ class ChatContactChoice {
   final String? avatarUrl;
 }
 
+class _NewDirectChatSheet extends StatelessWidget {
+  const _NewDirectChatSheet({required this.contacts});
+
+  final List<ChatContact> contacts;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              'Начать диалог',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.label,
+              ),
+            ),
+          ),
+          Expanded(
+            child: contacts.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Нет доступных контактов',
+                      style: TextStyle(color: CupertinoColors.secondaryLabel),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: contacts.length,
+                    itemBuilder: (context, index) {
+                      final ct = contacts[index];
+                      final fakeChat = Chat(
+                        id: 'tmp',
+                        title: ct.fullName,
+                        isGroup: false,
+                        peerAvatarPath: ct.avatarPath,
+                        peerAvatarUrl: ct.avatarUrl,
+                      );
+                      return _ContactTile(
+                        chat: fakeChat,
+                        onTap: () => Navigator.pop(
+                          context,
+                          ChatContactChoice(
+                            userId: ct.userId,
+                            fullName: ct.fullName,
+                            avatarPath: ct.avatarPath,
+                            avatarUrl: ct.avatarUrl,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactTile extends StatelessWidget {
+  const _ContactTile({required this.chat, required this.onTap});
+
+  final Chat chat;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              ChatAvatar(chat: chat, radius: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  chat.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label,
+                  ),
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_forward,
+                size: 16,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatRow extends StatelessWidget {
   const _ChatRow({required this.chat, required this.time, required this.onTap});
 
@@ -275,40 +401,77 @@ class _ChatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ListTile(
-      onTap: onTap,
-      visualDensity: const VisualDensity(horizontal: 0, vertical: -1),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      leading: ChatAvatar(chat: chat, radius: 22),
-      title: Text(
-        chat.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(
+    final subtitle =
         chat.lastMessagePreview ??
-            (chat.isGroup && chat.memberNames.isNotEmpty
-                ? chat.memberNames.join(', ')
-                : ''),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontSize: 13,
+        (chat.isGroup && chat.memberNames.isNotEmpty
+            ? chat.memberNames.join(', ')
+            : '');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ChatAvatar(chat: chat, radius: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      chat.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label,
+                      ),
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (time.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
-      trailing: time.isNotEmpty
-          ? Text(
-              time,
-              style: TextStyle(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            )
-          : null,
     );
   }
 }

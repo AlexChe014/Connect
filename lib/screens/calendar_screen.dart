@@ -1,4 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -100,7 +102,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Future<void> _quickBook() async {
     await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      CupertinoPageRoute(
         builder: (context) => BookingsScreen(
           showAppBar: true,
           initialDate: _selectedDay ?? DateTime.now(),
@@ -177,231 +179,392 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return Uri.tryParse(description) != null ? description : null;
   }
 
-  Widget _buildBottom() {
-    if (_isLoading) {
-      // Спиннер уже рисуется поверх (Positioned.fill в build()) — здесь
-      // не показываем пустой стейт, чтобы текст не лежал под спиннером.
-      return const SizedBox.shrink();
-    }
-
-    if (_error != null) {
-      return AppEmptyState(
-        icon: Icons.error_outline,
-        message: _error!,
-        onRetry: _bootstrap,
-      );
-    }
-
-    if (_selectedDay == null) {
-      return const AppEmptyState(icon: AppIcons.date, message: 'Выберите день');
-    }
-
-    final items = _eventsForDay(_selectedDay!);
-    if (items.isEmpty) {
-      return const AppEmptyState(
-        icon: AppIcons.date,
-        message: 'На этот день событий нет',
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final b = items[index];
-        final title = b.theme;
-        final subtitleParts = <String>[
-          '${_formatHm(b.datetimeStart)}—${_formatHm(b.datetimeEnd)}',
-          if ((b.objectName ?? '').trim().isNotEmpty) b.objectName!.trim(),
-          if (b.isPrivate) 'Приватное',
-        ];
-
-        final imageUrl = b.objectImageUrl;
-        final description = b.description?.trim() ?? '';
-        final meetingLink = _meetingLinkOrNull(description);
-        final cs = Theme.of(context).colorScheme;
-
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () async {
-              final changed = await BookingDetailSheet.show(
-                context,
-                bookingId: b.id,
-              );
-              if (changed == true && mounted) {
-                await _loadMonth(_focusedDay);
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  imageUrl != null
-                      ? AppNetworkImage(
-                          url: imageUrl,
-                          width: 40,
-                          height: 40,
-                          borderRadius: 10,
-                          errorIcon: AppIcons.locationPin,
-                        )
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: ColoredBox(
-                              color: cs.primaryContainer,
-                              child: AppIcon(
-                                AppIcons.locationPin,
-                                size: 18,
-                                color: cs.onPrimaryContainer,
-                              ),
-                            ),
-                          ),
-                        ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitleParts.join(' • '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                        if (meetingLink != null) ...[
-                          const SizedBox(height: 8),
-                          _JoinMeetingChip(url: meetingLink),
-                        ] else if (description.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 29,
+      height: 29,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Icon(icon, size: 16, color: CupertinoColors.white),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Календарь'),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _quickBook,
-        tooltip: 'Забронировать',
-        child: const AppIcon(AppIcons.profileAdd, size: 22),
-      ),
-      body: Column(
-        children: [
-          TableCalendar<UserBooking>(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-            calendarFormat: CalendarFormat.month,
-            locale: 'ru_RU',
-            startingDayOfWeek: StartingDayOfWeek.monday,
-            eventLoader: _eventsForDay,
-            calendarStyle: CalendarStyle(
-              markersMaxCount: 3,
-              markerSize: 7,
-              markerDecoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                shape: BoxShape.circle,
-              ),
-              todayDecoration: const BoxDecoration(),
-              todayTextStyle: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.w700,
-              ),
-              selectedDecoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.5,
-                ),
-              ),
-              selectedTextStyle: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            headerStyle: HeaderStyle(
-              formatButtonVisible: false,
-              titleCentered: true,
-            ),
-            onDaySelected: (selectedDay, focusedDay) {
-              if (!isSameDay(_selectedDay, selectedDay)) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                });
-              }
-            },
-            onPageChanged: (focusedDay) {
-              _focusedDay = focusedDay;
-              _loadMonth(focusedDay);
-            },
+  Widget _buildCalendarCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(child: _buildBottom()),
-                if (_isLoading)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.surface.withValues(alpha: 0.55),
-                        alignment: Alignment.center,
-                        child: const CircularProgressIndicator(),
-                      ),
-                    ),
-                  ),
-              ],
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: TableCalendar<UserBooking>(
+          firstDay: DateTime.utc(2020, 1, 1),
+          lastDay: DateTime.utc(2030, 12, 31),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          calendarFormat: CalendarFormat.month,
+          locale: 'ru_RU',
+          startingDayOfWeek: StartingDayOfWeek.monday,
+          eventLoader: _eventsForDay,
+          daysOfWeekHeight: 24,
+          rowHeight: 40,
+          daysOfWeekStyle: DaysOfWeekStyle(
+            weekdayStyle: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
             ),
+            weekendStyle: TextStyle(
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+          calendarStyle: CalendarStyle(
+            outsideDaysVisible: false,
+            markersMaxCount: 3,
+            markerSize: 5,
+            markerMargin: const EdgeInsets.only(top: 3),
+            markerDecoration: const BoxDecoration(
+              color: CupertinoColors.activeBlue,
+              shape: BoxShape.circle,
+            ),
+            defaultTextStyle: TextStyle(
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+            weekendTextStyle: TextStyle(
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+            todayDecoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: CupertinoColors.activeBlue, width: 1.5),
+            ),
+            todayTextStyle: const TextStyle(
+              color: CupertinoColors.activeBlue,
+              fontWeight: FontWeight.w700,
+            ),
+            selectedDecoration: const BoxDecoration(
+              color: CupertinoColors.activeBlue,
+              shape: BoxShape.circle,
+            ),
+            selectedTextStyle: const TextStyle(
+              color: CupertinoColors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          headerStyle: HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            leftChevronIcon: Icon(
+              CupertinoIcons.chevron_left,
+              size: 20,
+              color: cs.primary,
+            ),
+            rightChevronIcon: Icon(
+              CupertinoIcons.chevron_right,
+              size: 20,
+              color: cs.primary,
+            ),
+            titleTextStyle: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+          onDaySelected: (selectedDay, focusedDay) {
+            if (!isSameDay(_selectedDay, selectedDay)) {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+            }
+          },
+          onPageChanged: (focusedDay) {
+            _focusedDay = focusedDay;
+            _loadMonth(focusedDay);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventsList(BuildContext context) {
+    if (_error != null) {
+      return SliverToBoxAdapter(
+        child: SizedBox(
+          height: 220,
+          child: AppEmptyState(
+            icon: Icons.error_outline,
+            message: _error!,
+            onRetry: _bootstrap,
+          ),
+        ),
+      );
+    }
+
+    final selectedDay = _selectedDay;
+    if (selectedDay == null) {
+      return const SliverToBoxAdapter(
+        child: SizedBox(
+          height: 160,
+          child: AppEmptyState(icon: AppIcons.date, message: 'Выберите день'),
+        ),
+      );
+    }
+
+    final items = _eventsForDay(selectedDay);
+    final header = _capitalize(
+      DateFormat('EEEE, d MMMM', 'ru_RU').format(selectedDay),
+    );
+
+    if (items.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+          child: SizedBox(
+            height: 140,
+            child: AppEmptyState(
+              icon: AppIcons.date,
+              message: 'На этот день событий нет',
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+      sliver: SliverList.list(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 6),
+            child: Text(
+              header,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ),
+          CupertinoListSection.insetGrouped(
+            margin: EdgeInsets.zero,
+            children: items
+                .map(
+                  (b) => _EventTile(
+                    booking: b,
+                    formatHm: _formatHm,
+                    meetingLinkOrNull: _meetingLinkOrNull,
+                    iconBadge: _iconBadge,
+                    onTap: () async {
+                      final changed = await BookingDetailSheet.show(
+                        context,
+                        bookingId: b.id,
+                      );
+                      if (changed == true && mounted) {
+                        await _loadMonth(_focusedDay);
+                      }
+                    },
+                  ),
+                )
+                .toList(),
           ),
         ],
+      ),
+    );
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                CupertinoSliverNavigationBar(
+                  largeTitle: const Text('Календарь'),
+                  backgroundColor: CupertinoColors.systemGroupedBackground
+                      .withValues(alpha: 0.9),
+                  border: null,
+                  trailing: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    onPressed: _quickBook,
+                    child: const Icon(
+                      CupertinoIcons.calendar_badge_plus,
+                      size: 26,
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildCalendarCard(context)),
+                _buildEventsList(context),
+              ],
+            ),
+            if (_isLoading)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Container(
+                    color: CupertinoColors.systemGroupedBackground
+                        .resolveFrom(context)
+                        .withValues(alpha: 0.5),
+                    alignment: Alignment.center,
+                    child: const CupertinoActivityIndicator(radius: 14),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EventTile extends StatelessWidget {
+  const _EventTile({
+    required this.booking,
+    required this.formatHm,
+    required this.meetingLinkOrNull,
+    required this.iconBadge,
+    required this.onTap,
+  });
+
+  final UserBooking booking;
+  final String Function(DateTime) formatHm;
+  final String? Function(String) meetingLinkOrNull;
+  final Widget Function(IconData, Color) iconBadge;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitleParts = <String>[
+      '${formatHm(booking.datetimeStart)}—${formatHm(booking.datetimeEnd)}',
+      if ((booking.objectName ?? '').trim().isNotEmpty)
+        booking.objectName!.trim(),
+      if (booking.isPrivate) 'Приватное',
+    ];
+
+    final description = booking.description?.trim() ?? '';
+    final bookingLink = booking.link?.trim() ?? '';
+    final meetingLink = bookingLink.isNotEmpty
+        ? bookingLink
+        : meetingLinkOrNull(description);
+    // Если ссылка пришла отдельным полем (а не была текстом описания),
+    // описание — самостоятельный текст и его тоже нужно показать.
+    final hasSeparateDescription =
+        description.isNotEmpty && description != meetingLink;
+    final imageUrl = booking.objectImageUrl;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              imageUrl != null
+                  ? AppNetworkImage(
+                      url: imageUrl,
+                      width: 29,
+                      height: 29,
+                      borderRadius: 7,
+                      errorIcon: AppIcons.locationPin,
+                    )
+                  : iconBadge(
+                      CupertinoIcons.location_solid,
+                      CupertinoColors.activeBlue,
+                    ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      booking.theme,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        subtitleParts.join(' • '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (meetingLink != null) ...[
+                      const SizedBox(height: 8),
+                      _JoinMeetingChip(
+                        url: meetingLink,
+                        isPassed: booking.isPassed,
+                      ),
+                    ],
+                    if (hasSeparateDescription) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 4),
+                child: Icon(
+                  CupertinoIcons.chevron_forward,
+                  size: 16,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
 class _JoinMeetingChip extends StatelessWidget {
-  const _JoinMeetingChip({required this.url});
+  const _JoinMeetingChip({required this.url, this.isPassed = false});
 
   final String url;
+  final bool isPassed;
 
   Future<void> _open() async {
     final uri = Uri.tryParse(url);
@@ -411,29 +574,27 @@ class _JoinMeetingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: _open,
-      borderRadius: BorderRadius.circular(8),
+    final color = isPassed
+        ? CupertinoColors.systemGrey
+        : CupertinoColors.activeBlue;
+
+    return GestureDetector(
+      onTap: isPassed ? null : _open,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: cs.primaryContainer,
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppIcon(
-              AppIcons.videoMeeting,
-              size: 16,
-              color: cs.onPrimaryContainer,
-            ),
+            Icon(CupertinoIcons.video_camera_solid, size: 15, color: color),
             const SizedBox(width: 6),
             Text(
               'Подключиться',
               style: TextStyle(
-                color: cs.onPrimaryContainer,
+                color: color,
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),

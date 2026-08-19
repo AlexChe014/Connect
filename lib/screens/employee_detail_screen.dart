@@ -8,6 +8,7 @@ import '../models/staff_user.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/chat_service.dart';
 import '../widgets/chat_avatar.dart';
+import '../widgets/status_bubble.dart';
 
 class EmployeeDetailScreen extends StatelessWidget {
   const EmployeeDetailScreen({super.key, required this.user});
@@ -61,7 +62,10 @@ class EmployeeDetailScreen extends StatelessWidget {
       width: 29,
       height: 29,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(7),
+      ),
       child: Icon(icon, size: 17, color: CupertinoColors.white),
     );
   }
@@ -75,6 +79,7 @@ class EmployeeDetailScreen extends StatelessWidget {
     required Color color,
     required String label,
     required String value,
+    bool isPlaceholder = false,
   }) {
     return CupertinoListTile(
       leading: _iconBadge(icon, color),
@@ -87,7 +92,20 @@ class EmployeeDetailScreen extends StatelessWidget {
       ),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 2),
-        child: Text(value, style: const TextStyle(color: CupertinoColors.label)),
+        child: Text(
+          value,
+          // CupertinoListTile форсирует subtitle в 1 строку с "…", если не
+          // переопределить maxLines явно — вопреки комментарию выше это
+          // резало длинные значения (например, должность) на самом деле.
+          maxLines: 20,
+          overflow: TextOverflow.ellipsis,
+          style: isPlaceholder
+              ? TextStyle(
+                  fontStyle: FontStyle.italic,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                )
+              : const TextStyle(color: CupertinoColors.label),
+        ),
       ),
     );
   }
@@ -101,8 +119,12 @@ class EmployeeDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final birthdayLabel = user.birthday != null
         ? DateFormat('d MMMM', 'ru_RU').format(user.birthday!)
-        : null;
+        : 'Не указан';
+    final positionLabel = (user.position ?? '').trim().isNotEmpty
+        ? user.position!.trim()
+        : 'Не указана';
     final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
+    final workStatus = (user.workStatus ?? '').trim();
     final hasPhone = (user.phone ?? '').trim().isNotEmpty;
     final hasEmail = (user.email ?? '').trim().isNotEmpty;
 
@@ -170,7 +192,10 @@ class EmployeeDetailScreen extends StatelessWidget {
                                 .resolveFrom(context),
                             shape: BoxShape.circle,
                           ),
-                          child: const Text('🎂', style: TextStyle(fontSize: 20)),
+                          child: const Text(
+                            '🎂',
+                            style: TextStyle(fontSize: 20),
+                          ),
                         ),
                       ),
                   ],
@@ -180,7 +205,10 @@ class EmployeeDetailScreen extends StatelessWidget {
               Text(
                 user.fullName,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if ((user.department ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 4),
@@ -192,6 +220,10 @@ class EmployeeDetailScreen extends StatelessWidget {
                     color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
+              ],
+              if (workStatus.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Center(child: StatusBubble(text: workStatus)),
               ],
               const SizedBox(height: 6),
               Text(
@@ -260,14 +292,22 @@ class EmployeeDetailScreen extends StatelessWidget {
                       label: 'Телефон',
                       value: user.phone!.trim(),
                     ),
-                  if (birthdayLabel != null)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.gift_fill,
-                      color: CupertinoColors.systemPink,
-                      label: 'День рождения',
-                      value: birthdayLabel,
-                    ),
+                  _infoRow(
+                    context,
+                    icon: CupertinoIcons.gift_fill,
+                    color: CupertinoColors.systemPink,
+                    label: 'День рождения',
+                    value: birthdayLabel,
+                    isPlaceholder: user.birthday == null,
+                  ),
+                  _infoRow(
+                    context,
+                    icon: CupertinoIcons.briefcase_fill,
+                    color: CupertinoColors.systemTeal,
+                    label: 'Должность',
+                    value: positionLabel,
+                    isPlaceholder: (user.position ?? '').trim().isEmpty,
+                  ),
                   if ((user.department ?? '').trim().isNotEmpty)
                     _infoRow(
                       context,
@@ -275,14 +315,6 @@ class EmployeeDetailScreen extends StatelessWidget {
                       color: CupertinoColors.systemIndigo,
                       label: 'Отдел',
                       value: user.department!.trim(),
-                    ),
-                  if ((user.workStatus ?? '').trim().isNotEmpty)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.person_badge_plus_fill,
-                      color: CupertinoColors.systemGrey,
-                      label: 'Рабочий статус',
-                      value: user.workStatus!.trim(),
                     ),
                   // Роли — служебная информация, полезна только для
                   // администраторов; обычным пользователям всегда покажет

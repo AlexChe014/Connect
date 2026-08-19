@@ -1,7 +1,7 @@
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/chat_avatar.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 class CreateGroupChatScreen extends StatefulWidget {
   const CreateGroupChatScreen({super.key});
@@ -15,6 +15,7 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
   final _descCtrl = TextEditingController();
   final _selected = <int>{};
   bool _creating = false;
+  String? _nameError;
 
   @override
   void initState() {
@@ -31,16 +32,13 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
 
   Future<void> _create() async {
     final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Введите название группы')));
-      return;
-    }
+    setState(() {
+      _nameError = name.isEmpty ? 'Введите название группы' : null;
+    });
+    if (_nameError != null) return;
+
     if (_selected.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Выберите хотя бы одного участника')),
-      );
+      _showMessage('Выберите хотя бы одного участника');
       return;
     }
 
@@ -54,80 +52,161 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
     setState(() => _creating = false);
 
     if (c == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось создать группу')),
-      );
+      _showMessage('Не удалось создать группу');
       return;
     }
     Navigator.of(context).pop<Chat>(c);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final contacts = ChatService.instance.contacts;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Новая группа'),
+  void _showMessage(String message) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
         actions: [
-          TextButton(
-            onPressed: _creating ? null : _create,
-            child: _creating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Создать'),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Ок'),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Название группы',
-              border: OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.next,
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Описание (необязательно)',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 24),
-          Text('Участники', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          ...contacts.map((c) {
-            if (c.userId <= 0) return const SizedBox.shrink();
-            return CheckboxListTile(
-              value: _selected.contains(c.userId),
-              onChanged: (v) {
-                setState(() {
-                  if (v == true) {
-                    _selected.add(c.userId);
-                  } else {
-                    _selected.remove(c.userId);
-                  }
-                });
-              },
-              secondary: MemberAvatar(
-                displayName: c.fullName,
-                avatarUrl: c.avatarUrl,
-                radius: 18,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final contacts = ChatService.instance.contacts
+        .where((c) => c.userId > 0)
+        .toList();
+
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('Новая группа'),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _creating ? null : () => Navigator.pop(context),
+          child: const Icon(CupertinoIcons.back, size: 26),
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _creating ? null : _create,
+          child: _creating
+              ? const CupertinoActivityIndicator()
+              : const Text(
+                  'Создать',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+        ),
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.only(top: 12, bottom: 32),
+            children: [
+              CupertinoFormSection.insetGrouped(
+                header: const Text('О ГРУППЕ'),
+                children: [
+                  CupertinoTextFormFieldRow(
+                    controller: _nameCtrl,
+                    prefix: const Text('Название'),
+                    placeholder: 'Например, Отдел продаж',
+                    textCapitalization: TextCapitalization.sentences,
+                    textAlign: TextAlign.end,
+                    autofocus: true,
+                    onChanged: (_) {
+                      if (_nameError != null) {
+                        setState(() => _nameError = null);
+                      }
+                    },
+                  ),
+                  CupertinoTextFormFieldRow(
+                    controller: _descCtrl,
+                    prefix: const Text('Описание'),
+                    placeholder: 'Необязательно',
+                    textCapitalization: TextCapitalization.sentences,
+                    textAlign: TextAlign.end,
+                    maxLines: 2,
+                  ),
+                ],
               ),
-              title: Text(c.fullName),
-              contentPadding: EdgeInsets.zero,
-            );
-          }),
-        ],
+              if (_nameError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Text(
+                    _nameError!,
+                    style: const TextStyle(
+                      color: CupertinoColors.systemRed,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'УЧАСТНИКИ${_selected.isEmpty ? '' : ' • ${_selected.length}'}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (contacts.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Text(
+                    'Нет доступных контактов',
+                    style: TextStyle(color: CupertinoColors.secondaryLabel),
+                  ),
+                )
+              else
+                CupertinoListSection.insetGrouped(
+                  children: contacts.map((c) {
+                    final checked = _selected.contains(c.userId);
+                    return CupertinoListTile(
+                      leading: MemberAvatar(
+                        displayName: c.fullName,
+                        avatarUrl: c.avatarUrl,
+                        radius: 18,
+                      ),
+                      title: Text(c.fullName),
+                      trailing: checked
+                          ? const Icon(
+                              CupertinoIcons.checkmark_circle_fill,
+                              color: CupertinoColors.activeBlue,
+                            )
+                          : const Icon(
+                              CupertinoIcons.circle,
+                              color: CupertinoColors.systemGrey3,
+                            ),
+                      onTap: () {
+                        setState(() {
+                          if (checked) {
+                            _selected.remove(c.userId);
+                          } else {
+                            _selected.add(c.userId);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

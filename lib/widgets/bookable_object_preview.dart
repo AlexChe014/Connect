@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
-import '../config/app_icons.dart';
 import '../models/bookings/bookable_object.dart';
 import 'app_network_image.dart';
 
@@ -28,13 +27,13 @@ class BookableObjectPreview extends StatelessWidget {
                 width: imageSize,
                 height: imageSize,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
+                  color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: AppIcon(
-                  AppIcons.locationPin,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                child: Icon(
+                  CupertinoIcons.location_solid,
+                  color: CupertinoColors.systemBlue,
                   size: compact ? 26 : 32,
                 ),
               )
@@ -52,16 +51,19 @@ class BookableObjectPreview extends StatelessWidget {
               if (!compact)
                 Text(
                   object.name,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: const TextStyle(
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label,
                   ),
                 ),
               if (object.capacity > 0) ...[
                 SizedBox(height: compact ? 0 : 6),
                 Text(
                   'Вместимость: до ${object.capacity} чел.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel,
                   ),
                 ),
               ],
@@ -71,8 +73,9 @@ class BookableObjectPreview extends StatelessWidget {
                   object.description!.trim(),
                   maxLines: compact ? 2 : 4,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: CupertinoColors.secondaryLabel,
                   ),
                 ),
               ],

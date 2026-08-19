@@ -3,8 +3,10 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
+import 'package:flutter_quill/flutter_quill.dart'
+    show FlutterQuillLocalizations;
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'screens/calendar_screen.dart';
 import 'screens/chats_list_screen.dart';
@@ -15,12 +17,12 @@ import 'screens/profile_screen.dart';
 import 'screens/employees_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
-import 'config/app_icons.dart';
 import 'config/app_theme.dart';
 import 'config/branding.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/location_gate_service.dart';
+import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/tracking_transparency_service.dart';
 
@@ -47,6 +49,7 @@ class _ConnectAppState extends State<ConnectApp> {
       await TrackingTransparencyService.instance.requestIfNeeded();
       if (AuthService.instance.isAuthenticated) {
         await PushNotificationService.instance.requestPermissions();
+        await NotificationPreferencesService.instance.syncAll();
         await LocationGateService.instance.verifyForCurrentUser();
       }
     });
@@ -165,6 +168,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       drawerScrimColor: Colors.transparent,
       onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: SafeArea(
           child: ListView(
             padding: EdgeInsets.zero,
@@ -173,79 +179,93 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
                 child: Column(children: [BrandingLoginLogo(height: 56)]),
               ),
-              ListTileTheme(
-                data: const ListTileThemeData(
-                  tileColor: Colors.transparent,
-                  selectedTileColor:
-                      Colors.transparent, // no background in menu
-                  dense: true,
-                  visualDensity: VisualDensity(horizontal: 0, vertical: -3),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                ),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const AppIcon(AppIcons.dashboard),
-                      title: const Text('Лента'),
-                      selected: _homeSection == _HomeSection.news,
-                      onTap: () {
-                        setState(() {
-                          _homeSection = _HomeSection.news;
-                          _currentIndex = 0;
-                        });
-                        Navigator.pop(context);
-                      },
-                    ),
-                    ListTile(
-                      leading: const AppIcon(AppIcons.bookings),
-                      title: const Text('Бронирования'),
-                      selected: _homeSection == _HomeSection.bookings,
-                      onTap: () {
-                        setState(() {
-                          _homeSection = _HomeSection.bookings;
-                          _currentIndex = 0;
-                        });
-                        Navigator.pop(context);
-                      },
-                    ),
-                    ListTile(
-                      leading: const AppIcon(AppIcons.user),
-                      title: const Text('Сотрудники'),
-                      selected: _homeSection == _HomeSection.employees,
-                      onTap: () {
-                        setState(() {
-                          _homeSection = _HomeSection.employees;
-                          _currentIndex = 0;
-                        });
-                        Navigator.pop(context);
-                      },
-                    ),
-                    ListTile(
-                      leading: const AppIcon(AppIcons.mailAt),
-                      title: const Text('Почта'),
-                      selected: _homeSection == _HomeSection.mail,
-                      onTap: () {
-                        setState(() {
-                          _homeSection = _HomeSection.mail;
-                          _currentIndex = 0;
-                        });
-                        Navigator.pop(context);
-                      },
-                    ),
-                    ListTile(
-                      leading: const AppIcon(AppIcons.documents),
-                      title: const Text('Согласование'),
-                      selected: _homeSection == _HomeSection.documents,
-                      onTap: () {
-                        setState(() {
-                          _homeSection = _HomeSection.documents;
-                          _currentIndex = 0;
-                        });
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ],
-                ),
+              CupertinoListSection.insetGrouped(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _DrawerItem(
+                    icon: CupertinoIcons.square_grid_2x2,
+                    label: 'Лента',
+                    selected:
+                        _currentIndex == 0 && _homeSection == _HomeSection.news,
+                    onTap: () {
+                      setState(() {
+                        _homeSection = _HomeSection.news;
+                        _currentIndex = 0;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.bookmark,
+                    label: 'Бронирования',
+                    selected:
+                        _currentIndex == 0 &&
+                        _homeSection == _HomeSection.bookings,
+                    onTap: () {
+                      setState(() {
+                        _homeSection = _HomeSection.bookings;
+                        _currentIndex = 0;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.person_2,
+                    label: 'Сотрудники',
+                    selected:
+                        _currentIndex == 0 &&
+                        _homeSection == _HomeSection.employees,
+                    onTap: () {
+                      setState(() {
+                        _homeSection = _HomeSection.employees;
+                        _currentIndex = 0;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.mail,
+                    label: 'Почта',
+                    selected:
+                        _currentIndex == 0 && _homeSection == _HomeSection.mail,
+                    onTap: () {
+                      setState(() {
+                        _homeSection = _HomeSection.mail;
+                        _currentIndex = 0;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.doc_text,
+                    label: 'Согласование',
+                    selected:
+                        _currentIndex == 0 &&
+                        _homeSection == _HomeSection.documents,
+                    onTap: () {
+                      setState(() {
+                        _homeSection = _HomeSection.documents;
+                        _currentIndex = 0;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.book,
+                    label: 'База знаний',
+                    selected: false,
+                    isExternal: true,
+                    onTap: () {
+                      Navigator.pop(context);
+                      launchUrl(
+                        Uri.parse(
+                          'https://support.xon-connect.ru/books/rukovodstvo-polzovatelia-xonconnect/page/avtorizaciia',
+                        ),
+                        mode: LaunchMode.externalApplication,
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -297,9 +317,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         iconSize: 26,
         items: const [
           BottomNavigationBarItem(
-            icon: _LogoNavIcon(selected: false),
-            activeIcon: _LogoNavIcon(selected: true),
-            label: 'Лента',
+            icon: Icon(CupertinoIcons.line_horizontal_3),
+            label: 'Меню',
           ),
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.calendar),
@@ -319,42 +338,43 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-class _LogoNavIcon extends StatelessWidget {
-  const _LogoNavIcon({required this.selected});
+class _DrawerItem extends StatelessWidget {
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.isExternal = false,
+  });
 
+  final IconData icon;
+  final String label;
   final bool selected;
+  final VoidCallback onTap;
+
+  /// `true` — пункт открывает внешнюю ссылку, а не раздел приложения:
+  /// вместо галочки «выбрано» показывает иконку внешней ссылки.
+  final bool isExternal;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final border = selected
-        ? scheme.primary
-        : scheme.outline.withValues(alpha: 0.45);
-    final fill = selected
-        ? scheme.primary.withValues(alpha: 0.10)
-        : Colors.transparent;
-    final fg = selected
-        ? scheme.primary
-        : scheme.onSurface.withValues(alpha: 0.70);
-
-    return Container(
-      width: 30,
-      height: 30,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: border, width: 1.5),
-      ),
-      alignment: Alignment.center,
-      clipBehavior: Clip.antiAlias,
-      child: Image.asset(
-        BrandingAssets.loginLogoPng,
-        width: 22,
-        height: 22,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) =>
-            AppIcon(AppIcons.dashboard, size: 18, color: fg),
-      ),
+    return CupertinoListTile(
+      onTap: onTap,
+      leading: Icon(icon, size: 22, color: CupertinoColors.activeBlue),
+      title: Text(label),
+      trailing: isExternal
+          ? Icon(
+              CupertinoIcons.arrow_up_right_square,
+              size: 18,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            )
+          : selected
+          ? const Icon(
+              CupertinoIcons.checkmark_alt,
+              size: 20,
+              color: CupertinoColors.activeBlue,
+            )
+          : null,
     );
   }
 }

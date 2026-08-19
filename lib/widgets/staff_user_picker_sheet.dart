@@ -1,12 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show showModalBottomSheet;
 
 import '../config/api_config.dart';
-import '../config/app_icons.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../services/paginated.dart';
+import 'chat_avatar.dart';
 
 /// Поиск и выбор сотрудника (`/user/filter`) с debounce и пагинацией.
 class StaffUserPickerSheet extends StatefulWidget {
@@ -28,6 +29,9 @@ class StaffUserPickerSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
       builder: (context) => SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.75,
         child: StaffUserPickerSheet(
@@ -132,9 +136,7 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      _showError(e.toString());
     }
   }
 
@@ -159,17 +161,28 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
     }
   }
 
+  void _showError(String message) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Ок'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _onUserTap(StaffUser user) {
     if (_selectedIds.contains(user.id)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Участник уже добавлен')));
+      _showError('Участник уже добавлен');
       return;
     }
     if (user.idAsInt == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Некорректный id пользователя')),
-      );
+      _showError('Некорректный id пользователя');
       return;
     }
     setState(() => _selectedIds.add(user.id));
@@ -178,88 +191,89 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Text(
-              'Участники',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Фамилия, имя или email',
-                prefixIcon: const AppIcon(AppIcons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+    return DefaultTextStyle(
+      style: TextStyle(
+        fontFamily: '.SF Pro Text',
+        decoration: TextDecoration.none,
+        color: CupertinoColors.label.resolveFrom(context),
+        fontSize: 16,
+      ),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text(
+                'Участники',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.label,
                 ),
-                isDense: true,
               ),
-              onSubmitted: (_) {
-                _debounce?.cancel();
-                _appliedQ = _searchController.text.trim();
-                _loadFirstPage();
-              },
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? Center(
-                    child: Text(
-                      _appliedQ.isEmpty
-                          ? 'Сотрудники не найдены'
-                          : 'Никого не найдено по запросу',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: _items.length + (_isLoadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index >= _items.length) {
-                        return const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Center(
-                            child: SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: CupertinoSearchTextField(
+                controller: _searchController,
+                autofocus: true,
+                placeholder: 'Фамилия, имя или email',
+                onSubmitted: (_) {
+                  _debounce?.cancel();
+                  _appliedQ = _searchController.text.trim();
+                  _loadFirstPage();
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CupertinoActivityIndicator())
+                  : _items.isEmpty
+                  ? Center(
+                      child: Text(
+                        _appliedQ.isEmpty
+                            ? 'Сотрудники не найдены'
+                            : 'Никого не найдено по запросу',
+                        style: const TextStyle(
+                          color: CupertinoColors.secondaryLabel,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: _items.length + (_isLoadingMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index >= _items.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(child: CupertinoActivityIndicator()),
+                          );
+                        }
+                        final user = _items[index];
+                        final isSelected = _selectedIds.contains(user.id);
+                        return _PickerUserTile(
+                          user: user,
+                          isSelected: isSelected,
+                          onTap: () => _onUserTap(user),
                         );
-                      }
-                      final user = _items[index];
-                      final isSelected = _selectedIds.contains(user.id);
-                      return _PickerUserTile(
-                        user: user,
-                        isSelected: isSelected,
-                        onTap: () => _onUserTap(user),
-                      );
-                    },
-                  ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Готово'),
+                      },
+                    ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: CupertinoButton.filled(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Готово'),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -278,38 +292,28 @@ class _PickerUserTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasAvatar = (user.avatarUrl ?? '').trim().isNotEmpty;
-
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? CupertinoColors.systemGrey5.resolveFrom(context)
+            : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+                context,
+              ),
+        borderRadius: BorderRadius.circular(12),
+      ),
       clipBehavior: Clip.antiAlias,
-      color: isSelected ? theme.colorScheme.surfaceContainerHighest : null,
-      child: InkWell(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: isSelected ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: hasAvatar
-                    ? ClipOval(
-                        child: Image.network(
-                          user.avatarUrl!,
-                          width: 44,
-                          height: 44,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Text(user.initials),
-                        ),
-                      )
-                    : Text(
-                        user.initials,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
+              MemberAvatar(
+                displayName: user.fullName,
+                avatarUrl: user.avatarUrl,
+                radius: 20,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -318,8 +322,10 @@ class _PickerUserTile extends StatelessWidget {
                   children: [
                     Text(
                       user.fullName,
-                      style: theme.textTheme.titleSmall?.copyWith(
+                      style: const TextStyle(
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -328,8 +334,9 @@ class _PickerUserTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         user.email!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: CupertinoColors.secondaryLabel,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -339,8 +346,9 @@ class _PickerUserTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         user.department!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: CupertinoColors.secondaryLabel,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -350,11 +358,14 @@ class _PickerUserTile extends StatelessWidget {
                 ),
               ),
               if (isSelected)
-                Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                const Icon(
+                  CupertinoIcons.checkmark_circle_fill,
+                  color: CupertinoColors.activeBlue,
+                )
               else
-                AppIcon(
-                  AppIcons.profileAdd,
-                  color: theme.colorScheme.onSurfaceVariant,
+                const Icon(
+                  CupertinoIcons.plus_circle,
+                  color: CupertinoColors.systemGrey,
                 ),
             ],
           ),

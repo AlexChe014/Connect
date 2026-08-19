@@ -188,7 +188,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
     if (_items.isEmpty) {
       return SliverFillRemaining(
-        hasScrollBody: false,
         child: AppEmptyState(
           icon: CupertinoIcons.person_2,
           message: _appliedQ.isEmpty
@@ -226,39 +225,47 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: SafeArea(
-        top: false,
-        bottom: false,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            _debounce?.cancel();
-            _appliedQ = _qController.text.trim();
-            await _loadFirstPage();
-          },
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              const CupertinoSliverNavigationBar(
-                largeTitle: Text('Сотрудники'),
-                backgroundColor: CupertinoColors.systemGroupedBackground,
-                border: null,
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: CupertinoSearchTextField(
-                    controller: _qController,
-                    placeholder: 'Фамилия, имя, отчество или почта',
-                    onSubmitted: (_) {
-                      _debounce?.cancel();
-                      _appliedQ = _qController.text.trim();
-                      _loadFirstPage();
-                    },
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: RefreshIndicator(
+            onRefresh: () async {
+              _debounce?.cancel();
+              _appliedQ = _qController.text.trim();
+              await _loadFirstPage();
+            },
+            child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                const CupertinoSliverNavigationBar(
+                  largeTitle: Text('Сотрудники'),
+                  backgroundColor: CupertinoColors.systemGroupedBackground,
+                  border: null,
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: CupertinoSearchTextField(
+                      controller: _qController,
+                      placeholder: 'Фамилия, имя, отчество или почта',
+                      onSubmitted: (_) {
+                        _debounce?.cancel();
+                        _appliedQ = _qController.text.trim();
+                        _loadFirstPage();
+                      },
+                    ),
                   ),
                 ),
-              ),
-              _buildResultsSliver(),
-            ],
+                _buildResultsSliver(),
+              ],
+            ),
           ),
         ),
       ),
@@ -281,7 +288,9 @@ class _EmployeeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context),
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
@@ -312,7 +321,8 @@ class _EmployeeTile extends StatelessWidget {
                             : AppColors.outlineStrong,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: CupertinoColors.secondarySystemGroupedBackground
+                          color: CupertinoColors
+                              .secondarySystemGroupedBackground
                               .resolveFrom(context),
                           width: 2,
                         ),
@@ -328,7 +338,8 @@ class _EmployeeTile extends StatelessWidget {
                         height: 20,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: CupertinoColors.secondarySystemGroupedBackground
+                          color: CupertinoColors
+                              .secondarySystemGroupedBackground
                               .resolveFrom(context),
                           shape: BoxShape.circle,
                         ),
@@ -383,7 +394,9 @@ class _EmployeeTileSkeleton extends StatelessWidget {
     return Container(
       height: 64,
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context),
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
     );
