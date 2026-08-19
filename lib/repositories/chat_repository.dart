@@ -28,12 +28,22 @@ class ChatRepository {
           'messages_per_chat': '$messagesPerChat',
         },
       );
-      final data = ApiEnvelope.unwrapDataMap(
+      final payload = ApiEnvelope.unwrapData(
         decoded,
         defaultErrorMessage: 'Не удалось получить список чатов',
       );
-      final rawChats = data['chats'];
-      if (rawChats is! List) {
+      List rawChats;
+      Map<String, dynamic>? pagination;
+      if (payload is List) {
+        rawChats = payload;
+      } else if (payload is Map<String, dynamic>) {
+        rawChats = (payload['chats'] ?? payload['data']) as List? ?? const [];
+        pagination = _asJsonMap(payload['pagination']);
+      } else if (payload is Map) {
+        final map = payload.cast<String, dynamic>();
+        rawChats = (map['chats'] ?? map['data']) as List? ?? const [];
+        pagination = _asJsonMap(map['pagination']);
+      } else {
         throw ApiException(200, 'Некорректный формат списка чатов');
       }
 
@@ -45,7 +55,6 @@ class ChatRepository {
             .where((c) => c.id.isNotEmpty),
       );
 
-      final pagination = _asJsonMap(data['pagination']);
       lastPage = _parseInt(pagination?['last_page']) ?? page;
       final currentPage = _parseInt(pagination?['current_page']) ?? page;
       if (currentPage >= lastPage || page >= maxPages) break;
@@ -122,10 +131,10 @@ class ChatRepository {
     }
 
     final body = <String, dynamic>{
-      'message': trimmed,
-      'type': 'TEXT',
+      'text': trimmed,
     };
     if (repliedMessageId != null) {
+      // Спецификация описывает только `text`, но бэкенд поддерживает треды.
       body['replied_message_id'] = repliedMessageId;
     }
 

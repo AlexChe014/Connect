@@ -4,5 +4,5 @@ class UpdateChatMessageRequest {
 
   final String text;
 
-  Map<String, dynamic> toJson() => {'message': text.trim()};
+  Map<String, dynamic> toJson() => {'text': text.trim()};
 }

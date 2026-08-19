@@ -16,10 +16,6 @@ class UpdateChatRequest {
       body['title'] = titleValue;
     }
 
-    if (description != null) {
-      body['description'] = description!.trim();
-    }
-
     return body;
   }
 }
