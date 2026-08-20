@@ -187,13 +187,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     }
 
     if (_items.isEmpty) {
-      return SliverFillRemaining(
-        child: AppEmptyState(
-          icon: CupertinoIcons.person_2,
-          message: _appliedQ.isEmpty
-              ? 'Пока нет сотрудников'
-              : 'Никого не нашлось по запросу «$_appliedQ»',
-        ),
+      return SliverAppEmptyState(
+        icon: CupertinoIcons.person_2,
+        message: _appliedQ.isEmpty
+            ? 'Пока нет сотрудников'
+            : 'Никого не нашлось по запросу «$_appliedQ»',
       );
     }
 

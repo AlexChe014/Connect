@@ -108,7 +108,6 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
       await MailRepository.instance.sendMail(
         SendMailRequest(
-          connectionId: widget.connection.id,
           to: _toController.text.trim(),
           subject: _subjectController.text.trim(),
           body: _bodyController.text,

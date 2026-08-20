@@ -275,6 +275,7 @@ class EmployeeDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 28),
               CupertinoListSection.insetGrouped(
+                header: const Text('Информация'),
                 children: [
                   if (hasEmail)
                     _infoRow(

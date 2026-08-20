@@ -17,6 +17,7 @@ import 'screens/profile_screen.dart';
 import 'screens/employees_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
+import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'config/branding.dart';
 import 'services/app_navigation_service.dart';
@@ -29,6 +30,7 @@ import 'services/tracking_transparency_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ru_RU', null);
+  await ApiConfig.init();
   await AuthService.instance.init();
   await PushNotificationService.instance.init();
   runApp(const ConnectApp());

@@ -1,0 +1,17 @@
+# Генерация шрифта иконок:
+#   powershell -File icons/collect_icons.ps1   # includes stroke-to-fill via oslllo-svg-fixer
+#   flutter pub run icon_font_generator:generator -z icon_font.yaml
+#
+# Исходники: icons/font/ (106 SVG, формат icon_{section}_{name}.svg).
+# Контурные SVG (stroke) автоматически конвертируются в fill перед генерацией шрифта.
+
+icon_font:
+  input_svg_dir: icons/font
+  output_font_file: assets/fonts/connect_icons.otf
+  output_class_file: lib/config/connect_icons.dart
+  class_name: ConnectIcons
+  font_name: Connect Icons
+  normalize: true
+  ignore_shapes: true
+  format: true
+  verbose: false

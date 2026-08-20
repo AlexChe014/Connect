@@ -147,13 +147,21 @@ class ChatMapper {
     required String messagesBaseUrl,
     String defaultErrorMessage = 'Не удалось получить сообщения',
   }) {
-    final data = ApiEnvelope.unwrapDataMap(
+    final payload = ApiEnvelope.unwrapData(
       decoded,
       defaultErrorMessage: defaultErrorMessage,
     );
-
-    final rawList = data['messages'] ?? data['data'];
-    if (rawList is! List) {
+    List rawList;
+    Map<String, dynamic>? data;
+    if (payload is List) {
+      rawList = payload;
+    } else if (payload is Map<String, dynamic>) {
+      data = payload;
+      rawList = (payload['messages'] ?? payload['data']) as List? ?? const [];
+    } else if (payload is Map) {
+      data = payload.cast<String, dynamic>();
+      rawList = (data['messages'] ?? data['data']) as List? ?? const [];
+    } else {
       throw ApiException(200, 'Некорректный формат messages');
     }
 
@@ -170,7 +178,7 @@ class ChatMapper {
         )
         .toList(growable: false);
 
-    final pagination = _asJsonMap(data['pagination']);
+    final pagination = _asJsonMap(data?['pagination']);
     var currentPage = 1;
     int? lastPage;
     int? perPage;
@@ -188,11 +196,11 @@ class ChatMapper {
             '$messagesBaseUrl?page=${currentPage + 1}&per_page=$pp';
       }
     } else {
-      currentPage = _parseInt(data['current_page']) ?? 1;
-      lastPage = _parseInt(data['last_page']);
-      perPage = _parseInt(data['per_page']);
-      total = _parseInt(data['total']);
-      nextPageUrl = data['next_page_url'] as String?;
+      currentPage = _parseInt(data?['current_page']) ?? 1;
+      lastPage = _parseInt(data?['last_page']);
+      perPage = _parseInt(data?['per_page']);
+      total = _parseInt(data?['total']);
+      nextPageUrl = data?['next_page_url'] as String?;
     }
 
     final chronological = items.reversed.toList(growable: false);

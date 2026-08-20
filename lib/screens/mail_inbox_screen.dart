@@ -62,7 +62,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
       if (!fallbackToService && folder != null) {
         items = await MailRepository.instance.getMessagesByFolder(
           connectionId: widget.connection.id,
-          folderId: folder.id,
+          folder: folder.name,
         );
       } else {
         items = await MailRepository.instance.getMessagesByService(

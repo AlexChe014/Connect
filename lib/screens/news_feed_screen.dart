@@ -314,12 +314,10 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
 
     if (_news.isEmpty) {
-      return SliverFillRemaining(
-        child: AppEmptyState(
-          icon: CupertinoIcons.news,
-          message: 'Пока нет новостей',
-          onRetry: _loadFirstPage,
-        ),
+      return SliverAppEmptyState(
+        icon: CupertinoIcons.news,
+        message: 'Пока нет новостей',
+        onRetry: _loadFirstPage,
       );
     }
 

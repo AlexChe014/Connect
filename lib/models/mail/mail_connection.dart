@@ -1,6 +1,8 @@
 class MailConnection {
   final int id;
   final String email;
+  final String? host;
+  final int? port;
   final String? service;
   final String? username;
   final String? name;
@@ -8,11 +10,14 @@ class MailConnection {
   final int? customImapPort;
   final String? customImapEncryption;
   final bool isActive;
+  final bool isDefault;
   final String? lastError;
 
   const MailConnection({
     required this.id,
     required this.email,
+    this.host,
+    this.port,
     this.service,
     this.username,
     this.name,
@@ -20,6 +25,7 @@ class MailConnection {
     this.customImapPort,
     this.customImapEncryption,
     this.isActive = true,
+    this.isDefault = false,
     this.lastError,
   });
 
@@ -43,6 +49,8 @@ class MailConnection {
     return MailConnection(
       id: _parseInt(json['id']) ?? 0,
       email: _optionalString(json, ['email', 'mail']) ?? '',
+      host: _optionalString(json, ['host', 'imap_host', 'custom_imap_host']),
+      port: _parseInt(json['port'] ?? json['imap_port'] ?? json['custom_imap_port']),
       service: _optionalString(json, ['service', 'provider', 'type']),
       username: _optionalString(json, ['username', 'login']),
       name: _optionalString(json, ['from_name', 'name', 'title', 'display_name']),
@@ -51,6 +59,7 @@ class MailConnection {
       customImapEncryption:
           _optionalString(json, ['imap_encryption', 'custom_imap_encryption']),
       isActive: _parseBool(json['is_active'], defaultValue: true),
+      isDefault: _parseBool(json['is_default'], defaultValue: false),
       lastError: _optionalString(json, ['last_error', 'error', 'message']),
     );
   }

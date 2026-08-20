@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_icons.dart';
+import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../services/auth_service.dart';
 import '../services/location_gate_service.dart';
@@ -18,24 +19,41 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _backendController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    _backendController.text = ApiConfig.customBackendHost ?? '';
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _backendController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final backend = _backendController.text.trim();
+    if (backend.isNotEmpty && !ApiConfig.isBackendHostValid(backend)) {
+      setState(() {
+        _errorMessage = 'Некорректный адрес бэкенда. Пример: https://connect.xondev.ru';
+      });
+      return;
+    }
+
     setState(() {
       _errorMessage = null;
       _isLoading = true;
     });
 
     try {
+      await ApiConfig.setBackendHost(backend.isEmpty ? null : backend);
       await AuthService.instance.login(
         _emailController.text.trim(),
         _passwordController.text,
@@ -171,6 +189,26 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
+                        TextFormField(
+                          controller: _backendController,
+                          keyboardType: TextInputType.url,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                            labelText: 'Адрес сервера',
+                            hintText: 'https://connect.xondev.ru',
+                            helperText: 'Указывайте адрес без /mobile',
+                            prefixIcon: Icon(Icons.link),
+                          ),
+                          validator: (v) {
+                            final value = v?.trim() ?? '';
+                            if (value.isEmpty) return null;
+                            if (!ApiConfig.isBackendHostValid(value)) {
+                              return 'Некорректный URL';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
