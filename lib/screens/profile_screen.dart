@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
@@ -205,6 +206,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } catch (_) {}
     }
     return DateTime.tryParse(s.contains('T') ? s : s.replaceFirst(' ', 'T'));
+  }
+
+  static final Uri _privacyPolicyUri = Uri.parse(
+    'https://xon-connect.ru/include/licenses_detail.php',
+  );
+
+  Future<void> _openPrivacyPolicy() async {
+    await launchUrl(
+      _privacyPolicyUri,
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  Future<void> _requestAccountDeletion() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удаление аккаунта'),
+        content: const Text(
+          'Аккаунт создаётся и управляется корпоративной IT-службой. '
+          'Мы откроем письмо с запросом на удаление — его нужно отправить '
+          'в поддержку, обработка занимает до 30 дней.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Продолжить'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final email = _optionalField('email', altKeys: ['mail']) ?? '';
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'support@xondev.ru',
+      query:
+          'subject=${Uri.encodeComponent('Запрос на удаление аккаунта Connect')}'
+          '&body=${Uri.encodeComponent(
+            'Прошу удалить мой аккаунт и связанные с ним данные в приложении Connect.\n\n'
+            'Учётная запись: $email',
+          )}',
+    );
+    if (!await launchUrl(uri) && mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Не удалось открыть почту'),
+          content: const Text(
+            'Отправьте запрос на удаление аккаунта на support@xondev.ru вручную.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ОК'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _logout() async {
@@ -501,6 +567,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           CupertinoListSection.insetGrouped(
             children: [
               CupertinoListTile(
+                leading: _iconBadge(
+                  CupertinoIcons.doc_text_fill,
+                  CupertinoColors.systemGrey,
+                ),
+                title: const Text('Политика конфиденциальности'),
+                trailing: const CupertinoListTileChevron(),
+                onTap: _openPrivacyPolicy,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          CupertinoListSection.insetGrouped(
+            children: [
+              CupertinoListTile(
                 title: const Center(
                   child: Text(
                     'Выйти из аккаунта',
@@ -511,6 +591,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 onTap: _logout,
+              ),
+              CupertinoListTile(
+                title: const Center(
+                  child: Text(
+                    'Запросить удаление аккаунта',
+                    style: TextStyle(
+                      color: CupertinoColors.systemRed,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                onTap: _requestAccountDeletion,
               ),
             ],
           ),

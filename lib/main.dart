@@ -25,7 +25,6 @@ import 'services/auth_service.dart';
 import 'services/location_gate_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
-import 'services/tracking_transparency_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +47,6 @@ class _ConnectAppState extends State<ConnectApp> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await TrackingTransparencyService.instance.requestIfNeeded();
       if (AuthService.instance.isAuthenticated) {
         await PushNotificationService.instance.requestPermissions();
         await NotificationPreferencesService.instance.syncAll();

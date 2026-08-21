@@ -38,8 +38,6 @@
 	<string>Микрофон используется при записи видеосообщения в корпоративном чате Connect.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Геолокация нужна, чтобы подтвердить, что вы находитесь на территории компании при использовании функций, связанных с присутствием на рабочем месте.</string>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>Разрешение на отслеживание помогает улучшать стабильность приложения и доставку корпоративных уведомлений. Данные не используются для рекламы третьих лиц.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
