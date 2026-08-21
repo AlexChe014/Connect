@@ -83,6 +83,7 @@ abstract final class AppIcons {
   // 14 — коннектор
   static const IconData cameraOn = TablerIcons.camera;
   static const IconData videoMeeting = TablerIcons.video;
+  static const IconData scheduleMeeting = TablerIcons.calendar_plus;
 }
 
 /// Иконка из [AppIcons] с поддержкой размера и цвета из [IconTheme].

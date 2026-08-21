@@ -3,8 +3,10 @@ import 'booking_recurring.dart';
 /// Тело запроса `POST /booking/create` (form-data).
 class CreateBookingRequest {
   final String theme;
-  final int modelType;
-  final int modelId;
+  /// Для онлайн-встреч Коннектора может быть не задан.
+  final int? modelType;
+  /// Для онлайн-встреч Коннектора может быть не задан.
+  final int? modelId;
   final int datetimeStartSeconds;
   final int datetimeEndSeconds;
   final List<int> userIds;
@@ -19,8 +21,8 @@ class CreateBookingRequest {
 
   const CreateBookingRequest({
     required this.theme,
-    required this.modelType,
-    required this.modelId,
+    this.modelType,
+    this.modelId,
     required this.datetimeStartSeconds,
     required this.datetimeEndSeconds,
     this.userIds = const [],
@@ -37,11 +39,16 @@ class CreateBookingRequest {
   List<MapEntry<String, String>> toFormEntries() {
     final entries = <MapEntry<String, String>>[
       MapEntry('theme', theme.trim()),
-      MapEntry('model_type', modelType.toString()),
-      MapEntry('model_id', modelId.toString()),
       MapEntry('datetime_start', datetimeStartSeconds.toString()),
       MapEntry('datetime_end', datetimeEndSeconds.toString()),
     ];
+
+    if (modelType != null) {
+      entries.add(MapEntry('model_type', modelType.toString()));
+    }
+    if (modelId != null) {
+      entries.add(MapEntry('model_id', modelId.toString()));
+    }
 
     for (final userId in userIds) {
       entries.add(MapEntry('users[]', userId.toString()));

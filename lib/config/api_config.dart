@@ -11,6 +11,10 @@ class ApiConfig {
   static const String _apiSegment = '/api';
   static String? _customBackendHost;
 
+  /// Временно: файлы/картинки всё ещё раздаёт старый хост
+  /// (`https://data.xondev.ru`), пока storage не настроен на новом сервере.
+  static const String _filesHost = 'https://data.xondev.ru';
+
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _customBackendHost = _sanitizeBackendHost(prefs.getString(_backendHostKey));
@@ -26,8 +30,7 @@ class ApiConfig {
   static String get baseUrl => '${_normalizeHost(backendHost)}$_mobileSegment$_apiSegment';
 
   /// Публичный хост для файлов/картинок (без завершающего слеша).
-  /// Бэкенд иногда отдаёт ссылки вида `http://localhost/...` — приводим к этому домену.
-  static String get publicHost => _normalizeHost(backendHost);
+  static String get publicHost => _filesHost;
 
   /// Таймаут запросов в секундах
   static const int timeoutSeconds = 30;
@@ -75,32 +78,47 @@ class ApiConfig {
 
   /// Нормализация URL файлов от бэкенда.
   ///
-  /// Требование: `http://localhost` заменяем на текущий `publicHost`.
+  /// Временно все «локальные» и API-хосты приводим к [_filesHost]:
+  /// - `localhost` / `127.0.0.1`
+  /// - текущий [backendHost] (файлы на новом сервере ещё не настроены)
+  /// - относительные пути (`/storage/...`)
+  ///
+  /// Важно: `Uri.replace(port: null)` в Dart **не сбрасывает** порт.
   static String? normalizeFileUrl(String? url) {
     if (url == null) return null;
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
 
     final uri = Uri.tryParse(trimmed);
-    if (uri != null && uri.host == 'localhost') {
-      final publicUri = Uri.parse(publicHost);
-      return uri
-          .replace(
-            scheme: publicUri.scheme,
-            host: publicUri.host,
-            port: null,
-          )
-          .toString();
+    if (uri == null) return trimmed;
+
+    final publicUri = Uri.parse(publicHost);
+
+    // Относительный путь без хоста.
+    if (!uri.hasScheme || uri.host.isEmpty) {
+      final path = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+      return publicUri.replace(path: path).toString();
     }
 
-    // Фоллбэк для “кривых” строк, которые `Uri` не парсит.
-    const localhostPrefix = 'http://localhost';
-    if (trimmed.startsWith(localhostPrefix)) {
-      final rest = trimmed.substring(localhostPrefix.length);
-      final restWithoutPort = rest.replaceFirst(RegExp(r'^:\d+'), '');
-      return '$publicHost$restWithoutPort';
-    }
+    final host = uri.host.toLowerCase();
+    final backendUri = Uri.tryParse(backendHost);
+    final backendHostName = backendUri?.host.toLowerCase();
+    final filesHostName = publicUri.host.toLowerCase();
 
-    return trimmed;
+    final shouldRewrite = host == 'localhost' ||
+        host == '127.0.0.1' ||
+        (backendHostName != null &&
+            host == backendHostName &&
+            host != filesHostName);
+
+    if (!shouldRewrite) return trimmed;
+
+    return publicUri
+        .replace(
+          path: uri.path.isEmpty ? '/' : uri.path,
+          query: uri.hasQuery ? uri.query : null,
+          fragment: uri.hasFragment ? uri.fragment : null,
+        )
+        .toString();
   }
 }

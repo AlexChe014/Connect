@@ -41,9 +41,17 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         widget.connection.id,
       );
       if (!mounted) return;
+      MailFolder? selected;
+      for (final folder in folders) {
+        if (folder.isInbox) {
+          selected = folder;
+          break;
+        }
+      }
+      selected ??= folders.isNotEmpty ? folders.first : null;
       setState(() {
         _folders = folders;
-        _selectedFolder = folders.isNotEmpty ? folders.first : null;
+        _selectedFolder = selected;
         _isLoadingFolders = false;
       });
       await _loadMessages();
@@ -59,10 +67,10 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     try {
       final List<MailMessage> items;
       final folder = _selectedFolder;
-      if (!fallbackToService && folder != null) {
+      if (!fallbackToService && folder != null && folder.id > 0) {
         items = await MailRepository.instance.getMessagesByFolder(
           connectionId: widget.connection.id,
-          folder: folder.name,
+          folderId: folder.id,
         );
       } else {
         items = await MailRepository.instance.getMessagesByService(
@@ -75,6 +83,19 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         _isLoadingMessages = false;
       });
     } catch (_) {
+      if (!fallbackToService && _selectedFolder != null) {
+        try {
+          final items = await MailRepository.instance.getMessagesByService(
+            widget.connection.id,
+          );
+          if (!mounted) return;
+          setState(() {
+            _messages = items;
+            _isLoadingMessages = false;
+          });
+          return;
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() => _isLoadingMessages = false);
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(

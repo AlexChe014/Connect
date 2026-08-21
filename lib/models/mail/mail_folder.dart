@@ -1,28 +1,57 @@
 class MailFolder {
   final int id;
   final String name;
+  final String? originalName;
   final int? unreadCount;
   final int? totalCount;
 
   const MailFolder({
     required this.id,
     required this.name,
+    this.originalName,
     this.unreadCount,
     this.totalCount,
   });
 
+  bool get isInbox {
+    final original = originalName?.trim().toLowerCase();
+    if (original == 'inbox') return true;
+    final n = name.trim().toLowerCase();
+    return n == 'inbox' || n == 'входящие';
+  }
+
   factory MailFolder.fromJson(Map<String, dynamic> json) {
+    final originalName = _optionalString(json, [
+      'original_name',
+      'path',
+      'full_name',
+    ]);
     return MailFolder(
       id: _parseInt(
-        json['id'] ?? json['folder_id'] ?? json['uid'] ?? json['mailbox_id'],
-      ) ??
+            json['id'] ?? json['folder_id'] ?? json['uid'] ?? json['mailbox_id'],
+          ) ??
           0,
-      name: _optionalString(json, ['name', 'title', 'folder', 'label', 'mailbox']) ??
+      name: _optionalString(json, [
+            'custom_name',
+            'name',
+            'title',
+            'folder',
+            'label',
+            'mailbox',
+            'original_name',
+          ]) ??
+          originalName ??
           'Папка',
+      originalName: originalName,
       unreadCount: _parseInt(
         json['unread'] ?? json['unread_count'] ?? json['unseen'],
       ),
-      totalCount: _parseInt(json['total'] ?? json['total_count'] ?? json['count']),
+      totalCount: _parseInt(
+        json['emails_count'] ??
+            json['total'] ??
+            json['total_count'] ??
+            json['count'],
+      ),
     );
   }
 

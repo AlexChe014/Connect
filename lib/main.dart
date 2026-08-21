@@ -17,6 +17,7 @@ import 'screens/profile_screen.dart';
 import 'screens/employees_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
+import 'screens/connector_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'config/branding.dart';
@@ -111,7 +112,7 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-enum _HomeSection { news, bookings, employees, mail, documents }
+enum _HomeSection { news, bookings, connector, employees, mail, documents }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -132,6 +133,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   _HomeSection _parseHomeSection(String? value) {
     return switch (value) {
       'bookings' => _HomeSection.bookings,
+      'connector' => _HomeSection.connector,
       'employees' => _HomeSection.employees,
       'mail' => _HomeSection.mail,
       'documents' => _HomeSection.documents,
@@ -145,6 +147,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId);
       case _HomeSection.bookings:
         return const BookingsScreen(showAppBar: false);
+      case _HomeSection.connector:
+        return const ConnectorScreen(showAppBar: false);
       case _HomeSection.employees:
         return const EmployeesScreen(showAppBar: false);
       case _HomeSection.mail:
@@ -204,6 +208,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     onTap: () {
                       setState(() {
                         _homeSection = _HomeSection.bookings;
+                        _currentIndex = 0;
+                      });
+                      Navigator.pop(context);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.videocam,
+                    label: 'Коннектор',
+                    selected:
+                        _currentIndex == 0 &&
+                        _homeSection == _HomeSection.connector,
+                    onTap: () {
+                      setState(() {
+                        _homeSection = _HomeSection.connector;
                         _currentIndex = 0;
                       });
                       Navigator.pop(context);

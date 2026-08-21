@@ -189,10 +189,10 @@ class MailRepository {
 
   Future<List<MailMessage>> getMessagesByFolder({
     required int connectionId,
-    required String folder,
+    required int folderId,
   }) async {
     final decoded = await ApiClient.instance.get(
-      MailRoutes.getByFolderUrl(connectionId, folder),
+      MailRoutes.getByFolderUrl(connectionId, folderId),
     );
     return _parseMessageList(decoded, 'Не удалось получить письма');
   }
@@ -287,10 +287,10 @@ class MailRepository {
   Future<void> moveMessage({
     required int connectionId,
     required int messageId,
-    required String folder,
+    required int folderId,
   }) async {
     await ApiClient.instance.get(
-      MailRoutes.moveMessageUrl(connectionId, messageId, folder),
+      MailRoutes.moveMessageUrl(connectionId, messageId, folderId),
     );
   }
 
@@ -400,22 +400,36 @@ class MailRepository {
     String errorMessage,
   ) {
     final data = _unwrapMailData(decoded, errorMessage);
-    // API returns array of strings (mailbox names)
+    // Live API: array of EmailFolder objects (id, original_name, custom_name, children).
+    // Spec/docs may still describe plain strings — support both.
     if (data is List) {
-      return data
-          .map((item) {
-            if (item is String) {
-              return MailFolder(id: 0, name: item);
-            }
-            final map = _asJsonMap(item);
-            if (map != null) return MailFolder.fromJson(map);
-            return null;
-          })
-          .whereType<MailFolder>()
-          .where((f) => f.name.isNotEmpty)
-          .toList();
+      final folders = <MailFolder>[];
+      for (final item in data) {
+        _collectMailFolders(item, folders);
+      }
+      return folders.where((f) => f.id > 0 || f.name.isNotEmpty).toList();
     }
     return _parseFolderList(decoded, errorMessage);
+  }
+
+  void _collectMailFolders(Object? item, List<MailFolder> out) {
+    if (item is String) {
+      final name = item.trim();
+      if (name.isNotEmpty) out.add(MailFolder(id: 0, name: name));
+      return;
+    }
+    final map = _asJsonMap(item);
+    if (map == null) return;
+    final folder = MailFolder.fromJson(map);
+    if (folder.id > 0 || folder.name.isNotEmpty) {
+      out.add(folder);
+    }
+    final children = map['children'];
+    if (children is List) {
+      for (final child in children) {
+        _collectMailFolders(child, out);
+      }
+    }
   }
 
   List<MailFolder> _parseFolderList(

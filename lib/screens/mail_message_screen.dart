@@ -155,7 +155,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       await MailRepository.instance.moveMessage(
         connectionId: widget.connection.id,
         messageId: widget.messageId,
-        folder: folder.name,
+        folderId: folder.id,
       );
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(

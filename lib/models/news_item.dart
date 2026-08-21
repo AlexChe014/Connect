@@ -1,5 +1,5 @@
-import 'package:connect/config/api_config.dart';
 import 'package:connect/utils/html_text_utils.dart';
+import 'package:connect/utils/media_url_utils.dart';
 
 class NewsItem {
   final String id;
@@ -86,19 +86,18 @@ class NewsItem {
     final date = _parseBackendDate(rawDate) ?? DateTime.now();
 
     final imageUrls = <String>[];
-    final pics = json['pictures'];
+    final pics = json['pictures'] ?? json['media'];
     if (pics is List) {
       for (final pic in pics) {
-        if (pic is! Map) continue;
-        final map = Map<String, dynamic>.from(pic);
-        String? url = (map['preview_url'] as String?)?.trim();
-        if (url == null || url.isEmpty) {
-          url = (map['original_url'] as String?)?.trim();
-        }
-        final normalized = ApiConfig.normalizeFileUrl(url);
+        final normalized = MediaUrlUtils.normalizeFirstUrl(pic);
         if (normalized != null && normalized.isNotEmpty) {
           imageUrls.add(normalized);
         }
+      }
+    } else {
+      final single = MediaUrlUtils.normalizeFirstUrl(pics);
+      if (single != null && single.isNotEmpty) {
+        imageUrls.add(single);
       }
     }
     final imageUrl = imageUrls.isEmpty ? null : imageUrls.first;
@@ -222,32 +221,10 @@ class NewsAuthor {
       if (name != null && name.isNotEmpty) name,
     ];
 
-    final avatarUrl = ApiConfig.normalizeFileUrl(_extractMediaUrl(json['media']));
-
     return NewsAuthor(
       id: id,
       fullName: parts.isEmpty ? 'Автор' : parts.join(' '),
-      avatarUrl: avatarUrl,
+      avatarUrl: MediaUrlUtils.normalizeFirstUrl(json['media']),
     );
-  }
-
-  static String? _extractMediaUrl(Object? media) {
-    if (media == null) return null;
-    if (media is String) return media.trim();
-    if (media is Map<String, dynamic>) {
-      final candidates = [
-        media['url'],
-        media['link'],
-        media['path'],
-        media['src'],
-        media['preview_url'],
-        media['original_url'],
-      ];
-      for (final c in candidates) {
-        final s = c?.toString().trim();
-        if (s != null && s.isNotEmpty) return s;
-      }
-    }
-    return media.toString().trim().isEmpty ? null : media.toString().trim();
   }
 }

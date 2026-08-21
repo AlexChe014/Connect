@@ -37,8 +37,9 @@ class MailRoutes {
   static String getByServiceUrl(int connectionId) =>
       '${ApiConfig.baseUrl}$_mailPrefix/get/service/$connectionId';
 
-  static String getByFolderUrl(int connectionId, String folder) =>
-      '${ApiConfig.baseUrl}$_mailPrefix/get/folder/$connectionId/${Uri.encodeComponent(folder)}';
+  /// [folderId] — id папки из `/mail/get/mailboxes/{connection}` (не IMAP-имя).
+  static String getByFolderUrl(int connectionId, int folderId) =>
+      '${ApiConfig.baseUrl}$_mailPrefix/get/folder/$connectionId/$folderId';
 
   static String getMailboxesUrl(int connectionId) =>
       '${ApiConfig.baseUrl}$_mailPrefix/get/mailboxes/$connectionId';
@@ -70,8 +71,8 @@ class MailRoutes {
 
   // --- Move ---
 
-  static String moveMessageUrl(int connectionId, int messageId, String folder) =>
-      '${ApiConfig.baseUrl}$_mailPrefix/move/$connectionId/$messageId/${Uri.encodeComponent(folder)}';
+  static String moveMessageUrl(int connectionId, int messageId, int folderId) =>
+      '${ApiConfig.baseUrl}$_mailPrefix/move/$connectionId/$messageId/$folderId';
 
   // --- Attachments ---
 
