@@ -10,6 +10,7 @@ class UserBooking {
   final String? description;
   final bool isPrivate;
   final bool isPassed;
+  final String? link;
 
   /// Display helpers (часто используются в UI)
   final String? objectName;
@@ -23,6 +24,7 @@ class UserBooking {
     this.description,
     required this.isPrivate,
     required this.isPassed,
+    this.link,
     this.objectName,
     this.objectImageUrl,
   });
@@ -44,9 +46,9 @@ class UserBooking {
       description: json['description'] as String?,
       isPrivate: BookingJson.parseInt(json['is_private']) == 1,
       isPassed: json['is_passed'] == true,
+      link: (json['link'] as String?)?.trim(),
       objectName: BookingJson.objectNameFromJson(json),
       objectImageUrl: objectImageUrl,
     );
   }
 }
-

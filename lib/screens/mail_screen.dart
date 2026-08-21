@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'
+    show RefreshIndicator, ScaffoldMessenger, SnackBar;
 
-import '../config/app_icons.dart';
 import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
 import '../repositories/profile_repository.dart';
@@ -80,7 +81,7 @@ class _MailScreenState extends State<MailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось загрузить почтовые ящики')),
       );
     }
@@ -88,7 +89,7 @@ class _MailScreenState extends State<MailScreen> {
 
   Future<void> _openCreateConnection() async {
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      CupertinoPageRoute<bool>(
         builder: (context) => const MailConnectionFormScreen(),
       ),
     );
@@ -97,137 +98,105 @@ class _MailScreenState extends State<MailScreen> {
 
   void _openInbox(MailConnection connection) {
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
+      CupertinoPageRoute<void>(
         builder: (context) => MailInboxScreen(connection: connection),
       ),
     );
   }
 
-  Widget _buildAddButton(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: InkWell(
-        onTap: _openCreateConnection,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Row(
-            children: [
-              AppIcon(
-                AppIcons.mailAdd,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Добавить почтовый ящик',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
+  Future<void> _editPassword(MailConnection connection) async {
+    final updated = await Navigator.of(context).push<bool>(
+      CupertinoPageRoute<bool>(
+        builder: (context) => MailConnectionFormScreen(existing: connection),
       ),
     );
+    if (updated == true) await _loadConnections();
   }
 
-  Widget _buildResults() {
-    return RefreshIndicator(
-      onRefresh: _loadConnections,
-      child: _buildResultsContent(),
-    );
-  }
-
-  Widget _buildResultsContent() {
+  List<Widget> _buildContentSlivers() {
     if (_isLoading) {
-      return const AppSkeletonList();
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          sliver: SliverList.separated(
+            itemCount: 4,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) => const AppSkeletonListTile(),
+          ),
+        ),
+      ];
     }
 
     if (_connections.isEmpty) {
-      return AppEmptyState(
-        icon: AppIcons.mailAt,
-        message: _userId == null
-            ? 'Не удалось определить пользователя'
-            : 'Почтовые ящики не подключены\nПодключите Yandex, Gmail или свой IMAP-сервер',
-      );
+      return [
+        SliverFillRemaining(
+          child: AppEmptyState(
+            icon: CupertinoIcons.mail,
+            message: _userId == null
+                ? 'Не удалось определить пользователя'
+                : 'Почтовые ящики не подключены\nПодключите Yandex, Gmail или свой IMAP-сервер',
+            onRetry: _openCreateConnection,
+            retryLabel: 'Подключить ящик',
+          ),
+        ),
+      ];
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      itemCount: _connections.length,
-      itemBuilder: (context, index) {
-        final connection = _connections[index];
-        return _ConnectionTile(
-          connection: connection,
-          onTap: () => _openInbox(connection),
-          onEditPassword: () async {
-            final updated = await Navigator.of(context).push<bool>(
-              MaterialPageRoute<bool>(
-                builder: (context) =>
-                    MailConnectionFormScreen(existing: connection),
-              ),
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        sliver: SliverList.separated(
+          itemCount: _connections.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final connection = _connections[index];
+            return _ConnectionTile(
+              connection: connection,
+              onTap: () => _openInbox(connection),
+              onEditPassword: () => _editPassword(connection),
             );
-            if (updated == true) await _loadConnections();
           },
-        );
-      },
-    );
-  }
-
-  Widget _buildHeader({required bool showInlineTitle}) {
-    final theme = Theme.of(context);
-    final appBarTheme = theme.appBarTheme;
-
-    return Container(
-      color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            if (showInlineTitle)
-              SizedBox(
-                height: kToolbarHeight,
-                child: Center(
-                  child: Text(
-                    'Почта',
-                    style:
-                        appBarTheme.titleTextStyle ??
-                        theme.textTheme.titleLarge,
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: _buildAddButton(context),
-            ),
-          ],
         ),
       ),
-    );
-  }
-
-  Widget _buildBody({required bool showInlineTitle}) {
-    return Column(
-      children: [
-        _buildHeader(showInlineTitle: showInlineTitle),
-        const Divider(height: 1),
-        Expanded(child: _buildResults()),
-      ],
-    );
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.showAppBar) {
-      return _buildBody(showInlineTitle: true);
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Почта'),
-        centerTitle: true,
-        elevation: 0,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: RefreshIndicator(
+            onRefresh: _loadConnections,
+            child: CustomScrollView(
+              slivers: [
+                CupertinoSliverNavigationBar(
+                  largeTitle: const Text('Почта'),
+                  backgroundColor: CupertinoColors.systemGroupedBackground
+                      .withValues(alpha: 0.9),
+                  border: null,
+                  trailing: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    onPressed: _openCreateConnection,
+                    child: const Icon(CupertinoIcons.add_circled, size: 28),
+                  ),
+                ),
+                ..._buildContentSlivers(),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: _buildBody(showInlineTitle: false),
     );
   }
 }
@@ -245,59 +214,89 @@ class _ConnectionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: AppIcon(
-                  AppIcons.mailAt,
-                  color: theme.colorScheme.onPrimaryContainer,
+              Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: CupertinoColors.activeBlue,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  CupertinoIcons.mail_solid,
+                  size: 17,
+                  color: CupertinoColors.white,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       connection.displayName,
-                      style: theme.textTheme.titleSmall?.copyWith(
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       connection.email,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       connection.serviceLabel,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.primary,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.activeBlue,
                       ),
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Обновить пароль',
-                onPressed: onEditPassword,
-                icon: const Icon(Icons.vpn_key_outlined),
+              GestureDetector(
+                onTap: onEditPassword,
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    CupertinoIcons.lock_rotation,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    size: 20,
+                  ),
+                ),
               ),
               Icon(
-                Icons.chevron_right,
-                color: theme.colorScheme.onSurfaceVariant,
+                CupertinoIcons.chevron_forward,
+                size: 16,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
               ),
             ],
           ),

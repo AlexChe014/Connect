@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show SelectableText;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/mail/mail_message.dart';
@@ -22,7 +23,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
     if (html != null && html.trim().isNotEmpty) {
       _controller = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.transparent)
+        ..setBackgroundColor(const Color(0x00000000))
         ..loadHtmlString(_prepareHtml(html));
     }
   }
@@ -48,7 +49,6 @@ class _MailBodyContentState extends State<MailBodyContent> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final plain = widget.message.plainBody;
     final html = widget.message.htmlContent;
 
@@ -65,21 +65,28 @@ class _MailBodyContentState extends State<MailBodyContent> {
     if (plain.isNotEmpty) {
       return SelectableText(
         plain,
-        style: theme.textTheme.bodyLarge,
+        style: TextStyle(
+          fontSize: 16,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
       );
     }
 
     if (html != null && html.trim().isNotEmpty) {
       return SelectableText(
         html,
-        style: theme.textTheme.bodySmall,
+        style: TextStyle(
+          fontSize: 13,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
       );
     }
 
     return Text(
       'Текст письма отсутствует',
-      style: theme.textTheme.bodyLarge?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
+      style: TextStyle(
+        fontSize: 16,
+        color: CupertinoColors.secondaryLabel.resolveFrom(context),
       ),
     );
   }

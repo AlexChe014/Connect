@@ -1,7 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:connect/config/app_icons.dart';
-import 'package:connect/config/app_theme.dart';
 import 'package:connect/models/bookings/bookable_object.dart';
 import 'package:connect/models/infrastructure/booking_object_type.dart';
 import 'package:connect/models/infrastructure/building.dart';
@@ -12,8 +11,8 @@ import 'package:connect/repositories/infrastructure_repository.dart';
 import 'package:connect/screens/create_booking_screen.dart';
 import 'package:connect/utils/booking_time_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
-import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
+import 'package:connect/widgets/booking_pickers.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key, this.showAppBar = true, this.initialDate});
@@ -270,16 +269,12 @@ class _BookingsScreenState extends State<BookingsScreen> {
     if (type == null) return;
 
     if (!_isTimeRangeValid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Сначала выберите корректный интервал в фильтрах'),
-        ),
-      );
+      _showMessage('Сначала выберите корректный интервал в фильтрах');
       return;
     }
 
     final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      CupertinoPageRoute(
         builder: (context) => CreateBookingScreen(
           object: object,
           modelType: type.typeId,
@@ -292,23 +287,45 @@ class _BookingsScreenState extends State<BookingsScreen> {
     if (created == true && mounted) {
       await _loadResults();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Бронирование создано')));
+      _showMessage('Бронирование создано');
     }
   }
 
-  Widget _buildBody() {
+  void _showMessage(String message) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Ок'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildContentSlivers(BuildContext context) {
     if (_isBootLoading) {
-      return const AppLoadingIndicator(size: 32);
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Center(child: CupertinoActivityIndicator(radius: 14)),
+        ),
+      ];
     }
 
     if (_bootError != null) {
-      return AppEmptyState(
-        icon: Icons.error_outline,
-        message: _bootError!,
-        onRetry: _bootstrap,
-      );
+      return [
+        SliverFillRemaining(
+          child: AppEmptyState(
+            icon: CupertinoIcons.exclamationmark_triangle,
+            message: _bootError!,
+            onRetry: _bootstrap,
+          ),
+        ),
+      ];
     }
 
     final selectedBuilding = _selectedBuilding;
@@ -317,11 +334,15 @@ class _BookingsScreenState extends State<BookingsScreen> {
     if (selectedBuilding == null ||
         selectedSpace == null ||
         selectedType == null) {
-      return AppEmptyState(
-        icon: Icons.error_outline,
-        message: 'Не удалось инициализировать фильтры бронирования',
-        onRetry: _bootstrap,
-      );
+      return [
+        SliverFillRemaining(
+          child: AppEmptyState(
+            icon: CupertinoIcons.exclamationmark_triangle,
+            message: 'Не удалось инициализировать фильтры бронирования',
+            onRetry: _bootstrap,
+          ),
+        ),
+      ];
     }
 
     final slots = BookingTimeUtils.slotsForDate(_selectedDate);
@@ -348,184 +369,225 @@ class _BookingsScreenState extends State<BookingsScreen> {
       });
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadResults,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        children: [
-          _FiltersDisclosure(
-            isExpanded: _filtersExpanded,
-            title: 'Фильтры',
-            summary:
-                '${selectedBuilding.name} • ${selectedSpace.name} • ${selectedType.name}\n'
-                '${BookingTimeUtils.formatDateShort(_selectedDate)} • ${BookingTimeUtils.formatHm(slots[_startSlotIndex])}'
-                '—${BookingTimeUtils.formatHm(slots[_endSlotIndex])}'
-                '${_capacityController.text.trim().isEmpty ? '' : ' • ${_capacityController.text.trim()} чел.'}'
-                '${_selectedEquipmentIds.isEmpty ? '' : ' • Оборуд.: ${_selectedEquipmentIds.length}'}',
-            onTap: () => setState(() => _filtersExpanded = !_filtersExpanded),
-          ),
-          AnimatedCrossFade(
-            firstChild: const SizedBox.shrink(),
-            secondChild: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: _FiltersCard(
-                buildings: _buildings,
-                spaces: _spaces,
-                types: _types,
-                equipment: _equipment,
-                selectedBuilding: selectedBuilding,
-                selectedSpace: selectedSpace,
-                selectedType: selectedType,
-                selectedDate: _selectedDate,
-                slots: slots,
-                minStartIndex: minStartIndex,
-                startIndex: _startSlotIndex,
-                endIndex: _endSlotIndex,
-                capacityController: _capacityController,
-                selectedEquipmentIds: _selectedEquipmentIds,
-                onBuildingChanged: (b) =>
-                    _loadSpacesTypesAndEquipmentForBuilding(b),
-                onSpaceChanged: (s) async {
-                  setState(() {
-                    _selectedSpace = s;
-                    _types = s.types;
-                    _selectedType = s.types.isNotEmpty ? s.types.first : null;
-                  });
-                  await _loadResults();
-                },
-                onTypeChanged: (t) async {
-                  setState(() => _selectedType = t);
-                  await _loadResults();
-                },
-                onDateChanged: (d) async {
-                  setState(() {
-                    _selectedDate = d;
-                    final newSlots = BookingTimeUtils.slotsForDate(d);
-                    final lastIndex = newSlots.length - 1;
-                    final minStartIndex = BookingTimeUtils.minStartIndex(
-                      newSlots,
-                      d,
-                    ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
-                    _startSlotIndex = _startSlotIndex.clamp(
-                      minStartIndex,
-                      (lastIndex - 1).clamp(0, lastIndex),
-                    );
-                    _endSlotIndex = _startSlotIndex + 1;
-                  });
-                  await _loadResults();
-                },
-                onStartTimeChanged: (i) async {
-                  setState(() {
-                    final lastIndex = slots.length - 1;
-                    _startSlotIndex = i.clamp(
-                      0,
-                      (lastIndex - 1).clamp(0, lastIndex),
-                    );
-                    if (_endSlotIndex <= _startSlotIndex) {
-                      _endSlotIndex = _startSlotIndex + 1;
-                    }
-                  });
-                  await _loadResults();
-                },
-                onEndTimeChanged: (i) async {
-                  setState(() => _endSlotIndex = i);
-                  await _loadResults();
-                },
-                onEquipmentTap: () async {
-                  final updated = await showModalBottomSheet<Set<int>>(
-                    context: context,
-                    isScrollControlled: true,
-                    showDragHandle: true,
-                    builder: (context) {
-                      return _EquipmentPickerSheet(
-                        equipment: _equipment,
-                        selectedIds: _selectedEquipmentIds,
-                      );
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        sliver: SliverToBoxAdapter(
+          child: Column(
+            children: [
+              _FiltersDisclosure(
+                isExpanded: _filtersExpanded,
+                summary:
+                    '${selectedBuilding.name} • ${selectedSpace.name} • ${selectedType.name}\n'
+                    '${BookingTimeUtils.formatDateShort(_selectedDate)} • ${BookingTimeUtils.formatHm(slots[_startSlotIndex])}'
+                    '—${BookingTimeUtils.formatHm(slots[_endSlotIndex])}'
+                    '${_capacityController.text.trim().isEmpty ? '' : ' • ${_capacityController.text.trim()} чел.'}'
+                    '${_selectedEquipmentIds.isEmpty ? '' : ' • Оборуд.: ${_selectedEquipmentIds.length}'}',
+                onTap: () =>
+                    setState(() => _filtersExpanded = !_filtersExpanded),
+              ),
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: _FiltersCard(
+                    buildings: _buildings,
+                    spaces: _spaces,
+                    types: _types,
+                    equipment: _equipment,
+                    selectedBuilding: selectedBuilding,
+                    selectedSpace: selectedSpace,
+                    selectedType: selectedType,
+                    selectedDate: _selectedDate,
+                    slots: slots,
+                    minStartIndex: minStartIndex,
+                    startIndex: _startSlotIndex,
+                    endIndex: _endSlotIndex,
+                    capacityController: _capacityController,
+                    selectedEquipmentIds: _selectedEquipmentIds,
+                    onBuildingChanged: (b) =>
+                        _loadSpacesTypesAndEquipmentForBuilding(b),
+                    onSpaceChanged: (s) async {
+                      setState(() {
+                        _selectedSpace = s;
+                        _types = s.types;
+                        _selectedType = s.types.isNotEmpty
+                            ? s.types.first
+                            : null;
+                      });
+                      await _loadResults();
                     },
-                  );
-                  if (updated != null && mounted) {
-                    setState(() {
-                      _selectedEquipmentIds
-                        ..clear()
-                        ..addAll(updated);
-                    });
-                    await _loadResults();
-                  }
-                },
-                onCapacitySubmitted: (_) => _loadResults(),
-                onApplyPressed: () async {
-                  await _loadResults();
-                  if (mounted) setState(() => _filtersExpanded = false);
-                },
-              ),
-            ),
-            crossFadeState: _filtersExpanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 220),
-            sizeCurve: Curves.easeOutCubic,
-          ),
-          const SizedBox(height: 4),
-          if (_resultsError != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _resultsError!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
+                    onTypeChanged: (t) async {
+                      setState(() => _selectedType = t);
+                      await _loadResults();
+                    },
+                    onDateChanged: (d) async {
+                      setState(() {
+                        _selectedDate = d;
+                        final newSlots = BookingTimeUtils.slotsForDate(d);
+                        final lastIndex = newSlots.length - 1;
+                        final minStartIndex = BookingTimeUtils.minStartIndex(
+                          newSlots,
+                          d,
+                        ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
+                        _startSlotIndex = _startSlotIndex.clamp(
+                          minStartIndex,
+                          (lastIndex - 1).clamp(0, lastIndex),
+                        );
+                        _endSlotIndex = _startSlotIndex + 1;
+                      });
+                      await _loadResults();
+                    },
+                    onStartTimeChanged: (i) async {
+                      setState(() {
+                        final lastIndex = slots.length - 1;
+                        _startSlotIndex = i.clamp(
+                          0,
+                          (lastIndex - 1).clamp(0, lastIndex),
+                        );
+                        if (_endSlotIndex <= _startSlotIndex) {
+                          _endSlotIndex = _startSlotIndex + 1;
+                        }
+                      });
+                      await _loadResults();
+                    },
+                    onEndTimeChanged: (i) async {
+                      setState(() => _endSlotIndex = i);
+                      await _loadResults();
+                    },
+                    onEquipmentTap: () async {
+                      final updated = await showModalBottomSheet<Set<int>>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context),
+                        builder: (context) {
+                          return _EquipmentPickerSheet(
+                            equipment: _equipment,
+                            selectedIds: _selectedEquipmentIds,
+                          );
+                        },
+                      );
+                      if (updated != null && mounted) {
+                        setState(() {
+                          _selectedEquipmentIds
+                            ..clear()
+                            ..addAll(updated);
+                        });
+                        await _loadResults();
+                      }
+                    },
+                    onCapacitySubmitted: (_) => _loadResults(),
+                    onApplyPressed: () async {
+                      await _loadResults();
+                      if (mounted) setState(() => _filtersExpanded = false);
+                    },
+                  ),
                 ),
+                crossFadeState: _filtersExpanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 220),
+                sizeCurve: Curves.easeOutCubic,
+              ),
+            ],
+          ),
+        ),
+      ),
+      if (_resultsError != null)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          sliver: SliverToBoxAdapter(
+            child: Text(
+              _resultsError!,
+              style: const TextStyle(
+                color: CupertinoColors.systemRed,
+                fontSize: 14,
               ),
             ),
-          if (_isResultsLoading) const LinearProgressIndicator(),
-          if (_results.isNotEmpty) const SizedBox(height: 2),
-          if (!_isResultsLoading && _resultsError == null && _results.isEmpty)
-            const AppEmptyState(
-              icon: Icons.search_off,
-              message: 'Нет доступных объектов по выбранным параметрам',
+          ),
+        ),
+      if (_isResultsLoading)
+        const SliverPadding(
+          padding: EdgeInsets.symmetric(vertical: 20),
+          sliver: SliverToBoxAdapter(
+            child: Center(child: CupertinoActivityIndicator()),
+          ),
+        ),
+      if (!_isResultsLoading && _resultsError == null && _results.isEmpty)
+        const SliverFillRemaining(
+          child: AppEmptyState(
+            icon: CupertinoIcons.search,
+            message: 'Нет доступных объектов по выбранным параметрам',
+          ),
+        ),
+      if (_results.isNotEmpty)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 0.78,
             ),
-          if (_results.isNotEmpty)
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.78,
-              ),
-              itemCount: _results.length,
-              itemBuilder: (context, index) => _BookableObjectTile(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _BookableObjectTile(
                 object: _results[index],
                 onTap: () => _openCreateBooking(_results[index]),
               ),
+              childCount: _results.length,
             ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
+          ),
+        ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.showAppBar) {
-      // Заголовок рисуем сразу, а не только после загрузки фильтров —
-      // иначе шапка "прыгает" по высоте, когда данные приходят с сервера.
-      return Column(
-        children: [
-          const _InlinePageTitle(title: 'Бронирование'),
-          Expanded(child: _buildBody()),
-        ],
-      );
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Бронирование'),
-        centerTitle: true,
-        elevation: 0,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: RefreshIndicator(
+            onRefresh: _isBootLoading ? _bootstrap : _loadResults,
+            child: CustomScrollView(
+              slivers: [
+                const CupertinoSliverNavigationBar(
+                  largeTitle: Text('Бронирование'),
+                  backgroundColor: CupertinoColors.systemGroupedBackground,
+                  border: null,
+                ),
+                ..._buildContentSlivers(context),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: _buildBody(),
     );
   }
+}
+
+Widget _iconBadge(IconData icon, Color color) {
+  return Container(
+    width: 29,
+    height: 29,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(7),
+    ),
+    child: Icon(icon, size: 17, color: CupertinoColors.white),
+  );
 }
 
 class _FiltersCard extends StatelessWidget {
@@ -580,125 +642,56 @@ class _FiltersCard extends StatelessWidget {
     required this.onApplyPressed,
   });
 
-  static String formatHm(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '$h:$m';
-  }
-
   String _formatDate(DateTime d) {
     final dd = d.day.toString().padLeft(2, '0');
     final mm = d.month.toString().padLeft(2, '0');
     return '$dd.$mm.${d.year}';
   }
 
+  Widget _pickerRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return CupertinoListTile(
+      leading: _iconBadge(icon, color),
+      title: Text(label),
+      additionalInfo: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 150),
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: CupertinoColors.secondaryLabel),
+        ),
+      ),
+      trailing: const CupertinoListTileChevron(),
+      onTap: onTap,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final endMinIndex = (startIndex + 1).clamp(0, slots.length - 1);
+    final now = DateTime.now();
 
-    InputDecoration decoration(String label, {Widget? suffixIcon}) {
-      return InputDecoration(labelText: label, suffixIcon: suffixIcon);
-    }
-
-    Future<T?> pickOption<T>({
-      required String title,
-      required List<T> options,
-      required T current,
-      required String Function(T) labelOf,
-      bool Function(T)? enabledOf,
-    }) {
-      return showModalBottomSheet<T>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * 0.45,
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: options.map((option) {
-                      final enabled = enabledOf?.call(option) ?? true;
-                      final selected = option == current;
-                      return ListTile(
-                        dense: true,
-                        enabled: enabled,
-                        title: Text(
-                          labelOf(option),
-                          style: TextStyle(
-                            color: enabled
-                                ? null
-                                : colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        trailing: selected
-                            ? Icon(Icons.check, color: colorScheme.primary)
-                            : null,
-                        onTap: enabled
-                            ? () => Navigator.pop(context, option)
-                            : null,
-                      );
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          );
-        },
-      );
-    }
-
-    Widget optionField({
-      required String label,
-      required String value,
-      required VoidCallback onTap,
-    }) {
-      return InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: InputDecorator(
-          decoration: decoration(
-            label,
-            suffixIcon: const Icon(Icons.keyboard_arrow_down),
-          ),
-          child: Text(value),
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        border: Border.all(color: colorScheme.outline),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CupertinoListSection.insetGrouped(
+          margin: EdgeInsets.zero,
           children: [
-            optionField(
+            _pickerRow(
+              icon: CupertinoIcons.building_2_fill,
+              color: CupertinoColors.systemBlue,
               label: 'Офис',
               value: selectedBuilding.name,
               onTap: () async {
-                final picked = await pickOption<Building>(
+                final picked = await showBookingOptionSheet<Building>(
+                  context: context,
                   title: 'Офис',
                   options: buildings,
                   current: selectedBuilding,
@@ -709,12 +702,14 @@ class _FiltersCard extends StatelessWidget {
                 }
               },
             ),
-            const SizedBox(height: 12),
-            optionField(
+            _pickerRow(
+              icon: CupertinoIcons.square_stack_3d_up_fill,
+              color: CupertinoColors.systemIndigo,
               label: 'Этаж',
               value: selectedSpace.name,
               onTap: () async {
-                final picked = await pickOption<Space>(
+                final picked = await showBookingOptionSheet<Space>(
+                  context: context,
                   title: 'Этаж',
                   options: spaces,
                   current: selectedSpace,
@@ -725,12 +720,14 @@ class _FiltersCard extends StatelessWidget {
                 }
               },
             ),
-            const SizedBox(height: 12),
-            optionField(
+            _pickerRow(
+              icon: CupertinoIcons.cube_box_fill,
+              color: CupertinoColors.systemTeal,
               label: 'Объект бронирования',
               value: selectedType.name,
               onTap: () async {
-                final picked = await pickOption<BookingObjectType>(
+                final picked = await showBookingOptionSheet<BookingObjectType>(
+                  context: context,
                   title: 'Объект бронирования',
                   options: types,
                   current: selectedType,
@@ -741,131 +738,152 @@ class _FiltersCard extends StatelessWidget {
                 }
               },
             ),
-            const SizedBox(height: 12),
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
+          ],
+        ),
+        CupertinoListSection.insetGrouped(
+          margin: const EdgeInsets.only(top: 12),
+          children: [
+            _pickerRow(
+              icon: CupertinoIcons.calendar,
+              color: CupertinoColors.systemOrange,
+              label: 'Дата',
+              value: _formatDate(selectedDate),
               onTap: () async {
-                final now = DateTime.now();
-                final picked = await showDatePicker(
+                final picked = await showBookingDateSheet(
                   context: context,
-                  initialDate: selectedDate.isBefore(now) ? now : selectedDate,
+                  initial: selectedDate,
                   firstDate: DateTime(now.year, now.month, now.day),
                   lastDate: DateTime(now.year + 1),
                 );
                 if (picked != null) onDateChanged(picked);
               },
-              child: InputDecorator(
-                decoration: decoration(
-                  'Дата',
-                  suffixIcon: const AppIcon(AppIcons.date, size: 20),
-                ),
-                child: Text(_formatDate(selectedDate)),
+            ),
+            _pickerRow(
+              icon: CupertinoIcons.clock_fill,
+              color: CupertinoColors.systemOrange,
+              label: 'Начало',
+              value: BookingTimeUtils.formatHm(
+                slots[startIndex.clamp(minStartIndex, slots.length - 1)],
               ),
+              onTap: () async {
+                final picked = await showBookingTimeSheet(
+                  context: context,
+                  title: 'Начало',
+                  slots: slots,
+                  minIndex: minStartIndex,
+                  currentIndex: startIndex,
+                );
+                if (picked != null) onStartTimeChanged(picked);
+              },
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: optionField(
-                    label: 'С',
-                    value: formatHm(
-                      slots[startIndex.clamp(minStartIndex, slots.length - 1)],
-                    ),
-                    onTap: () async {
-                      final indices = List<int>.generate(
-                        slots.length,
-                        (i) => i,
-                      );
-                      final picked = await pickOption<int>(
-                        title: 'Начало',
-                        options: indices,
-                        current: startIndex.clamp(
-                          minStartIndex,
-                          slots.length - 1,
-                        ),
-                        labelOf: (i) => formatHm(slots[i]),
-                        enabledOf: (i) => i >= minStartIndex,
-                      );
-                      if (picked != null) onStartTimeChanged(picked);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: optionField(
-                    label: 'По',
-                    value: formatHm(
-                      slots[endIndex.clamp(endMinIndex, slots.length - 1)],
-                    ),
-                    onTap: () async {
-                      final indices = List<int>.generate(
-                        slots.length,
-                        (i) => i,
-                      );
-                      final picked = await pickOption<int>(
-                        title: 'Окончание',
-                        options: indices,
-                        current: endIndex.clamp(endMinIndex, slots.length - 1),
-                        labelOf: (i) => formatHm(slots[i]),
-                        enabledOf: (i) => i >= endMinIndex,
-                      );
-                      if (picked != null) onEndTimeChanged(picked);
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: capacityController,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.search,
-              decoration: decoration(
-                'Вместимость (необязательно)',
-              ).copyWith(hintText: 'Например, 8'),
-              onSubmitted: onCapacitySubmitted,
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onEquipmentTap,
-              child: InputDecorator(
-                decoration: decoration(
-                  'Оборудование (необязательно)',
-                  suffixIcon: const AppIcon(AppIcons.sliders),
-                ),
-                child: selectedEquipmentIds.isEmpty
-                    ? Text(
-                        equipment.isEmpty
-                            ? 'Нет доступного оборудования'
-                            : 'Выберите оборудование',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: equipment.isEmpty
-                              ? colorScheme.onSurfaceVariant
-                              : null,
-                        ),
-                      )
-                    : Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: equipment
-                            .where((e) => selectedEquipmentIds.contains(e.id))
-                            .map((e) => Chip(label: Text(e.name)))
-                            .toList(),
-                      ),
+            _pickerRow(
+              icon: CupertinoIcons.clock_fill,
+              color: CupertinoColors.systemOrange,
+              label: 'Окончание',
+              value: BookingTimeUtils.formatHm(
+                slots[endIndex.clamp(endMinIndex, slots.length - 1)],
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonalIcon(
-                onPressed: () => onApplyPressed(),
-                icon: const AppIcon(AppIcons.search),
-                label: const Text('Показать доступные'),
-              ),
+              onTap: () async {
+                final picked = await showBookingTimeSheet(
+                  context: context,
+                  title: 'Окончание',
+                  slots: slots,
+                  minIndex: endMinIndex,
+                  currentIndex: endIndex,
+                );
+                if (picked != null) onEndTimeChanged(picked);
+              },
             ),
           ],
         ),
+        CupertinoListSection.insetGrouped(
+          margin: const EdgeInsets.only(top: 12),
+          children: [
+            CupertinoListTile(
+              leading: _iconBadge(
+                CupertinoIcons.person_2_fill,
+                CupertinoColors.systemGreen,
+              ),
+              title: const Text('Вместимость'),
+              additionalInfo: ClipRect(
+                child: SizedBox(
+                  width: 80,
+                  child: CupertinoTextField(
+                    controller: capacityController,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.search,
+                    textAlign: TextAlign.right,
+                    placeholder: 'Напр. 8',
+                    decoration: const BoxDecoration(),
+                    padding: EdgeInsets.zero,
+                    onSubmitted: onCapacitySubmitted,
+                  ),
+                ),
+              ),
+            ),
+            CupertinoListTile(
+              leading: _iconBadge(
+                CupertinoIcons.slider_horizontal_3,
+                CupertinoColors.systemPurple,
+              ),
+              title: const Text('Оборудование'),
+              subtitle: selectedEquipmentIds.isEmpty
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: equipment
+                            .where((e) => selectedEquipmentIds.contains(e.id))
+                            .map((e) => _EquipmentChip(name: e.name))
+                            .toList(),
+                      ),
+                    ),
+              additionalInfo: selectedEquipmentIds.isEmpty
+                  ? Text(
+                      equipment.isEmpty ? 'Нет' : 'Выбрать',
+                      style: const TextStyle(
+                        color: CupertinoColors.secondaryLabel,
+                      ),
+                    )
+                  : null,
+              trailing: const CupertinoListTileChevron(),
+              onTap: onEquipmentTap,
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: SizedBox(
+            width: double.infinity,
+            child: CupertinoButton.filled(
+              onPressed: () => onApplyPressed(),
+              child: const Text('Показать доступные'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EquipmentChip extends StatelessWidget {
+  const _EquipmentChip({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemGrey5.resolveFrom(context),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        name,
+        style: const TextStyle(fontSize: 12, color: CupertinoColors.label),
       ),
     );
   }
@@ -873,54 +891,48 @@ class _FiltersCard extends StatelessWidget {
 
 class _FiltersDisclosure extends StatelessWidget {
   final bool isExpanded;
-  final String title;
   final String summary;
   final VoidCallback onTap;
 
   const _FiltersDisclosure({
     required this.isExpanded,
-    required this.title,
     required this.summary,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Material(
-      color: cs.surface,
-      borderRadius: BorderRadius.circular(AppColors.radius),
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppColors.radius),
-            border: Border.all(color: cs.outline),
-          ),
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: AppIcon(AppIcons.sliders, color: cs.primary, size: 18),
+              _iconBadge(
+                CupertinoIcons.slider_horizontal_3,
+                CupertinoColors.systemBlue,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    const Text(
+                      'Фильтры',
+                      style: TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -928,8 +940,9 @@ class _FiltersDisclosure extends StatelessWidget {
                       summary,
                       maxLines: isExpanded ? 4 : 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.secondaryLabel,
                         height: 1.25,
                       ),
                     ),
@@ -939,43 +952,12 @@ class _FiltersDisclosure extends StatelessWidget {
               const SizedBox(width: 10),
               Icon(
                 isExpanded
-                    ? Icons.keyboard_arrow_up
-                    : Icons.keyboard_arrow_down,
-                color: cs.onSurfaceVariant,
+                    ? CupertinoIcons.chevron_up
+                    : CupertinoIcons.chevron_down,
+                size: 18,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InlinePageTitle extends StatelessWidget {
-  final String title;
-
-  const _InlinePageTitle({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final appBarTheme = theme.appBarTheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: appBarTheme.backgroundColor ?? AppColors.surfaceElevated,
-        border: const Border(bottom: BorderSide(color: AppColors.outline)),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: kToolbarHeight,
-          child: Center(
-            child: Text(
-              title,
-              style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-            ),
           ),
         ),
       ),
@@ -993,27 +975,32 @@ class _BookableObjectTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageUrl = object.previewImageUrl;
     final description = (object.description ?? '').trim();
-    final cs = Theme.of(context).colorScheme;
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppColors.radius),
-        boxShadow: AppColors.cardPhotoShadow,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: CupertinoColors.black.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      child: Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+      clipBehavior: Clip.antiAlias,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: GestureDetector(
           onTap: onTap,
           child: Stack(
             fit: StackFit.expand,
             children: [
               if (imageUrl == null)
-                ColoredBox(
-                  color: cs.primaryContainer,
-                  child: AppIcon(
-                    AppIcons.locationPin,
-                    color: cs.onPrimaryContainer,
+                Container(
+                  color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
+                  child: const Icon(
+                    CupertinoIcons.location_solid,
+                    color: CupertinoColors.systemBlue,
                     size: 40,
                   ),
                 )
@@ -1044,11 +1031,11 @@ class _BookableObjectTile extends StatelessWidget {
                           object.name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: const TextStyle(
+                            color: CupertinoColors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
                         ),
                         if (description.isNotEmpty) ...[
                           const SizedBox(height: 4),
@@ -1056,11 +1043,11 @@ class _BookableObjectTile extends StatelessWidget {
                             description,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.92),
-                                  height: 1.2,
-                                ),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.92),
+                              height: 1.2,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ],
@@ -1094,69 +1081,95 @@ class _EquipmentPickerSheetState extends State<_EquipmentPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 8,
-          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Оборудование',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            if (widget.equipment.isEmpty)
-              Text(
-                'В выбранном офисе нет доступного оборудования',
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: widget.equipment.map((e) {
-                    final checked = _working.contains(e.id);
-                    return CheckboxListTile(
-                      value: checked,
-                      onChanged: (v) {
-                        setState(() {
-                          if (v == true) {
-                            _working.add(e.id);
-                          } else {
-                            _working.remove(e.id);
-                          }
-                        });
-                      },
-                      title: Text(e.name),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    );
-                  }).toList(),
+    return DefaultTextStyle(
+      style: TextStyle(
+        fontFamily: '.SF Pro Text',
+        decoration: TextDecoration.none,
+        color: CupertinoColors.label.resolveFrom(context),
+        fontSize: 16,
+      ),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: Text(
+                  'Оборудование',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none,
+                    color: CupertinoColors.label,
+                  ),
                 ),
               ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => setState(_working.clear),
-                  child: const Text('Сбросить'),
+              if (widget.equipment.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Text(
+                    'В выбранном офисе нет доступного оборудования',
+                    style: TextStyle(
+                      fontSize: 15,
+                      decoration: TextDecoration.none,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: CupertinoListSection.insetGrouped(
+                      children: widget.equipment.map((e) {
+                        final checked = _working.contains(e.id);
+                        return CupertinoListTile(
+                          title: Text(e.name),
+                          trailing: checked
+                              ? const Icon(
+                                  CupertinoIcons.check_mark,
+                                  color: CupertinoColors.activeBlue,
+                                )
+                              : null,
+                          onTap: () {
+                            setState(() {
+                              if (checked) {
+                                _working.remove(e.id);
+                              } else {
+                                _working.add(e.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, _working),
-                  child: const Text('Готово'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: CupertinoButton(
+                        onPressed: () => setState(_working.clear),
+                        child: const Text('Сбросить'),
+                      ),
+                    ),
+                    Expanded(
+                      child: CupertinoButton.filled(
+                        onPressed: () => Navigator.pop(context, _working),
+                        child: const Text('Готово'),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

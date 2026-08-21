@@ -47,5 +47,10 @@ app.*.map.json
 # Локальные секреты (ключ шифрования чата и др.)
 dart_defines.json
 
+# Firebase config (содержит API-ключи проекта)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+firebase.json
+
 # Claude Code local state
 .claude/

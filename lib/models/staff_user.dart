@@ -12,6 +12,7 @@ class StaffUser {
   final String? phone;
   final DateTime? birthday;
   final String? department;
+  final String? position;
   final String? workStatus;
   final List<String> roles;
   final String? avatarUrl;
@@ -26,6 +27,7 @@ class StaffUser {
     this.phone,
     this.birthday,
     this.department,
+    this.position,
     this.workStatus,
     this.roles = const [],
     this.avatarUrl,
@@ -87,16 +89,30 @@ class StaffUser {
 
     final surname = s('surname');
     final name = s('name');
-    final patronymic = s('patronymic', fallback: s('father_name', fallback: s('middlename')));
+    final patronymic = s(
+      'patronymic',
+      fallback: s('father_name', fallback: s('middlename')),
+    );
 
     final email = _optionalString(json, ['email', 'mail']);
-    final phone = _optionalString(json, ['phone', 'mobile', 'tel', 'telephone']);
+    final phone = _optionalString(json, [
+      'phone',
+      'mobile',
+      'tel',
+      'telephone',
+    ]);
 
     final birthday = _parseDate(
       json['birthday'] ?? json['birth_date'] ?? json['date_of_birth'],
     );
 
     final department = _departmentLabel(json);
+    final position = _namedEntityLabel(json, [
+      'position',
+      'job_title',
+      'post',
+      'appointment',
+    ]);
     final workStatus = _namedEntityLabel(json, [
       'work_status',
       'employment_status',
@@ -104,7 +120,9 @@ class StaffUser {
       'status',
     ]);
 
-    final roles = _parseRoles(json['roles'] ?? json['role_names'] ?? json['user_roles']);
+    final roles = _parseRoles(
+      json['roles'] ?? json['role_names'] ?? json['user_roles'],
+    );
 
     final avatarUrl = ApiConfig.normalizeFileUrl(_avatarFromJson(json));
 
@@ -119,6 +137,7 @@ class StaffUser {
       phone: phone,
       birthday: birthday,
       department: department,
+      position: position,
       workStatus: workStatus,
       roles: roles,
       avatarUrl: avatarUrl,
@@ -136,7 +155,10 @@ class StaffUser {
     return null;
   }
 
-  static String? _namedEntityLabel(Map<String, dynamic> json, List<String> keys) {
+  static String? _namedEntityLabel(
+    Map<String, dynamic> json,
+    List<String> keys,
+  ) {
     for (final k in keys) {
       final raw = json[k];
       if (raw == null) continue;
@@ -165,7 +187,12 @@ class StaffUser {
         if (t.isNotEmpty) return t;
       }
     }
-    return _optionalString(json, ['department_name', 'dep_name', 'department', 'dep']);
+    return _optionalString(json, [
+      'department_name',
+      'dep_name',
+      'department',
+      'dep',
+    ]);
   }
 
   static DateTime? _parseDate(Object? raw) {
@@ -228,7 +255,13 @@ class StaffUser {
   }
 
   static String? _avatarFromJson(Map<String, dynamic> json) {
-    final direct = _optionalString(json, ['avatar_url', 'avatar', 'photo', 'photo_url', 'image']);
+    final direct = _optionalString(json, [
+      'avatar_url',
+      'avatar',
+      'photo',
+      'photo_url',
+      'image',
+    ]);
     if (direct != null) return direct;
 
     return MediaUrlUtils.firstUrl(json['media'] ?? json['avatar_media']);

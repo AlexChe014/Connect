@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../models/bookings/booking_detail.dart';
 import '../models/bookings/update_booking_request.dart';
@@ -9,10 +9,7 @@ import '../widgets/selected_staff_field.dart';
 
 /// Редактирование брони (`POST /booking/update/{id}`).
 class EditBookingScreen extends StatefulWidget {
-  const EditBookingScreen({
-    super.key,
-    required this.detail,
-  });
+  const EditBookingScreen({super.key, required this.detail});
 
   final BookingDetail detail;
 
@@ -21,13 +18,13 @@ class EditBookingScreen extends StatefulWidget {
 }
 
 class _EditBookingScreenState extends State<EditBookingScreen> {
-  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _themeController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _linkController;
   late List<StaffUser> _participants;
   bool _updateAll = false;
   bool _isSubmitting = false;
+  String? _themeError;
 
   @override
   void initState() {
@@ -53,14 +50,18 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    final theme = _themeController.text.trim();
+    setState(() {
+      _themeError = theme.isEmpty ? 'Укажите тему' : null;
+    });
+    if (_themeError != null) return;
 
     setState(() => _isSubmitting = true);
     try {
       await BookingsRepository.instance.updateBooking(
         bookingId: widget.detail.id,
         request: UpdateBookingRequest(
-          theme: _themeController.text.trim(),
+          theme: theme,
           description: _descriptionController.text.trim(),
           link: _linkController.text.trim(),
           userIds: _participantIds,
@@ -71,18 +72,24 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      _showMessage(e.toString());
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  InputDecoration _decoration(BuildContext context, String label, {String? hint}) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
+  void _showMessage(String message) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Ок'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -91,76 +98,129 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
     final detail = widget.detail;
     final object = detail.object;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Изменить бронь'),
-        centerTitle: true,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('Изменить бронь'),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Icon(CupertinoIcons.back, size: 26),
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _isSubmitting ? null : _submit,
+          child: _isSubmitting
+              ? const CupertinoActivityIndicator()
+              : const Text(
+                  'Сохранить',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+        ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (object != null) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: BookableObjectPreview(object: object),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.only(top: 12, bottom: 32),
+            children: [
+              if (object != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.secondarySystemGroupedBackground
+                          .resolveFrom(context),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: BookableObjectPreview(object: object),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              CupertinoFormSection.insetGrouped(
+                header: const Text('О БРОНИ'),
+                children: [
+                  CupertinoTextFormFieldRow(
+                    controller: _themeController,
+                    prefix: const Text('Тема'),
+                    textCapitalization: TextCapitalization.sentences,
+                    textAlign: TextAlign.end,
+                    onChanged: (_) {
+                      if (_themeError != null) {
+                        setState(() => _themeError = null);
+                      }
+                    },
+                  ),
+                  CupertinoTextFormFieldRow(
+                    controller: _descriptionController,
+                    prefix: const Text('Описание'),
+                    placeholder: 'Необязательно',
+                    textCapitalization: TextCapitalization.sentences,
+                    textAlign: TextAlign.end,
+                    maxLines: 3,
+                  ),
+                  CupertinoTextFormFieldRow(
+                    controller: _linkController,
+                    prefix: const Text('Ссылка'),
+                    placeholder: 'https://…',
+                    keyboardType: TextInputType.url,
+                    textAlign: TextAlign.end,
+                  ),
+                ],
+              ),
+              if (_themeError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Text(
+                    _themeError!,
+                    style: const TextStyle(
+                      color: CupertinoColors.systemRed,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SelectedStaffField(
+                  participants: _participants,
+                  onUserAdded: (user) => setState(
+                    () => _participants = [..._participants, user],
+                  ),
+                  onUserRemoved: (user) => setState(
+                    () => _participants = _participants
+                        .where((p) => p.id != user.id)
+                        .toList(),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
+              if (detail.isRecurring) ...[
+                const SizedBox(height: 20),
+                CupertinoFormSection.insetGrouped(
+                  children: [
+                    CupertinoListTile(
+                      title: const Text('Изменить всю серию повторений'),
+                      trailing: CupertinoSwitch(
+                        value: _updateAll,
+                        onChanged: (v) => setState(() => _updateAll = v),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-            TextFormField(
-              controller: _themeController,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: _decoration(context, 'Тема *'),
-              validator: (v) {
-                if ((v ?? '').trim().isEmpty) return 'Укажите тему';
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _descriptionController,
-              maxLines: 3,
-              decoration: _decoration(context, 'Описание'),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _linkController,
-              keyboardType: TextInputType.url,
-              decoration: _decoration(context, 'Ссылка', hint: 'https://…'),
-            ),
-            const SizedBox(height: 16),
-            SelectedStaffField(
-              participants: _participants,
-              onUserAdded: (user) =>
-                  setState(() => _participants = [..._participants, user]),
-              onUserRemoved: (user) => setState(
-                () => _participants = _participants.where((p) => p.id != user.id).toList(),
-              ),
-            ),
-            if (detail.isRecurring) ...[
-              const SizedBox(height: 12),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Изменить всю серию повторений'),
-                value: _updateAll,
-                onChanged: (v) => setState(() => _updateAll = v),
-              ),
-            ],
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _isSubmitting ? null : _submit,
-              child: _isSubmitting
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Сохранить'),
-            ),
-          ],
+          ),
         ),
       ),
     );

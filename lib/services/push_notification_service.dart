@@ -239,37 +239,42 @@ class PushNotificationService {
   }
 
   void _storeNavigationFromMessage(RemoteMessage message) {
-    final type = message.data['type'];
-    if (type == 'chat_message') {
-      final chatId = message.data['chat_id'];
-      if (chatId != null && chatId.isNotEmpty) {
-        AppNavigationService.storePendingChat(chatId);
-      }
-      return;
-    }
-    if (type == 'news') {
-      final newsId = message.data['news_id'];
-      if (newsId != null && newsId.isNotEmpty) {
-        AppNavigationService.storePendingNews(newsId);
-      }
+    final data = message.data;
+    switch (data['type']) {
+      case 'chat_message':
+        final chatId = data['chat_id'];
+        if (chatId != null && chatId.isNotEmpty) {
+          AppNavigationService.storePendingChat(chatId);
+        }
+      case 'news':
+        final newsId = data['news_id'];
+        if (newsId != null && newsId.isNotEmpty) {
+          AppNavigationService.storePendingNews(newsId);
+        }
+      case 'document':
+        final serviceId = data['service_id'];
+        if (serviceId != null && serviceId.isNotEmpty) {
+          AppNavigationService.storePendingDocument(serviceId);
+        }
+      case 'mail':
+        final connectionId = data['connection_id'];
+        if (connectionId != null && connectionId.isNotEmpty) {
+          AppNavigationService.storePendingMail(
+            connectionId,
+            data['message_id'],
+          );
+        }
+      case 'meeting_invite':
+      case 'meeting_reminder':
+        final bookingId = data['booking_id'];
+        if (bookingId != null && bookingId.isNotEmpty) {
+          AppNavigationService.storePendingBooking(bookingId);
+        }
     }
   }
 
   void _navigateFromData(Map<String, dynamic> data) {
-    final type = data['type'];
-    if (type == 'chat_message') {
-      final chatId = data['chat_id']?.toString();
-      if (chatId != null && chatId.isNotEmpty) {
-        AppNavigationService.openChatById(chatId);
-      }
-      return;
-    }
-    if (type == 'news') {
-      final newsId = data['news_id']?.toString();
-      if (newsId != null && newsId.isNotEmpty) {
-        AppNavigationService.openNewsById(newsId);
-      }
-    }
+    AppNavigationService.openFromData(data);
   }
 
   String _encodePayload(Map<String, dynamic> data) {

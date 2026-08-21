@@ -1,13 +1,14 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'
+    show RefreshIndicator, ScaffoldMessenger, SnackBar;
 import 'package:intl/intl.dart';
 
-import '../config/app_icons.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/app_loading.dart';
+import '../widgets/booking_pickers.dart';
 import 'compose_mail_screen.dart';
 import 'mail_message_screen.dart';
 
@@ -76,7 +77,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingMessages = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось загрузить письма')),
       );
     }
@@ -84,7 +85,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
 
   Future<void> _openCompose({MailMessage? replyTo}) async {
     final sent = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      CupertinoPageRoute<bool>(
         builder: (context) =>
             ComposeMailScreen(connection: widget.connection, replyTo: replyTo),
       ),
@@ -94,7 +95,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
 
   Future<void> _openMessage(MailMessage message) async {
     final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      CupertinoPageRoute<bool>(
         builder: (context) => MailMessageScreen(
           connection: widget.connection,
           messageId: message.id,
@@ -106,152 +107,186 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     if (changed == true) await _loadMessages();
   }
 
-  void _showFolderPicker() {
+  Future<void> _showFolderPicker() async {
     if (_folders.isEmpty) return;
-    showModalBottomSheet<void>(
+    final picked = await showBookingOptionSheet<MailFolder>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Папки',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ),
-            ..._folders.map(
-              (folder) => ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(folder.name),
-                subtitle: folder.unreadCount != null
-                    ? Text('Непрочитанных: ${folder.unreadCount}')
-                    : null,
-                selected: _selectedFolder?.id == folder.id,
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() => _selectedFolder = folder);
-                  _loadMessages();
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+      title: 'Папки',
+      options: _folders,
+      current: _selectedFolder ?? _folders.first,
+      labelOf: (folder) => folder.unreadCount != null
+          ? '${folder.name} (${folder.unreadCount})'
+          : folder.name,
     );
+    if (picked == null) return;
+    setState(() => _selectedFolder = picked);
+    _loadMessages();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final dateFormat = DateFormat('d MMM, HH:mm', 'ru_RU');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.connection.displayName),
-        centerTitle: true,
-        actions: [
-          if (_folders.isNotEmpty)
-            IconButton(
-              tooltip: 'Папки',
-              onPressed: _showFolderPicker,
-              icon: const Icon(Icons.folder_outlined),
-            ),
-          IconButton(
-            tooltip: 'Обновить',
-            onPressed: _isLoadingMessages ? null : _loadMessages,
-            icon: const AppIcon(AppIcons.refresh),
-          ),
-        ],
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
+          widget.connection.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+        trailing: _folders.isEmpty
+            ? null
+            : CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: _showFolderPicker,
+                child: const Icon(CupertinoIcons.folder, size: 24),
+              ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openCompose(),
-        child: const AppIcon(AppIcons.compose),
-      ),
-      body: _isLoadingFolders && _isLoadingMessages
-          ? const AppLoadingIndicator(size: 32)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  child: Text(
-                    widget.connection.email,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: _loadMessages,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: Stack(
+            children: [
+              _isLoadingFolders && _isLoadingMessages
+                  ? const Center(child: CupertinoActivityIndicator(radius: 14))
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (!widget.connection.isActive ||
-                            (widget.connection.lastError ?? '').isNotEmpty)
-                          Card(
-                            color: theme.colorScheme.errorContainer,
-                            margin: const EdgeInsets.only(bottom: 12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Icon(
-                                    Icons.warning_amber_rounded,
-                                    color: theme.colorScheme.onErrorContainer,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      widget.connection.lastError ??
-                                          'Почтовое подключение неактивно',
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                            color: theme
-                                                .colorScheme
-                                                .onErrorContainer,
-                                          ),
-                                    ),
-                                  ),
-                                ],
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                          child: Text(
+                            widget.connection.email,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
                               ),
                             ),
                           ),
-                        if (_messages.isEmpty && !_isLoadingMessages)
-                          SizedBox(
-                            height: MediaQuery.sizeOf(context).height * 0.35,
-                            child: AppEmptyState(
-                              icon: Icons.inbox_outlined,
-                              message: _selectedFolder != null
-                                  ? 'В папке «${_selectedFolder!.name}» нет писем'
-                                  : 'Нет писем',
+                        ),
+                        Expanded(
+                          child: RefreshIndicator(
+                            onRefresh: _loadMessages,
+                            child: ListView(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+                              children: [
+                                if (!widget.connection.isActive ||
+                                    (widget.connection.lastError ?? '')
+                                        .isNotEmpty)
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: CupertinoColors.systemRed
+                                          .withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Icon(
+                                          CupertinoIcons
+                                              .exclamationmark_triangle_fill,
+                                          color: CupertinoColors.systemRed,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            widget.connection.lastError ??
+                                                'Почтовое подключение неактивно',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: CupertinoColors.systemRed,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                if (_messages.isEmpty && !_isLoadingMessages)
+                                  SizedBox(
+                                    height:
+                                        MediaQuery.sizeOf(context).height *
+                                        0.35,
+                                    child: AppEmptyState(
+                                      icon: CupertinoIcons.tray,
+                                      message: _selectedFolder != null
+                                          ? 'В папке «${_selectedFolder!.name}» нет писем'
+                                          : 'Нет писем',
+                                    ),
+                                  )
+                                else ...[
+                                  for (
+                                    var i = 0;
+                                    i < _messages.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0) const SizedBox(height: 8),
+                                    _MessageTile(
+                                      message: _messages[i],
+                                      dateFormat: dateFormat,
+                                      onTap: () => _openMessage(_messages[i]),
+                                    ),
+                                  ],
+                                  if (_isLoadingMessages)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 16,
+                                      ),
+                                      child: Center(
+                                        child: CupertinoActivityIndicator(),
+                                      ),
+                                    ),
+                                ],
+                              ],
                             ),
-                          )
-                        else ...[
-                          for (var i = 0; i < _messages.length; i++) ...[
-                            if (i > 0) const SizedBox(height: 8),
-                            _MessageTile(
-                              message: _messages[i],
-                              dateFormat: dateFormat,
-                              onTap: () => _openMessage(_messages[i]),
-                            ),
-                          ],
-                          if (_isLoadingMessages)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: AppLoadingIndicator(size: 20),
-                            ),
-                        ],
+                          ),
+                        ),
                       ],
+                    ),
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: GestureDetector(
+                  onTap: () => _openCompose(),
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.activeBlue,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: CupertinoColors.black.withValues(alpha: 0.2),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.square_pencil,
+                      color: CupertinoColors.white,
+                      size: 24,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -269,12 +304,18 @@ class _MessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final isUnread = !message.isRead;
 
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -286,8 +327,8 @@ class _MessageTile extends StatelessWidget {
                   width: 8,
                   height: 8,
                   margin: const EdgeInsets.only(top: 6, right: 8),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
+                  decoration: const BoxDecoration(
+                    color: CupertinoColors.activeBlue,
                     shape: BoxShape.circle,
                   ),
                 )
@@ -304,10 +345,12 @@ class _MessageTile extends StatelessWidget {
                             message.from.isEmpty
                                 ? 'Неизвестный отправитель'
                                 : message.from,
-                            style: theme.textTheme.titleSmall?.copyWith(
+                            style: TextStyle(
+                              fontSize: 15,
                               fontWeight: isUnread
                                   ? FontWeight.w700
                                   : FontWeight.w500,
+                              color: CupertinoColors.label.resolveFrom(context),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -316,8 +359,11 @@ class _MessageTile extends StatelessWidget {
                         if (message.date != null)
                           Text(
                             dateFormat.format(message.date!.toLocal()),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
                           ),
                       ],
@@ -325,10 +371,12 @@ class _MessageTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       message.subject,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      style: TextStyle(
+                        fontSize: 14,
                         fontWeight: isUnread
                             ? FontWeight.w600
                             : FontWeight.w400,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -337,8 +385,11 @@ class _MessageTile extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         message.previewBody,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -348,16 +399,21 @@ class _MessageTile extends StatelessWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          AppIcon(
-                            AppIcons.attachment,
+                          Icon(
+                            CupertinoIcons.paperclip,
                             size: 14,
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Вложения',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
                           ),
                         ],

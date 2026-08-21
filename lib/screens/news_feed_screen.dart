@@ -13,11 +13,11 @@ import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
 import '../utils/app_feedback.dart';
+import '../utils/html_text_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
-import '../widgets/chat_message_text.dart';
 import '../widgets/news_people_sheet.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
@@ -199,9 +199,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   }
 
   Future<void> _openCreate() async {
-    final created = await Navigator.of(context).push<bool>(
-      CupertinoPageRoute(builder: (_) => const NewsCreateScreen()),
-    );
+    final created = await Navigator.of(
+      context,
+    ).push<bool>(CupertinoPageRoute(builder: (_) => const NewsCreateScreen()));
     if (created == true && mounted) {
       await _loadFirstPage();
     }
@@ -261,9 +261,9 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   }
 
   void _showCupertinoSnack(String message) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _addView(NewsItem item) async {
@@ -325,7 +325,8 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
       sliver: SliverList.separated(
         itemCount: _news.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.lg),
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: AppSpacing.lg),
         itemBuilder: (context, index) {
           if (index >= _news.length) {
             return const Padding(
@@ -375,8 +376,8 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
             slivers: [
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('Лента'),
-                backgroundColor:
-                    CupertinoColors.systemGroupedBackground.withValues(alpha: 0.9),
+                backgroundColor: CupertinoColors.systemGroupedBackground
+                    .withValues(alpha: 0.9),
                 border: null,
                 trailing: CupertinoButton(
                   padding: EdgeInsets.zero,
@@ -481,14 +482,18 @@ class _NewsCard extends StatelessWidget {
                         Icon(
                           CupertinoIcons.calendar,
                           size: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           dateLabel,
                           style: TextStyle(
                             fontSize: 12,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
                         ),
                       ],
@@ -505,11 +510,10 @@ class _NewsCard extends StatelessWidget {
                     if (news.contentHtml.trim().isNotEmpty ||
                         news.content.trim().isNotEmpty) ...[
                       const SizedBox(height: 6),
-                      ChatMessageText(
+                      _ExpandableSummary(
                         text: news.contentHtml.trim().isNotEmpty
                             ? news.contentHtml
                             : news.content,
-                        maxLines: 3,
                         fontSize: 15,
                         color: CupertinoColors.label.resolveFrom(context),
                       ),
@@ -523,6 +527,11 @@ class _NewsCard extends StatelessWidget {
                           onTap: onShowViewers,
                         ),
                         const Spacer(),
+                        _StatChip(
+                          icon: CupertinoIcons.chat_bubble,
+                          onTap: onOpen,
+                        ),
+                        const SizedBox(width: 16),
                         _LikeButton(
                           count: news.likesCount,
                           isLiked: news.isLiked,
@@ -539,6 +548,65 @@ class _NewsCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Превью текста новости в 3 строки — если текст в них не помещается,
+/// показывает под ним подпись «Читать полностью» (сам тап обрабатывает
+/// карточка целиком, у подписи нет своего onTap).
+class _ExpandableSummary extends StatelessWidget {
+  const _ExpandableSummary({
+    required this.text,
+    required this.fontSize,
+    required this.color,
+  });
+
+  final String text;
+  final double fontSize;
+  final Color color;
+
+  static const _maxLines = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final plain = HtmlTextUtils.looksLikeHtml(text)
+        ? HtmlTextUtils.toPlainText(text)
+        : text;
+    final style = TextStyle(color: color, fontSize: fontSize, height: 1.35);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: plain, style: style),
+          maxLines: _maxLines,
+          textDirection: Directionality.of(context),
+        )..layout(maxWidth: constraints.maxWidth);
+        final isTruncated = painter.didExceedMaxLines;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              plain,
+              maxLines: _maxLines,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
+            if (isTruncated) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Читать полностью',
+                style: TextStyle(
+                  fontSize: fontSize - 2,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.activeBlue.resolveFrom(context),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -588,10 +656,10 @@ class _NewsCardSkeleton extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.label, this.onTap});
+  const _StatChip({required this.icon, this.label, this.onTap});
 
   final IconData icon;
-  final String label;
+  final String? label;
   final VoidCallback? onTap;
 
   @override
@@ -603,8 +671,10 @@ class _StatChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 13, color: color)),
+          if (label != null) ...[
+            const SizedBox(width: 6),
+            Text(label!, style: TextStyle(fontSize: 13, color: color)),
+          ],
         ],
       ),
     );

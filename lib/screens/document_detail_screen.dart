@@ -1,12 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 
-import '../config/app_icons.dart';
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/app_loading.dart';
 
 class DocumentDetailScreen extends StatefulWidget {
   const DocumentDetailScreen({
@@ -98,7 +97,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         number: DocumentPayloadUtils.number(_displayDocument),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
             widget.service.isSigningService
@@ -124,19 +123,20 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   Future<void> _reject() async {
     if (_isSubmitting) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => CupertinoAlertDialog(
         title: const Text('Отклонить документ?'),
         content: const Text(
           'Документ будет отклонён. Это действие нельзя отменить.',
         ),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
           ),
-          FilledButton(
+          CupertinoDialogAction(
+            isDestructiveAction: true,
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Отклонить'),
           ),
@@ -154,9 +154,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         number: DocumentPayloadUtils.number(_displayDocument),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      ScaffoldMessenger.maybeOf(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Документ отклонён')));
+      )?.showSnackBar(const SnackBar(content: Text('Документ отклонён')));
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
@@ -168,9 +168,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   void _showError(String fallback, Object error) {
     final message = error is ApiException ? error.message : fallback;
-    ScaffoldMessenger.of(
+    ScaffoldMessenger.maybeOf(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   List<MapEntry<String, String>> _summaryEntries(
@@ -215,81 +215,119 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         .toList();
   }
 
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 29,
+      height: 29,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Icon(icon, size: 17, color: CupertinoColors.white),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title =
         DocumentPayloadUtils.datalist(_displayDocument) ??
         DocumentPayloadUtils.title(_displayDocument);
+
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 15,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(child: _buildBody()),
+              if (!_isLoading && _errorMessage == null) _buildActionBar(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionBar() {
     final actionLabel = widget.service.isSigningService
         ? 'Подписать'
         : 'Согласовать';
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        centerTitle: true,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemGroupedBackground.resolveFrom(context),
+        border: Border(
+          top: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+          ),
+        ),
       ),
-      body: _buildBody(),
-      bottomNavigationBar: _isLoading || _errorMessage != null
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: _commentController,
-                      decoration: const InputDecoration(
-                        labelText: 'Комментарий',
-                        hintText: 'Необязательно',
-                      ),
-                      minLines: 1,
-                      maxLines: 3,
-                      enabled: !_isSubmitting,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _isSubmitting ? null : _reject,
-                            child: const Text('Отклонить'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: _isSubmitting ? null : _accept,
-                            child: _isSubmitting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(actionLabel),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CupertinoTextField(
+                controller: _commentController,
+                placeholder: 'Комментарий (необязательно)',
+                minLines: 1,
+                maxLines: 3,
+                enabled: !_isSubmitting,
               ),
-            ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: CupertinoButton(
+                      color: CupertinoColors.systemGrey5.resolveFrom(context),
+                      onPressed: _isSubmitting ? null : _reject,
+                      child: const Text(
+                        'Отклонить',
+                        style: TextStyle(color: CupertinoColors.systemRed),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: CupertinoButton.filled(
+                      onPressed: _isSubmitting ? null : _accept,
+                      child: _isSubmitting
+                          ? const CupertinoActivityIndicator(
+                              color: CupertinoColors.white,
+                            )
+                          : Text(actionLabel),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const AppLoadingIndicator(size: 32);
+      return const Center(child: CupertinoActivityIndicator(radius: 14));
     }
 
     if (_errorMessage != null) {
       return AppEmptyState(
-        icon: Icons.error_outline,
+        icon: CupertinoIcons.exclamationmark_triangle,
         message: _errorMessage!,
         onRetry: _loadDetails,
       );
@@ -301,117 +339,154 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     final files = _files(document);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              DocumentPayloadUtils.datalist(document) ??
-                  DocumentPayloadUtils.title(document),
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        Container(
+          decoration: BoxDecoration(
+            color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+              context,
             ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            DocumentPayloadUtils.datalist(document) ??
+                DocumentPayloadUtils.title(document),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
         ),
         if (entries.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Детали',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Column(
-              children: [
-                for (var i = 0; i < entries.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  ListTile(
-                    title: Text(entries[i].key),
-                    subtitle: Text(entries[i].value),
-                  ),
-                ],
-              ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'ДЕТАЛИ',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                letterSpacing: 0.2,
+              ),
             ),
+          ),
+          const SizedBox(height: 6),
+          CupertinoListSection.insetGrouped(
+            margin: EdgeInsets.zero,
+            children: [
+              for (final entry in entries)
+                CupertinoListTile(
+                  title: Text(
+                    entry.key,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: CupertinoColors.secondaryLabel,
+                    ),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      entry.value,
+                      // CupertinoListTile форсирует subtitle в 1 строку с
+                      // "…", если не переопределить maxLines явно.
+                      maxLines: 20,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: CupertinoColors.label),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
         if (sides.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Стороны',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Column(
-              children: [
-                for (var i = 0; i < sides.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  ListTile(
-                    title: Text(sides[i]['partner']?.toString() ?? 'Сторона'),
-                    subtitle: Text(sides[i]['value']?.toString() ?? ''),
-                  ),
-                ],
-              ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'СТОРОНЫ',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                letterSpacing: 0.2,
+              ),
             ),
+          ),
+          const SizedBox(height: 6),
+          CupertinoListSection.insetGrouped(
+            margin: EdgeInsets.zero,
+            children: [
+              for (final side in sides)
+                CupertinoListTile(
+                  leading: _iconBadge(
+                    CupertinoIcons.person_2_fill,
+                    CupertinoColors.systemIndigo,
+                  ),
+                  title: Text(side['partner']?.toString() ?? 'Сторона'),
+                  subtitle: (side['value']?.toString() ?? '').isEmpty
+                      ? null
+                      : Text(side['value'].toString()),
+                ),
+            ],
           ),
         ],
         if (files.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Файлы',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Column(
-              children: [
-                for (var i = 0; i < files.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  ListTile(
-                    leading: const AppIcon(AppIcons.attachment),
-                    title: Text(files[i]['namefile']?.toString() ?? 'Файл'),
-                  ),
-                ],
-              ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'ФАЙЛЫ',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                letterSpacing: 0.2,
+              ),
             ),
+          ),
+          const SizedBox(height: 6),
+          CupertinoListSection.insetGrouped(
+            margin: EdgeInsets.zero,
+            children: [
+              for (final file in files)
+                CupertinoListTile(
+                  leading: _iconBadge(
+                    CupertinoIcons.paperclip,
+                    CupertinoColors.systemGrey,
+                  ),
+                  title: Text(file['namefile']?.toString() ?? 'Файл'),
+                ),
+            ],
           ),
         ],
         if (_acceptors.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Согласующие',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Column(
-              children: [
-                for (var i = 0; i < _acceptors.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  ListTile(
-                    title: Text(
-                      DocumentPayloadUtils.labelForAcceptor(_acceptors[i]),
-                    ),
-                    subtitle: () {
-                      final status = DocumentPayloadUtils.acceptorStatus(
-                        _acceptors[i],
-                      );
-                      return status == null ? null : Text(status);
-                    }(),
-                  ),
-                ],
-              ],
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'СОГЛАСУЮЩИЕ',
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                letterSpacing: 0.2,
+              ),
             ),
+          ),
+          const SizedBox(height: 6),
+          CupertinoListSection.insetGrouped(
+            margin: EdgeInsets.zero,
+            children: [
+              for (final acceptor in _acceptors)
+                CupertinoListTile(
+                  leading: _iconBadge(
+                    CupertinoIcons.checkmark_seal_fill,
+                    CupertinoColors.systemGreen,
+                  ),
+                  title: Text(DocumentPayloadUtils.labelForAcceptor(acceptor)),
+                  subtitle: () {
+                    final status = DocumentPayloadUtils.acceptorStatus(
+                      acceptor,
+                    );
+                    return status == null ? null : Text(status);
+                  }(),
+                ),
+            ],
           ),
         ],
       ],

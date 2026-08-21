@@ -77,7 +77,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     if (detail == null) return;
 
     final updated = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
+      CupertinoPageRoute(
         builder: (context) => EditBookingScreen(detail: detail),
       ),
     );
@@ -206,7 +206,13 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
   }) {
     return CupertinoListTile(
       leading: _iconBadge(icon, color),
-      title: Text(label),
+      title: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          color: CupertinoColors.secondaryLabel,
+        ),
+      ),
       additionalInfo: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 180),
         child: Text(
@@ -238,6 +244,11 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
         padding: const EdgeInsets.only(top: 2),
         child: Text(
           value,
+          // CupertinoListTile форсирует subtitle в 1 строку с "…", если не
+          // переопределить maxLines явно — длинное описание иначе обрежется
+          // после первого же слова.
+          maxLines: 20,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: CupertinoColors.label),
         ),
       ),
@@ -389,7 +400,9 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                     CupertinoListTile(
                       leading: _iconBadge(
                         CupertinoIcons.pencil,
-                        CupertinoColors.systemBlue,
+                        detail.isPassed
+                            ? CupertinoColors.systemGrey
+                            : CupertinoColors.systemBlue,
                       ),
                       title: Text(
                         'Изменить',
@@ -407,7 +420,9 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                     CupertinoListTile(
                       leading: _iconBadge(
                         CupertinoIcons.delete_solid,
-                        CupertinoColors.systemRed,
+                        detail.isPassed
+                            ? CupertinoColors.systemGrey
+                            : CupertinoColors.systemRed,
                       ),
                       title: Text(
                         'Удалить',

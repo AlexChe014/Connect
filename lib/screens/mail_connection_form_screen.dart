@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 
 import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
@@ -13,13 +14,13 @@ class MailConnectionFormScreen extends StatefulWidget {
 }
 
 class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _imapHostController = TextEditingController();
   final _imapPortController = TextEditingController(text: '993');
 
   bool _isSaving = false;
+  String? _errorText;
 
   bool get _isEdit => widget.existing != null;
 
@@ -46,9 +47,33 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
     super.dispose();
   }
 
+  String? _validate() {
+    if (!_isEdit) {
+      if (_emailController.text.trim().isEmpty) return 'Введите email';
+      if (!_emailController.text.contains('@')) return 'Некорректный email';
+      if (_imapHostController.text.trim().isEmpty) return 'Введите IMAP-хост';
+      if (_imapPortController.text.trim().isEmpty) return 'Введите порт';
+      if (int.tryParse(_imapPortController.text.trim()) == null) {
+        return 'Некорректный порт';
+      }
+      if (_passwordController.text.isEmpty) return 'Введите пароль';
+    } else {
+      if (_imapPortController.text.trim().isNotEmpty &&
+          int.tryParse(_imapPortController.text.trim()) == null) {
+        return 'Некорректный порт';
+      }
+      if (_emailController.text.trim().isNotEmpty &&
+          !_emailController.text.contains('@')) {
+        return 'Некорректный email';
+      }
+    }
+    return null;
+  }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    final error = _validate();
+    setState(() => _errorText = error);
+    if (error != null) return;
 
     setState(() => _isSaving = true);
     try {
@@ -82,7 +107,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
             _isEdit ? 'Не удалось обновить подключение' : 'Не удалось создать подключение',
@@ -96,82 +121,121 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _isEdit ? 'Редактировать подключение' : 'Новый почтовый ящик',
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(_isEdit ? 'Редактировать подключение' : 'Новый почтовый ящик'),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Icon(CupertinoIcons.back, size: 26),
         ),
-        centerTitle: true,
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _isSaving ? null : _save,
+          child: _isSaving
+              ? const CupertinoActivityIndicator()
+              : Text(
+                  _isEdit ? 'Сохранить' : 'Подключить',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+        ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email'),
-              validator: (v) {
-                if (!_isEdit && (v == null || v.trim().isEmpty)) return 'Введите email';
-                if (v != null && v.trim().isNotEmpty && !v.contains('@')) {
-                  return 'Некорректный email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _imapHostController,
-              decoration: const InputDecoration(labelText: 'IMAP-хост'),
-              validator: (v) {
-                if (!_isEdit && (v == null || v.trim().isEmpty)) return 'Введите IMAP-хост';
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _imapPortController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'IMAP-порт'),
-              validator: (v) {
-                if (!_isEdit && (v == null || v.trim().isEmpty)) return 'Введите порт';
-                if (v != null && v.trim().isNotEmpty && int.tryParse(v.trim()) == null) {
-                  return 'Некорректный порт';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: _isEdit ? 'Новый пароль (необязательно)' : 'Пароль',
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            children: [
+              if (!_isEdit)
+                CupertinoFormSection.insetGrouped(
+                  margin: EdgeInsets.zero,
+                  header: const Text('ПОДКЛЮЧЕНИЕ'),
+                  children: [
+                    CupertinoTextFormFieldRow(
+                      controller: _emailController,
+                      prefix: const Text('Email'),
+                      placeholder: 'name@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      textAlign: TextAlign.end,
+                      enabled: !_isSaving,
+                    ),
+                    CupertinoTextFormFieldRow(
+                      controller: _imapHostController,
+                      prefix: const Text('Хост'),
+                      placeholder: 'imap.example.com',
+                      textAlign: TextAlign.end,
+                      enabled: !_isSaving,
+                    ),
+                    CupertinoTextFormFieldRow(
+                      controller: _imapPortController,
+                      prefix: const Text('Порт'),
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.end,
+                      enabled: !_isSaving,
+                    ),
+                  ],
+                )
+              else
+                CupertinoListSection.insetGrouped(
+                  margin: EdgeInsets.zero,
+                  children: [
+                    CupertinoListTile(
+                      leading: Container(
+                        width: 29,
+                        height: 29,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.activeBlue,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.mail_solid,
+                          size: 16,
+                          color: CupertinoColors.white,
+                        ),
+                      ),
+                      title: Text(widget.existing!.email),
+                      subtitle: Text(widget.existing!.serviceLabel),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 20),
+              CupertinoFormSection.insetGrouped(
+                margin: EdgeInsets.zero,
+                children: [
+                  CupertinoTextFormFieldRow(
+                    controller: _passwordController,
+                    prefix: Text(_isEdit ? 'Новый пароль' : 'Пароль'),
+                    placeholder: _isEdit ? 'Необязательно' : null,
+                    obscureText: true,
+                    textAlign: TextAlign.end,
+                    enabled: !_isSaving,
+                  ),
+                ],
               ),
-              validator: (v) {
-                if (!_isEdit && (v == null || v.isEmpty)) return 'Введите пароль';
-                return null;
-              },
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(64, 42),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              onPressed: _isSaving ? null : _save,
-              child: _isSaving
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(_isEdit ? 'Сохранить' : 'Подключить'),
-            ),
-          ],
+              if (_errorText != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Text(
+                    _errorText!,
+                    style: const TextStyle(
+                      color: CupertinoColors.systemRed,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

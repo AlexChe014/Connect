@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'
+    show RefreshIndicator, ScaffoldMessenger, SnackBar;
 
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/cupertino_prompt_dialog.dart';
 import 'documents_list_screen.dart';
 
 class DocumentsSigningScreen extends StatefulWidget {
@@ -52,9 +55,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
 
   void _showError(String fallback, Object error) {
     final message = error is ApiException ? error.message : fallback;
-    ScaffoldMessenger.of(
+    ScaffoldMessenger.maybeOf(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _requestPersonalAccessCode() async {
@@ -77,7 +80,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         _isAuthenticating = false;
       });
       if (services.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('По этому коду нет доступных сервисов')),
         );
       }
@@ -101,7 +104,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         code: code,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(content: Text('Сервис «${service.displayTitle}» авторизован')),
       );
     } catch (e) {
@@ -116,7 +119,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         service.id,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
             removed > 0
@@ -138,74 +141,28 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     String hint = 'Введите код из 1С',
   }) async {
     final controller = TextEditingController();
-    return showDialog<String>(
+    return showCupertinoDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(
-            title,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-          ),
-          titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (subtitle != null) ...[
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  labelText: label,
-                  hintText: hint,
-                  isDense: true,
-                ),
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) =>
-                    Navigator.pop(context, controller.text.trim()),
-              ),
-            ],
+        return CupertinoPromptDialog(
+          title: title,
+          message: subtitle,
+          content: CupertinoTextField(
+            controller: controller,
+            placeholder: hint,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => Navigator.pop(context, controller.text.trim()),
           ),
           actions: [
-            TextButton(
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            CupertinoPromptDialogAction(
+              label: 'Отмена',
               onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+            CupertinoPromptDialogAction(
+              label: 'Продолжить',
+              isDefault: true,
               onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Продолжить'),
             ),
           ],
         );
@@ -214,40 +171,25 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
   }
 
   Future<void> _showServiceActions(DocumentService service) async {
-    final action = await showModalBottomSheet<String>(
+    final action = await showCupertinoModalPopup<String>(
       context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Text(
-                  service.displayName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              ListTile(
-                dense: true,
-                title: const Text('Авторизоваться'),
-                onTap: () => Navigator.pop(context, 'auth'),
-              ),
-              ListTile(
-                dense: true,
-                title: const Text('Выйти'),
-                onTap: () => Navigator.pop(context, 'logout'),
-              ),
-              const SizedBox(height: 8),
-            ],
+      builder: (context) => CupertinoActionSheet(
+        title: Text(service.displayName),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'auth'),
+            child: const Text('Авторизоваться'),
           ),
-        );
-      },
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'logout'),
+            child: const Text('Выйти'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
     );
 
     if (!mounted || action == null) return;
@@ -261,97 +203,110 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
 
   void _openDocuments(DocumentService service) {
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
+      CupertinoPageRoute<void>(
         builder: (context) => DocumentsListScreen(service: service),
       ),
     );
   }
 
-  Widget _buildResults() {
-    return RefreshIndicator(
-      onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
-      child: _buildResultsContent(),
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 34,
+      height: 34,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, size: 18, color: color),
     );
   }
 
-  Widget _buildResultsContent() {
+  List<Widget> _buildContentSlivers() {
     if (_isLoading || _isAuthenticating) {
-      return const AppSkeletonList(hasLeading: false);
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          sliver: SliverList.separated(
+            itemCount: 6,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) => const AppSkeletonListTile(),
+          ),
+        ),
+      ];
     }
 
     if (_services.isEmpty) {
-      return AppEmptyState(
-        icon: Icons.vpn_key_outlined,
-        message:
-            'Нет доступных сервисов\n'
-            'Введите личный код доступа, чтобы получить список сервисов 1С',
-        onRetry: _requestPersonalAccessCode,
-        retryLabel: 'Ввести код доступа',
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      itemCount: _services.length,
-      separatorBuilder: (context, index) => Divider(
-        height: 1,
-        thickness: 1,
-        color: Theme.of(context).colorScheme.outline,
-      ),
-      itemBuilder: (context, index) {
-        final service = _services[index];
-        return _ServiceTile(
-          service: service,
-          onTap: () => _openDocuments(service),
-          onEdit: () => _showServiceActions(service),
-        );
-      },
-    );
-  }
-
-  Widget _buildHeader({required bool showInlineTitle}) {
-    if (!showInlineTitle) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    final appBarTheme = theme.appBarTheme;
-    return Container(
-      color: appBarTheme.backgroundColor ?? theme.colorScheme.surface,
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: kToolbarHeight,
-          child: Center(
-            child: Text(
-              'Согласование',
-              style: appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
-            ),
+      return [
+        SliverFillRemaining(
+          child: AppEmptyState(
+            icon: CupertinoIcons.lock_shield,
+            message:
+                'Нет доступных сервисов\n'
+                'Введите личный код доступа, чтобы получить список сервисов 1С',
+            onRetry: _requestPersonalAccessCode,
+            retryLabel: 'Ввести код доступа',
           ),
         ),
-      ),
-    );
-  }
+      ];
+    }
 
-  Widget _buildBody({required bool showInlineTitle}) {
-    return Column(
-      children: [
-        _buildHeader(showInlineTitle: showInlineTitle),
-        if (showInlineTitle) const Divider(height: 1),
-        Expanded(child: _buildResults()),
-      ],
-    );
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        sliver: SliverList.separated(
+          itemCount: _services.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final service = _services[index];
+            return _ServiceTile(
+              service: service,
+              icon: _iconBadge(
+                service.isSigningService
+                    ? CupertinoIcons.pencil_outline
+                    : CupertinoIcons.checkmark_seal,
+                service.isSigningService
+                    ? CupertinoColors.systemBlue
+                    : CupertinoColors.systemGreen,
+              ),
+              onTap: () => _openDocuments(service),
+              onMore: () => _showServiceActions(service),
+            );
+          },
+        ),
+      ),
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.showAppBar) {
-      return _buildBody(showInlineTitle: true);
-    }
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Согласование'),
-        centerTitle: true,
-        elevation: 0,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          top: false,
+          bottom: false,
+          child: RefreshIndicator(
+            onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
+            child: CustomScrollView(
+              slivers: [
+                const CupertinoSliverNavigationBar(
+                  largeTitle: Text('Согласование'),
+                  backgroundColor: CupertinoColors.systemGroupedBackground,
+                  border: null,
+                ),
+                ..._buildContentSlivers(),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: _buildBody(showInlineTitle: false),
     );
   }
 }
@@ -359,41 +314,64 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
 class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
     required this.service,
+    required this.icon,
     required this.onTap,
-    required this.onEdit,
+    required this.onMore,
   });
 
   final DocumentService service;
+  final Widget icon;
   final VoidCallback onTap;
-  final VoidCallback onEdit;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                service.displayName,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              icon,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  service.displayName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.label,
+                  ),
                 ),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.more_horiz),
-              tooltip: 'Действия',
-              onPressed: onEdit,
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ],
+              GestureDetector(
+                onTap: onMore,
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    CupertinoIcons.ellipsis,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_forward,
+                size: 16,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+              ),
+            ],
+          ),
         ),
       ),
     );

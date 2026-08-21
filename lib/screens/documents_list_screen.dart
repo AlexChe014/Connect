@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'
+    show RefreshIndicator, ScaffoldMessenger, SnackBar;
 
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/app_loading.dart';
+import '../widgets/cupertino_prompt_dialog.dart';
 import 'document_detail_screen.dart';
 
 class DocumentsListScreen extends StatefulWidget {
@@ -112,9 +114,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       final message = e is ApiException
           ? e.message
           : 'Не удалось отправить код';
-      ScaffoldMessenger.of(
+      ScaffoldMessenger.maybeOf(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      )?.showSnackBar(SnackBar(content: Text(message)));
       return false;
     }
 
@@ -129,7 +131,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       if (!mounted) return false;
       setState(() => _isVerifying = false);
       if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('Неверный код подтверждения')),
         );
       }
@@ -140,102 +142,81 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       final message = e is ApiException
           ? e.message
           : 'Не удалось проверить код';
-      ScaffoldMessenger.of(
+      ScaffoldMessenger.maybeOf(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      )?.showSnackBar(SnackBar(content: Text(message)));
       return false;
     }
   }
 
   Future<String?> _promptSigningCode() async {
     final controller = TextEditingController();
-    return showDialog<String>(
+    return showCupertinoDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        final compactBtn = TextButton.styleFrom(
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        );
-        final compactFilled = FilledButton.styleFrom(
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        );
-        return AlertDialog(
-          title: const Text(
-            'Подтверждение доступа',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-          ),
-          titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-          contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+        return CupertinoPromptDialog(
+          title: 'Подтверждение доступа',
+          message:
+              'На вашу почту отправлен 4‑значный код. Введите его, '
+              'чтобы открыть документы.',
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'На вашу почту отправлен 4‑значный код. Введите его, чтобы открыть документы.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
+              CupertinoTextField(
                 controller: controller,
-                decoration: const InputDecoration(
-                  labelText: 'Код из письма',
-                  isDense: true,
-                ),
+                placeholder: 'Код из письма',
                 keyboardType: TextInputType.number,
                 maxLength: 4,
                 autofocus: true,
+                textAlign: TextAlign.center,
                 textInputAction: TextInputAction.done,
+                style: const TextStyle(fontSize: 20, letterSpacing: 8),
+                placeholderStyle: const TextStyle(
+                  fontSize: 15,
+                  letterSpacing: 0,
+                  color: CupertinoColors.placeholderText,
+                ),
                 onSubmitted: (_) =>
                     Navigator.pop(context, controller.text.trim()),
               ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  style: compactBtn,
-                  onPressed: () async {
-                    try {
-                      await DocumentsRepository.instance.sendVerificationCode(
-                        regenerate: true,
+              const SizedBox(height: 10),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: () async {
+                  try {
+                    await DocumentsRepository.instance.sendVerificationCode(
+                      regenerate: true,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                        const SnackBar(content: Text('Код отправлен повторно')),
                       );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Код отправлен повторно'),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      final message = e is ApiException
-                          ? e.message
-                          : 'Не удалось отправить код';
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(message)));
                     }
-                  },
-                  child: const Text('Отправить снова'),
-                ),
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    final message = e is ApiException
+                        ? e.message
+                        : 'Не удалось отправить код';
+                    ScaffoldMessenger.maybeOf(
+                      context,
+                    )?.showSnackBar(SnackBar(content: Text(message)));
+                  }
+                },
+                child: const Text('Отправить снова'),
               ),
             ],
           ),
           actions: [
-            TextButton(
-              style: compactBtn,
+            CupertinoPromptDialogAction(
+              label: 'Отмена',
               onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
             ),
-            FilledButton(
-              style: compactFilled,
+            CupertinoPromptDialogAction(
+              label: 'Продолжить',
+              isDefault: true,
               onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Продолжить'),
             ),
           ],
         );
@@ -251,7 +232,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
     final guid = DocumentPayloadUtils.guid(document);
     if (guid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('У документа отсутствует идентификатор')),
       );
       return;
@@ -259,7 +240,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
     Navigator.of(context)
         .push<void>(
-          MaterialPageRoute<void>(
+          CupertinoPageRoute<void>(
             builder: (context) => DocumentDetailScreen(
               service: widget.service,
               guid: guid,
@@ -273,7 +254,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
   void _enterSelectionMode(Map<String, dynamic> document) {
     final guid = DocumentPayloadUtils.guid(document);
     if (guid == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('У документа отсутствует идентификатор')),
       );
       return;
@@ -312,17 +293,17 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     final selected = _selectedDocuments;
     if (selected.isEmpty) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => CupertinoAlertDialog(
         title: Text('$_acceptActionLabel документы?'),
         content: Text('Будет обработано документов: ${selected.length}.'),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
           ),
-          FilledButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(context, true),
             child: Text(_acceptActionLabel),
           ),
@@ -350,7 +331,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
             widget.service.isSigningService
@@ -365,9 +346,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       final message = e is ApiException
           ? e.message
           : 'Не удалось выполнить массовое действие';
-      ScaffoldMessenger.of(
+      ScaffoldMessenger.maybeOf(
         context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      )?.showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -376,32 +357,33 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
   Widget _buildSelectionBar() {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: CupertinoColors.systemGroupedBackground.resolveFrom(context),
         border: Border(
-          top: BorderSide(color: Theme.of(context).colorScheme.outline),
+          top: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+          ),
         ),
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: CupertinoButton(
+                  color: CupertinoColors.systemGrey5.resolveFrom(context),
                   onPressed: _isSubmitting ? null : _clearSelection,
                   child: const Text('Отмена'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: FilledButton(
+                child: CupertinoButton.filled(
                   onPressed: _isSubmitting ? null : _bulkAccept,
                   child: _isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      ? const CupertinoActivityIndicator(
+                          color: CupertinoColors.white,
                         )
                       : Text('$_acceptActionLabel (${_selectedGuids.length})'),
                 ),
@@ -413,54 +395,54 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     );
   }
 
-  Widget _buildDocumentCheckbox({
-    required bool selected,
-    required ValueChanged<bool?> onChanged,
-  }) {
-    return SizedBox(
-      width: 24,
-      height: 24,
-      child: Checkbox(
-        value: selected,
-        onChanged: onChanged,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(
           _selectionMode
               ? 'Выбрано: ${_selectedGuids.length}'
               : widget.service.displayName,
         ),
-        centerTitle: true,
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
         leading: _selectionMode
-            ? IconButton(
-                tooltip: 'Отменить выбор',
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
                 onPressed: _isSubmitting ? null : _clearSelection,
-                icon: const Icon(Icons.close),
+                child: const Icon(CupertinoIcons.clear, size: 24),
               )
             : null,
       ),
-      body: _buildBody(),
-      bottomNavigationBar: _selectionMode ? _buildSelectionBar() : null,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(child: _buildBody()),
+              if (_selectionMode) _buildSelectionBar(),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const AppLoadingIndicator(size: 32);
+      return const Center(child: CupertinoActivityIndicator(radius: 14));
     }
 
     if (_errorMessage != null) {
       return AppEmptyState(
-        icon: Icons.error_outline,
+        icon: CupertinoIcons.exclamationmark_triangle,
         message: _errorMessage!,
         onRetry: () =>
             _loadDocuments(forceSigningCode: widget.service.isSigningService),
@@ -471,7 +453,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       return RefreshIndicator(
         onRefresh: () => _loadDocuments(),
         child: AppEmptyState(
-          icon: Icons.inbox_outlined,
+          icon: CupertinoIcons.tray,
           message: widget.service.isSigningService
               ? 'Нет документов на подписание'
               : 'Нет документов на согласование',
@@ -482,13 +464,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     return RefreshIndicator(
       onRefresh: () => _loadDocuments(),
       child: ListView.separated(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, _selectionMode ? 8 : 16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         itemCount: _documents.length,
-        separatorBuilder: (context, index) => Divider(
-          height: 1,
-          thickness: 1,
-          color: Theme.of(context).colorScheme.outline,
-        ),
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final document = _documents[index];
           final guid = DocumentPayloadUtils.guid(document);
@@ -497,44 +475,83 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
               DocumentPayloadUtils.title(document);
           final selected = guid != null && _selectedGuids.contains(guid);
 
-          return InkWell(
-            onTap: () {
-              if (_selectionMode) {
-                _toggleDocumentSelection(document);
-              } else {
-                _openDocument(document);
-              }
-            },
+          return _DocumentTile(
+            title: title,
+            selectionMode: _selectionMode,
+            selected: selected,
+            onTap: () => _openDocument(document),
             onLongPress: () => _enterSelectionMode(document),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (_selectionMode) ...[
-                    _buildDocumentCheckbox(
-                      selected: selected,
-                      onChanged: (_) => _toggleDocumentSelection(document),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
-                  if (!_selectionMode)
-                    Icon(
-                      Icons.chevron_right,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                ],
-              ),
-            ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _DocumentTile extends StatelessWidget {
+  const _DocumentTile({
+    required this.title,
+    required this.selectionMode,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final String title;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: selected
+            ? CupertinoColors.activeBlue.withValues(alpha: 0.1)
+            : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+                context,
+              ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              if (selectionMode) ...[
+                Icon(
+                  selected
+                      ? CupertinoIcons.checkmark_circle_fill
+                      : CupertinoIcons.circle,
+                  color: selected
+                      ? CupertinoColors.activeBlue
+                      : CupertinoColors.systemGrey3.resolveFrom(context),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: CupertinoColors.label,
+                  ),
+                ),
+              ),
+              if (!selectionMode)
+                Icon(
+                  CupertinoIcons.chevron_forward,
+                  size: 16,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

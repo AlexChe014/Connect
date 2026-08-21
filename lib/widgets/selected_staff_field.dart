@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../models/staff_user.dart';
+import 'chat_avatar.dart';
 import 'staff_user_picker_sheet.dart';
 
 /// Поле выбора участников брони с чипами и поиском.
@@ -38,35 +39,45 @@ class _SelectedStaffFieldState extends State<SelectedStaffField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: _openPicker,
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: widget.label,
-              hintText: 'Нажмите, чтобы добавить',
-              suffixIcon: const Icon(Icons.person_add_outlined),
+        CupertinoListSection.insetGrouped(
+          margin: EdgeInsets.zero,
+          children: [
+            CupertinoListTile(
+              leading: Container(
+                width: 29,
+                height: 29,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: CupertinoColors.systemGreen,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: const Icon(
+                  CupertinoIcons.person_2_fill,
+                  size: 17,
+                  color: CupertinoColors.white,
+                ),
+              ),
+              title: Text(widget.label),
+              additionalInfo: participants.isEmpty
+                  ? const Text(
+                      'Не выбраны',
+                      style: TextStyle(color: CupertinoColors.secondaryLabel),
+                    )
+                  : null,
+              trailing: const CupertinoListTileChevron(),
+              onTap: _openPicker,
             ),
-            child: participants.isEmpty
-                ? Text(
-                    'Не выбраны',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
+          ],
         ),
         if (participants.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: participants.map((user) {
-              return InputChip(
-                avatar: _StaffChipAvatar(user: user),
-                label: Text(user.fullName),
-                onDeleted: () => widget.onUserRemoved(user),
+              return _StaffChip(
+                user: user,
+                onRemove: () => widget.onUserRemoved(user),
               );
             }).toList(),
           ),
@@ -76,23 +87,49 @@ class _SelectedStaffFieldState extends State<SelectedStaffField> {
   }
 }
 
-class _StaffChipAvatar extends StatelessWidget {
-  const _StaffChipAvatar({required this.user});
+class _StaffChip extends StatelessWidget {
+  const _StaffChip({required this.user, required this.onRemove});
 
   final StaffUser user;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final url = user.avatarUrl?.trim();
-    if (url != null && url.isNotEmpty) {
-      return CircleAvatar(
-        backgroundImage: NetworkImage(url),
-        onBackgroundImageError: (exception, stackTrace) {},
-        child: Text(user.initials, style: const TextStyle(fontSize: 10)),
-      );
-    }
-    return CircleAvatar(
-      child: Text(user.initials, style: const TextStyle(fontSize: 10)),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+      decoration: BoxDecoration(
+        color: CupertinoColors.systemGrey5.resolveFrom(context),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MemberAvatar(
+            displayName: user.fullName,
+            avatarUrl: user.avatarUrl,
+            radius: 11,
+          ),
+          const SizedBox(width: 6),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: Text(
+              user.fullName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, color: CupertinoColors.label),
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(
+              CupertinoIcons.xmark_circle_fill,
+              size: 16,
+              color: CupertinoColors.systemGrey,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

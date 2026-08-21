@@ -1,15 +1,16 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart'
+    show ScaffoldMessenger, SnackBar;
 import 'package:intl/intl.dart';
 
-import '../config/app_icons.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/app_loading.dart';
+import '../widgets/booking_pickers.dart';
 import '../widgets/mail_body_content.dart';
 import 'compose_mail_screen.dart';
 
@@ -81,11 +82,11 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         _isLoading = false;
       });
       if (fallback == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('Не удалось загрузить письмо')),
         );
       } else if (fallback.htmlContent == null && fallback.plainBody.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('Не удалось загрузить текст письма')),
         );
       }
@@ -93,19 +94,20 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
   }
 
   Future<void> _deleteMessage() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showCupertinoDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => CupertinoAlertDialog(
         title: const Text('Удалить письмо?'),
         content: const Text(
           'Письмо будет удалено без возможности восстановления.',
         ),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Отмена'),
           ),
-          FilledButton(
+          CupertinoDialogAction(
+            isDestructiveAction: true,
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Удалить'),
           ),
@@ -124,7 +126,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось удалить письмо')),
       );
     } finally {
@@ -134,35 +136,18 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
 
   Future<void> _moveToFolder() async {
     if (widget.folders.isEmpty) {
-      ScaffoldMessenger.of(
+      ScaffoldMessenger.maybeOf(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Список папок пуст')));
+      )?.showSnackBar(const SnackBar(content: Text('Список папок пуст')));
       return;
     }
 
-    final folder = await showModalBottomSheet<MailFolder>(
+    final folder = await showBookingOptionSheet<MailFolder>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Переместить в папку',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ),
-            ...widget.folders.map(
-              (f) => ListTile(
-                leading: const Icon(Icons.drive_file_move_outline),
-                title: Text(f.name),
-                onTap: () => Navigator.pop(context, f),
-              ),
-            ),
-          ],
-        ),
-      ),
+      title: 'Переместить в папку',
+      options: widget.folders,
+      current: widget.folders.first,
+      labelOf: (f) => f.name,
     );
     if (folder == null || !mounted) return;
 
@@ -173,13 +158,13 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         folder: folder.name,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(content: Text('Письмо перемещено в «${folder.name}»')),
       );
       Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось переместить письмо')),
       );
     }
@@ -196,12 +181,12 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       final file = File('${dir.path}/${attachment.filename}');
       await file.writeAsBytes(bytes);
       if (!mounted) return;
-      ScaffoldMessenger.of(
+      ScaffoldMessenger.maybeOf(
         context,
-      ).showSnackBar(SnackBar(content: Text('Сохранено: ${file.path}')));
+      )?.showSnackBar(SnackBar(content: Text('Сохранено: ${file.path}')));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось скачать вложение')),
       );
     }
@@ -211,7 +196,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     final message = _message;
     if (message == null) return;
     final sent = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
+      CupertinoPageRoute<bool>(
         builder: (context) =>
             ComposeMailScreen(connection: widget.connection, replyTo: message),
       ),
@@ -219,126 +204,201 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     if (sent == true && mounted) Navigator.of(context).pop(true);
   }
 
+  Widget _iconBadge(IconData icon, Color color) {
+    return Container(
+      width: 29,
+      height: 29,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
+      child: Icon(icon, size: 16, color: CupertinoColors.white),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final message = _message;
     final dateFormat = DateFormat('d MMMM yyyy, HH:mm', 'ru_RU');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Письмо'),
-        centerTitle: true,
-        actions: [
-          if (message != null)
-            IconButton(
-              tooltip: 'Ответить',
-              onPressed: _reply,
-              icon: const AppIcon(AppIcons.reply),
-            ),
-          if (widget.folders.isNotEmpty)
-            IconButton(
-              tooltip: 'Переместить',
-              onPressed: _moveToFolder,
-              icon: const Icon(Icons.drive_file_move_outline),
-            ),
-          IconButton(
-            tooltip: 'Удалить',
-            onPressed: _isDeleting ? null : _deleteMessage,
-            icon: _isDeleting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.delete_outline),
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const AppLoadingIndicator(size: 32)
-          : message == null
-          ? const AppEmptyState(message: 'Письмо не найдено')
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  message.subject,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      navigationBar: CupertinoNavigationBar(
+        middle: const Text('Письмо'),
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        border: null,
+        trailing: message == null
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    onPressed: _reply,
+                    child: const Icon(CupertinoIcons.reply, size: 22),
                   ),
-                ),
-                const SizedBox(height: 16),
-                _MetaRow(label: 'От', value: message.from),
-                if ((message.to ?? '').isNotEmpty)
-                  _MetaRow(label: 'Кому', value: message.to!),
-                if (message.date != null)
-                  _MetaRow(
-                    label: 'Дата',
-                    value: dateFormat.format(message.date!.toLocal()),
-                  ),
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: MailBodyContent(message: message),
-                  ),
-                ),
-                if (message.attachments.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    'Вложения',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+                  if (widget.folders.isNotEmpty)
+                    CupertinoButton(
+                      padding: const EdgeInsets.only(left: 16),
+                      minimumSize: Size.zero,
+                      onPressed: _moveToFolder,
+                      child: const Icon(CupertinoIcons.folder, size: 22),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...message.attachments.map(
-                    (attachment) => Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const AppIcon(AppIcons.attachment),
-                        title: Text(attachment.filename),
-                        subtitle: attachment.size != null
-                            ? Text('${attachment.size} байт')
-                            : null,
-                        trailing: const AppIcon(AppIcons.download),
-                        onTap: () => _downloadAttachment(attachment),
-                      ),
-                    ),
+                  CupertinoButton(
+                    padding: const EdgeInsets.only(left: 16),
+                    minimumSize: Size.zero,
+                    onPressed: _isDeleting ? null : _deleteMessage,
+                    child: _isDeleting
+                        ? const CupertinoActivityIndicator()
+                        : const Icon(
+                            CupertinoIcons.delete,
+                            size: 22,
+                            color: CupertinoColors.systemRed,
+                          ),
                   ),
                 ],
-              ],
-            ),
-    );
-  }
-}
-
-class _MetaRow extends StatelessWidget {
-  const _MetaRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 56,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ),
-          ),
-          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
-        ],
+      ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 15,
+        ),
+        child: SafeArea(
+          child: _isLoading
+              ? const Center(child: CupertinoActivityIndicator(radius: 14))
+              : message == null
+              ? const AppEmptyState(message: 'Письмо не найдено')
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.secondarySystemGroupedBackground
+                            .resolveFrom(context),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        message.subject,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    CupertinoListSection.insetGrouped(
+                      margin: EdgeInsets.zero,
+                      children: [
+                        CupertinoListTile(
+                          title: const Text(
+                            'От',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: CupertinoColors.secondaryLabel,
+                            ),
+                          ),
+                          additionalInfo: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 220),
+                            child: Text(
+                              message.from,
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        if ((message.to ?? '').isNotEmpty)
+                          CupertinoListTile(
+                            title: const Text(
+                              'Кому',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                            additionalInfo: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: Text(
+                                message.to!,
+                                textAlign: TextAlign.right,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        if (message.date != null)
+                          CupertinoListTile(
+                            title: const Text(
+                              'Дата',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                            additionalInfo: Text(
+                              dateFormat.format(message.date!.toLocal()),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.secondarySystemGroupedBackground
+                            .resolveFrom(context),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: MailBodyContent(message: message),
+                    ),
+                    if (message.attachments.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          'ВЛОЖЕНИЯ',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      CupertinoListSection.insetGrouped(
+                        margin: EdgeInsets.zero,
+                        children: [
+                          for (final attachment in message.attachments)
+                            CupertinoListTile(
+                              leading: _iconBadge(
+                                CupertinoIcons.paperclip,
+                                CupertinoColors.systemGrey,
+                              ),
+                              title: Text(
+                                attachment.filename,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: attachment.size != null
+                                  ? Text('${attachment.size} байт')
+                                  : null,
+                              trailing: const Icon(
+                                CupertinoIcons.cloud_download,
+                                color: CupertinoColors.activeBlue,
+                              ),
+                              onTap: () => _downloadAttachment(attachment),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+        ),
       ),
     );
   }
