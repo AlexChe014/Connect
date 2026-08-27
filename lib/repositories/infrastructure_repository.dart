@@ -5,7 +5,6 @@ import 'package:connect/models/infrastructure/space.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
 import 'package:connect/services/paginated.dart';
-import 'package:connect/config/api_config.dart';
 
 class SpacesAndTypes {
   final List<Space> spaces;
@@ -73,28 +72,10 @@ class InfrastructureRepository {
         mapItem: (json) => Equipment.fromJson(json),
       );
       all.addAll(page.data.where((e) => e.isActive));
-      nextUrl = _normalizeNextPageUrl(page.nextPageUrl);
+      nextUrl = page.nextPageUrl;
     }
 
     return all;
-  }
-
-  String? _normalizeNextPageUrl(String? url) {
-    if (url == null) return null;
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
-
-    final nextUri = Uri.tryParse(trimmed);
-    if (nextUri == null) return null;
-
-    final baseUri = Uri.parse(ApiConfig.baseUrl);
-    return nextUri
-        .replace(
-          scheme: baseUri.scheme,
-          host: baseUri.host,
-          port: baseUri.hasPort ? baseUri.port : null,
-        )
-        .toString();
   }
 }
 

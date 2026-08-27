@@ -8,7 +8,6 @@ import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../config/app_theme.dart';
-import '../config/api_config.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
@@ -45,24 +44,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   /// снова после ухода с экрана и повторного появления).
   final Set<String> _fullyVisibleIds = <String>{};
   bool _openedNewsFromPush = false;
-
-  String? _normalizeNextPageUrl(String? url) {
-    if (url == null) return null;
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
-
-    final nextUri = Uri.tryParse(trimmed);
-    if (nextUri == null) return null;
-
-    final baseUri = Uri.parse(ApiConfig.baseUrl);
-
-    final normalized = nextUri.replace(
-      scheme: baseUri.scheme,
-      host: baseUri.host,
-      port: baseUri.hasPort ? baseUri.port : null,
-    );
-    return normalized.toString();
-  }
 
   @override
   void initState() {
@@ -104,7 +85,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       if (!mounted) return;
       setState(() {
         _news = page.data;
-        _nextPageUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _nextPageUrl = page.nextPageUrl;
         _isInitialLoading = false;
       });
       await _maybeOpenNewsFromPush();
@@ -120,8 +101,8 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   }
 
   Future<void> _loadMore() async {
-    final url = _normalizeNextPageUrl(_nextPageUrl);
-    if (url == null) return;
+    final url = _nextPageUrl;
+    if (url == null || _isLoadingMore) return;
 
     setState(() => _isLoadingMore = true);
     try {
@@ -131,7 +112,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       if (!mounted) return;
       setState(() {
         _news = [..._news, ...page.data];
-        _nextPageUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _nextPageUrl = page.nextPageUrl;
         _isLoadingMore = false;
       });
     } catch (_) {
@@ -160,7 +141,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       try {
         item = await NewsRepository.instance.getById(id);
       } catch (_) {
-        var nextUrl = _normalizeNextPageUrl(_nextPageUrl);
+        var nextUrl = _nextPageUrl;
         while (item == null && nextUrl != null) {
           try {
             final page = await NewsRepository.instance.getPage(url: nextUrl);
@@ -170,7 +151,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                 break;
               }
             }
-            nextUrl = _normalizeNextPageUrl(page.nextPageUrl);
+            nextUrl = page.nextPageUrl;
           } catch (_) {
             break;
           }

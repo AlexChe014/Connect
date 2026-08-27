@@ -209,6 +209,7 @@ class ChatMapper {
     return Paginated<ChatMessage>(
       data: withReplies,
       currentPage: currentPage,
+      lastPage: lastPage,
       nextPageUrl: nextPageUrl,
       prevPageUrl: null,
       path: messagesBaseUrl,

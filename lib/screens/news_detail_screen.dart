@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../models/news_comment.dart';
 import '../models/news_item.dart';
@@ -59,22 +58,6 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       ..dispose();
     _commentController.dispose();
     super.dispose();
-  }
-
-  String? _normalizeNextPageUrl(String? url) {
-    if (url == null) return null;
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
-    final nextUri = Uri.tryParse(trimmed);
-    if (nextUri == null) return null;
-    final baseUri = Uri.parse(ApiConfig.baseUrl);
-    return nextUri
-        .replace(
-          scheme: baseUri.scheme,
-          host: baseUri.host,
-          port: baseUri.hasPort ? baseUri.port : null,
-        )
-        .toString();
   }
 
   String _formatDate(DateTime date) {
@@ -176,7 +159,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       if (!mounted) return;
       setState(() {
         _comments = page.data;
-        _commentsNextUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _commentsNextUrl = page.nextPageUrl;
         _commentsLoading = false;
       });
     } catch (_) {
@@ -189,8 +172,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   }
 
   Future<void> _loadMoreComments() async {
-    final url = _normalizeNextPageUrl(_commentsNextUrl);
-    if (url == null) return;
+    final url = _commentsNextUrl;
+    if (url == null || _commentsLoadingMore) return;
     setState(() => _commentsLoadingMore = true);
     try {
       final Paginated<NewsComment> page = await CommentsRepository.instance
@@ -198,7 +181,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       if (!mounted) return;
       setState(() {
         _comments = [..._comments, ...page.data];
-        _commentsNextUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _commentsNextUrl = page.nextPageUrl;
         _commentsLoadingMore = false;
       });
     } catch (_) {

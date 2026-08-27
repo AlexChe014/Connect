@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 
-import '../config/api_config.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../services/paginated.dart';
+import 'app_loading.dart';
 import 'chat_avatar.dart';
 
 /// Поиск и выбор сотрудника (`/user/filter`) с debounce и пагинацией.
@@ -57,8 +57,39 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
   bool _isLoading = true;
   bool _isLoadingMore = false;
   String? _nextPageUrl;
+  int _currentPage = 1;
+  int? _lastPage;
   String _appliedQ = '';
   Timer? _debounce;
+
+  bool get _hasMore {
+    if (_nextPageUrl != null) return true;
+    if (_lastPage != null) return _currentPage < _lastPage!;
+    return false;
+  }
+
+  List<StaffUser> _appendUnique(
+    List<StaffUser> current,
+    List<StaffUser> incoming,
+  ) {
+    if (incoming.isEmpty) return current;
+    final seen = current.map((u) => u.id).toSet();
+    final extra = incoming
+        .where((u) => u.id.isNotEmpty && seen.add(u.id))
+        .toList(growable: false);
+    if (extra.isEmpty) return current;
+    return [...current, ...extra];
+  }
+
+  void _scheduleFillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      if (_isLoading || _isLoadingMore || !_hasMore) return;
+      if (_scrollController.position.maxScrollExtent <= 80) {
+        _loadMore();
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -79,22 +110,6 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
     super.dispose();
   }
 
-  String? _normalizeNextPageUrl(String? url) {
-    if (url == null) return null;
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
-    final nextUri = Uri.tryParse(trimmed);
-    if (nextUri == null) return null;
-    final baseUri = Uri.parse(ApiConfig.baseUrl);
-    return nextUri
-        .replace(
-          scheme: baseUri.scheme,
-          host: baseUri.host,
-          port: baseUri.hasPort ? baseUri.port : null,
-        )
-        .toString();
-  }
-
   void _scheduleSearch() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 450), () {
@@ -108,7 +123,7 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_isLoading || _isLoadingMore) return;
-    if (_nextPageUrl == null) return;
+    if (!_hasMore) return;
     final position = _scrollController.position;
     if (position.pixels >= position.maxScrollExtent - 200) {
       _loadMore();
@@ -120,6 +135,8 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
       _isLoading = true;
       _isLoadingMore = false;
       _nextPageUrl = null;
+      _currentPage = 1;
+      _lastPage = null;
       _items = [];
     });
 
@@ -130,9 +147,12 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
       if (!mounted) return;
       setState(() {
         _items = page.data;
-        _nextPageUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _nextPageUrl = page.nextPageUrl;
+        _currentPage = page.currentPage;
+        _lastPage = page.lastPage;
         _isLoading = false;
       });
+      _scheduleFillViewport();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -141,20 +161,32 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
   }
 
   Future<void> _loadMore() async {
-    final url = _normalizeNextPageUrl(_nextPageUrl);
-    if (url == null) return;
+    if (_isLoadingMore || !_hasMore) return;
+    final url = _nextPageUrl;
 
     setState(() => _isLoadingMore = true);
     try {
-      final Paginated<StaffUser> page = await UsersRepository.instance.getPage(
-        url: url,
-      );
+      final Paginated<StaffUser> page = url != null
+          ? await UsersRepository.instance.getPage(url: url)
+          : await UsersRepository.instance.getPage(
+              q: _appliedQ.isEmpty ? null : _appliedQ,
+              page: _currentPage + 1,
+            );
       if (!mounted) return;
+      final previousLength = _items.length;
+      final merged = _appendUnique(_items, page.data);
       setState(() {
-        _items = [..._items, ...page.data];
-        _nextPageUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _items = merged;
+        _nextPageUrl = page.nextPageUrl;
+        _currentPage = page.currentPage;
+        _lastPage = page.lastPage;
         _isLoadingMore = false;
+        if (merged.length == previousLength || page.data.isEmpty) {
+          _nextPageUrl = null;
+          _lastPage = _currentPage;
+        }
       });
+      _scheduleFillViewport();
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingMore = false);
@@ -229,7 +261,14 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
             const SizedBox(height: 8),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CupertinoActivityIndicator())
+                  ? ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: 8,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (context, index) =>
+                          const AppSkeletonCardTile(),
+                    )
                   : _items.isEmpty
                   ? Center(
                       child: Text(

@@ -1,3 +1,4 @@
+import 'package:connect/config/api_config.dart';
 import 'package:connect/config/routes/comments_routes.dart';
 import 'package:connect/models/news_comment.dart';
 import 'package:connect/services/api_client.dart';
@@ -74,7 +75,9 @@ class CommentsRepository {
         return Paginated<NewsComment>(
           data: items,
           currentPage: 1,
-          nextPageUrl: map['next_page_url'] as String?,
+          nextPageUrl: ApiConfig.normalizeNextPageUrl(
+            map['next_page_url']?.toString(),
+          ),
           prevPageUrl: map['prev_page_url'] as String?,
           path: map['path'] as String?,
           perPage: (map['per_page'] as num?)?.toInt() ?? items.length,

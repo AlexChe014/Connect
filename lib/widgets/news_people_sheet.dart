@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_icons.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
+import 'app_loading.dart';
 
 enum NewsPeopleKind { likers, viewers }
 
@@ -98,7 +99,7 @@ class _NewsPeopleSheetState extends State<NewsPeopleSheet> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppPageLoader();
     }
     if (_error != null) {
       return Center(

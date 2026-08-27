@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../config/api_config.dart';
 import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/chat_service.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
 import 'employee_detail_screen.dart';
 
@@ -30,27 +30,40 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   bool _isInitialLoading = true;
   bool _isLoadingMore = false;
   String? _nextPageUrl;
+  int _currentPage = 1;
+  int? _lastPage;
 
   String _appliedQ = '';
 
   Timer? _debounce;
 
-  String? _normalizeNextPageUrl(String? url) {
-    if (url == null) return null;
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return null;
+  bool get _hasMore {
+    if (_nextPageUrl != null) return true;
+    if (_lastPage != null) return _currentPage < _lastPage!;
+    return false;
+  }
 
-    final nextUri = Uri.tryParse(trimmed);
-    if (nextUri == null) return null;
+  List<StaffUser> _appendUnique(
+    List<StaffUser> current,
+    List<StaffUser> incoming,
+  ) {
+    if (incoming.isEmpty) return current;
+    final seen = current.map((u) => u.id).toSet();
+    final extra = incoming
+        .where((u) => u.id.isNotEmpty && seen.add(u.id))
+        .toList(growable: false);
+    if (extra.isEmpty) return current;
+    return [...current, ...extra];
+  }
 
-    final baseUri = Uri.parse(ApiConfig.baseUrl);
-    return nextUri
-        .replace(
-          scheme: baseUri.scheme,
-          host: baseUri.host,
-          port: baseUri.hasPort ? baseUri.port : null,
-        )
-        .toString();
+  void _scheduleFillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      if (_isInitialLoading || _isLoadingMore || !_hasMore) return;
+      if (_scrollController.position.maxScrollExtent <= 80) {
+        _loadMore();
+      }
+    });
   }
 
   @override
@@ -84,7 +97,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_isInitialLoading || _isLoadingMore) return;
-    if (_nextPageUrl == null) return;
+    if (!_hasMore) return;
 
     final position = _scrollController.position;
     if (position.pixels >= position.maxScrollExtent - 240) {
@@ -97,6 +110,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       _isInitialLoading = true;
       _isLoadingMore = false;
       _nextPageUrl = null;
+      _currentPage = 1;
+      _lastPage = null;
       _items = [];
     });
 
@@ -107,9 +122,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       if (!mounted) return;
       setState(() {
         _items = page.data;
-        _nextPageUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _nextPageUrl = page.nextPageUrl;
+        _currentPage = page.currentPage;
+        _lastPage = page.lastPage;
         _isInitialLoading = false;
       });
+      _scheduleFillViewport();
     } catch (_) {
       if (!mounted) return;
       setState(() => _isInitialLoading = false);
@@ -120,18 +138,32 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
     final url = _nextPageUrl;
-    if (url == null || _isLoadingMore) return;
 
     setState(() => _isLoadingMore = true);
     try {
-      final page = await UsersRepository.instance.getPage(url: url);
+      final page = url != null
+          ? await UsersRepository.instance.getPage(url: url)
+          : await UsersRepository.instance.getPage(
+              q: _appliedQ.isEmpty ? null : _appliedQ,
+              page: _currentPage + 1,
+            );
       if (!mounted) return;
+      final previousLength = _items.length;
+      final merged = _appendUnique(_items, page.data);
       setState(() {
-        _items = [..._items, ...page.data];
-        _nextPageUrl = _normalizeNextPageUrl(page.nextPageUrl);
+        _items = merged;
+        _nextPageUrl = page.nextPageUrl;
+        _currentPage = page.currentPage;
+        _lastPage = page.lastPage;
         _isLoadingMore = false;
+        if (merged.length == previousLength || page.data.isEmpty) {
+          _nextPageUrl = null;
+          _lastPage = _currentPage;
+        }
       });
+      _scheduleFillViewport();
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoadingMore = false);
@@ -181,7 +213,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         sliver: SliverList.separated(
           itemCount: 6,
           separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) => const _EmployeeTileSkeleton(),
+          itemBuilder: (context, index) => const AppSkeletonCardTile(),
         ),
       );
     }
@@ -379,23 +411,6 @@ class _EmployeeTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _EmployeeTileSkeleton extends StatelessWidget {
-  const _EmployeeTileSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
       ),
     );
   }

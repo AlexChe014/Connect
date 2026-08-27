@@ -121,4 +121,40 @@ class ApiConfig {
         )
         .toString();
   }
+
+  /// Приводит Laravel `next_page_url` к текущему [baseUrl].
+  ///
+  /// `Uri.replace(port: null)` в Dart **не сбрасывает** порт исходного URL —
+  /// из‑за этого пагинация ломалась, если бэкенд отдавал `localhost:8000`.
+  static String? normalizeNextPageUrl(String? url) {
+    if (url == null) return null;
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return null;
+
+    final nextUri = Uri.tryParse(trimmed);
+    if (nextUri == null) return null;
+
+    final baseUri = Uri.parse(baseUrl);
+    var path = nextUri.path;
+    if (path.isEmpty || path == '/') {
+      path = baseUri.path;
+    } else {
+      final basePath = baseUri.path;
+      if (basePath.isNotEmpty &&
+          basePath != '/' &&
+          !path.startsWith(basePath)) {
+        final suffix = path.startsWith('/') ? path : '/$path';
+        path = '$basePath$suffix';
+      }
+    }
+
+    return Uri(
+      scheme: baseUri.scheme,
+      userInfo: baseUri.userInfo,
+      host: baseUri.host,
+      port: baseUri.hasPort ? baseUri.port : null,
+      path: path,
+      query: nextUri.hasQuery ? nextUri.query : null,
+    ).toString();
+  }
 }

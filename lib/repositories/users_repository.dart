@@ -12,8 +12,9 @@ class UsersRepository {
     String? url,
     String? q,
     String? dep,
+    int page = 1,
   }) async {
-    final requestUrl = url ?? _buildFilterUrl(q: q, dep: dep, page: 1);
+    final requestUrl = url ?? _buildFilterUrl(q: q, dep: dep, page: page);
     final decoded = await ApiClient.instance.get(requestUrl);
 
     return ApiPaginatedEnvelope.unwrapPaginated<StaffUser>(
