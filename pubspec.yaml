@@ -119,5 +119,6 @@ flutter_launcher_icons:
   windows:
     generate: true
   image_path: assets/branding/app_icon.png
-  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_background: "#000000"
   adaptive_icon_foreground: assets/branding/app_icon.png
+  background_color_ios: "#000000"

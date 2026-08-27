@@ -8,7 +8,7 @@ abstract final class BrandingAssets {
   BrandingAssets._();
 
   /// Исходник для `flutter_launcher_icons` — иконка на рабочем столе / в лончере.
-  static const String appIconPng = 'assets/branding/app_icon.jpg';
+  static const String appIconPng = 'assets/branding/app_icon.png';
 
   /// Логотип на экране входа и в панели навигации.
   static const String loginLogoPng = 'assets/branding/login_logo.jpg';
