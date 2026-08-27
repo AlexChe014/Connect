@@ -5,6 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/bookings/booking_detail.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
+import '../repositories/connector_repository.dart';
+import '../services/api_client.dart';
+import '../utils/connector_launch.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
@@ -180,9 +183,38 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
   }
 
   Future<void> _openLink(String url) async {
+    final room = _connectorRoomFromUrl(url);
+    if (room != null) {
+      try {
+        final session = await ConnectorRepository.instance.join(room);
+        await openConnectorSession(session);
+        return;
+      } catch (e) {
+        if (!mounted) return;
+        final message = e is ApiException
+            ? e.message
+            : 'Не удалось подключиться к конференции';
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(SnackBar(content: Text(message)));
+        return;
+      }
+    }
+
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  /// Извлекает room UUID из `…/connector/{room}`.
+  String? _connectorRoomFromUrl(String url) {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return null;
+    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    final idx = segments.indexOf('connector');
+    if (idx < 0 || idx + 1 >= segments.length) return null;
+    final room = segments[idx + 1].trim();
+    return room.isEmpty ? null : room;
   }
 
   Widget _iconBadge(IconData icon, Color color) {

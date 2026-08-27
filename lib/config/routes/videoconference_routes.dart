@@ -1,5 +1,9 @@
 import '../api_config.dart';
 
+/// Устаревшие маршруты видеоконференций.
+///
+/// Новый контракт — [ConnectorRoutes]. Эти URL сохранены для обратной
+/// совместимости, пока бэкенд не мигрирует клиентов на `/connector/*`.
 class VideoconferenceRoutes {
   VideoconferenceRoutes._();
 

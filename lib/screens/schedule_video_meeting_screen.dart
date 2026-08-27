@@ -1,16 +1,16 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 
-import '../models/bookings/create_booking_request.dart';
+import '../models/connector/schedule_connector_request.dart';
 import '../models/staff_user.dart';
-import '../repositories/bookings_repository.dart';
-import '../repositories/videoconference_repository.dart';
+import '../repositories/connector_repository.dart';
 import '../services/api_client.dart';
+import '../services/connector_invite_service.dart';
 import '../utils/booking_time_utils.dart';
 import '../widgets/booking_pickers.dart';
 import '../widgets/selected_staff_field.dart';
 
-/// Планирование видеовстречи как записи Booking (без физического объекта).
+/// Планирование видеовстречи через `POST /connector/schedule`.
 class ScheduleVideoMeetingScreen extends StatefulWidget {
   const ScheduleVideoMeetingScreen({super.key});
 
@@ -58,9 +58,11 @@ class _ScheduleVideoMeetingScreenState
 
   List<DateTime> get _slots => BookingTimeUtils.slotsForDate(_bookingDate);
 
-  DateTime get _startDateTime => _slots[_startSlotIndex.clamp(0, _slots.length - 1)];
+  DateTime get _startDateTime =>
+      _slots[_startSlotIndex.clamp(0, _slots.length - 1)];
 
-  DateTime get _endDateTime => _slots[_endSlotIndex.clamp(0, _slots.length - 1)];
+  DateTime get _endDateTime =>
+      _slots[_endSlotIndex.clamp(0, _slots.length - 1)];
 
   int get _minStartIndex =>
       BookingTimeUtils.minStartIndex(_slots, _bookingDate);
@@ -97,25 +99,12 @@ class _ScheduleVideoMeetingScreenState
       final startSec = _startDateTime.millisecondsSinceEpoch ~/ 1000;
       final endSec = _endDateTime.millisecondsSinceEpoch ~/ 1000;
 
-      String? link;
-      try {
-        final meeting = await VideoconferenceRepository.instance.create(
-          topic: theme,
-          startSeconds: startSec,
-        );
-        link = meeting.url;
-      } catch (_) {
-        // Если отдельный API недоступен — попросим портал сгенерировать ссылку.
-      }
-
-      await BookingsRepository.instance.createBooking(
-        CreateBookingRequest(
+      final session = await ConnectorRepository.instance.schedule(
+        ScheduleConnectorRequest(
           theme: theme,
+          description: _descriptionController.text.trim(),
           datetimeStartSeconds: startSec,
           datetimeEndSeconds: endSec,
-          description: _descriptionController.text.trim(),
-          link: link,
-          generateLink: link == null || link.isEmpty,
           userIds: _participants
               .map((u) => u.idAsInt)
               .whereType<int>()
@@ -123,9 +112,24 @@ class _ScheduleVideoMeetingScreenState
         ),
       );
 
+      var invited = 0;
+      if (_participants.isNotEmpty) {
+        invited = await ConnectorInviteService.instance.inviteUsers(
+          session: session,
+          users: _participants,
+          topic: theme,
+        );
+      }
+
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Видеовстреча запланирована')),
+        SnackBar(
+          content: Text(
+            invited > 0
+                ? 'Встреча создана, приглашения в чат: $invited'
+                : 'Видеовстреча запланирована',
+          ),
+        ),
       );
       Navigator.pop(context, true);
     } catch (e) {
@@ -242,12 +246,23 @@ class _ScheduleVideoMeetingScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: SelectedStaffField(
+                  label: 'Участники',
                   participants: _participants,
                   onUserAdded: (user) =>
                       setState(() => _participants = [..._participants, user]),
                   onUserRemoved: (user) => setState(
                     () => _participants =
                         _participants.where((p) => p.id != user.id).toList(),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                child: Text(
+                  'Участникам в личный чат придёт ссылка на встречу.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ),

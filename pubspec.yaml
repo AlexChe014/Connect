@@ -57,6 +57,7 @@ dependencies:
   flutter_quill: ^11.5.1
   vsc_quill_delta_to_html: ^1.0.5
   dart_jsonwebtoken: ^3.4.1
+  jitsi_meet_flutter_sdk: ^13.1.1
 
 dev_dependencies:
   flutter_test:

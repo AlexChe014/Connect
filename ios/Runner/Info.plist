@@ -29,13 +29,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Камера нужна, чтобы сотрудники могли делать фото и снимать короткие видео для сообщений в корпоративных чатах Connect.</string>
+	<string>Камера нужна для фото и видео в чатах, а также для видеоконференций Connect.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Доступ к галерее нужен, чтобы прикреплять фото и изображения к сообщениям в чатах и к корпоративным материалам.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Разрешение на сохранение нужно, чтобы сохранять полученные в чатах и документах изображения в галерею устройства.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Микрофон используется при записи видеосообщения в корпоративном чате Connect.</string>
+	<string>Микрофон используется для видеосообщений в чате и для видеоконференций Connect.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Геолокация нужна, чтобы подтвердить, что вы находитесь на территории компании при использовании функций, связанных с присутствием на рабочем месте.</string>
 	<key>UIApplicationSceneManifest</key>
