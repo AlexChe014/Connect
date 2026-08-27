@@ -6,6 +6,7 @@ import 'package:connect/services/chat_service.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
@@ -72,10 +73,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _service.addListener(_onMsg);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _service.loadMessages(widget.chat.id, force: true);
-    });
+    _service.loadMessages(widget.chat.id, force: true);
   }
 
   @override
@@ -211,7 +209,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             children: [
               Expanded(
                 child: loading && list.isEmpty
-                    ? const Center(child: CupertinoActivityIndicator(radius: 14))
+                    ? const AppPageLoader()
                     : loadError != null && list.isEmpty
                     ? AppEmptyState(
                         icon: CupertinoIcons.exclamationmark_triangle,

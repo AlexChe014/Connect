@@ -1,5 +1,6 @@
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -16,18 +17,25 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
   final _selected = <int>{};
   bool _creating = false;
   String? _nameError;
+  final _chat = ChatService.instance;
 
   @override
   void initState() {
     super.initState();
-    ChatService.instance.loadContacts();
+    _chat.addListener(_onChat);
+    _chat.loadContacts();
   }
 
   @override
   void dispose() {
+    _chat.removeListener(_onChat);
     _nameCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
+  }
+
+  void _onChat() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _create() async {
@@ -75,9 +83,8 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final contacts = ChatService.instance.contacts
-        .where((c) => c.userId > 0)
-        .toList();
+    final contacts = _chat.contacts.where((c) => c.userId > 0).toList();
+    final contactsLoading = _chat.isContactsLoading && contacts.isEmpty;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
@@ -164,7 +171,20 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              if (contacts.isEmpty)
+              if (contactsLoading)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    children: List.generate(
+                      6,
+                      (index) => const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: AppSkeletonCardTile(),
+                      ),
+                    ),
+                  ),
+                )
+              else if (contacts.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: Text(

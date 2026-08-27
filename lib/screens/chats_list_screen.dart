@@ -56,11 +56,8 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   void initState() {
     super.initState();
     _chat.addListener(_onChats);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _chat.init();
-      _chat.loadContacts();
-    });
+    _chat.init();
+    _chat.loadContacts();
   }
 
   @override
@@ -83,7 +80,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         sliver: SliverList.separated(
           itemCount: 6,
           separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) => const AppSkeletonListTile(),
+          itemBuilder: (context, index) => const AppSkeletonCardTile(),
         ),
       );
     }
@@ -210,7 +207,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.7,
-          child: _NewDirectChatSheet(contacts: _chat.contacts),
+          child: const _NewDirectChatSheet(),
         );
       },
     );
@@ -278,13 +275,40 @@ class ChatContactChoice {
   final String? avatarUrl;
 }
 
-class _NewDirectChatSheet extends StatelessWidget {
-  const _NewDirectChatSheet({required this.contacts});
+class _NewDirectChatSheet extends StatefulWidget {
+  const _NewDirectChatSheet();
 
-  final List<ChatContact> contacts;
+  @override
+  State<_NewDirectChatSheet> createState() => _NewDirectChatSheetState();
+}
+
+class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
+  final _chat = ChatService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _chat.addListener(_onChange);
+    if (_chat.contacts.isEmpty) {
+      _chat.loadContacts();
+    }
+  }
+
+  @override
+  void dispose() {
+    _chat.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
+    final contacts = _chat.contacts;
+    final loading = _chat.isContactsLoading && contacts.isEmpty;
+
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -301,7 +325,16 @@ class _NewDirectChatSheet extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: contacts.isEmpty
+            child: loading
+                ? ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: 8,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, index) =>
+                        const AppSkeletonCardTile(),
+                  )
+                : contacts.isEmpty
                 ? const Center(
                     child: Text(
                       'Нет доступных контактов',

@@ -78,11 +78,13 @@ class ChatService extends ChangeNotifier {
   final Map<String, bool> _messagesLoading = {};
   final Map<String, String?> _messagesError = {};
 
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _isContactsLoading = false;
   String? _error;
 
   List<Chat> get chats => List.unmodifiable(_chats);
   bool get isLoading => _isLoading;
+  bool get isContactsLoading => _isContactsLoading;
   String? get error => _error;
 
   String? _lastActionError;
@@ -110,6 +112,9 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     await _refreshSelfProfile();
     await refreshChats();
   }
@@ -118,6 +123,7 @@ class ChatService extends ChangeNotifier {
     final userId = _selfUserId;
     if (userId == null) {
       _error = 'Не удалось определить текущего пользователя';
+      _isLoading = false;
       notifyListeners();
       return;
     }
@@ -143,8 +149,6 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> loadMessages(String chatId, {bool force = false}) async {
-    final userId = _selfUserId;
-    if (userId == null) return;
     if (!force && (_messages[chatId]?.isNotEmpty ?? false)) return;
 
     _messagesLoading[chatId] = true;
@@ -152,6 +156,15 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (_selfUserId == null) {
+        await _refreshSelfProfile();
+      }
+      final userId = _selfUserId;
+      if (userId == null) {
+        _messagesError[chatId] = 'Не удалось определить текущего пользователя';
+        return;
+      }
+
       final page = await ChatRepository.instance.getMessages(
         int.parse(chatId),
         currentUserId: userId,
@@ -174,15 +187,49 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> loadContacts() async {
+    if (_isContactsLoading) return;
+    _isContactsLoading = true;
+    notifyListeners();
     try {
-      final page = await UsersRepository.instance.getPage();
-      _contacts = page.data
-          .where((u) => u.idAsInt != null && u.idAsInt != _selfUserId)
-          .map(ChatContact.fromStaffUser)
-          .toList();
-      notifyListeners();
+      final all = <ChatContact>[];
+      String? nextUrl;
+      var pageNum = 1;
+      while (true) {
+        final page = await UsersRepository.instance.getPage(
+          url: nextUrl,
+          page: pageNum,
+        );
+        all.addAll(
+          page.data
+              .where((u) => u.idAsInt != null && u.idAsInt != _selfUserId)
+              .map(ChatContact.fromStaffUser),
+        );
+        final seen = <int>{};
+        _contacts = [
+          for (final c in all)
+            if (c.userId > 0 && seen.add(c.userId)) c,
+        ];
+        notifyListeners();
+
+        if (page.data.isEmpty || pageNum >= 80) break;
+
+        nextUrl = page.nextPageUrl;
+        if (nextUrl != null) {
+          pageNum = page.currentPage + 1;
+          continue;
+        }
+        if (page.lastPage != null && page.currentPage < page.lastPage!) {
+          if (page.currentPage < pageNum) break;
+          pageNum = page.currentPage + 1;
+          nextUrl = null;
+          continue;
+        }
+        break;
+      }
     } catch (_) {
-      _contacts = const [];
+      if (_contacts.isEmpty) _contacts = const [];
+    } finally {
+      _isContactsLoading = false;
       notifyListeners();
     }
   }
