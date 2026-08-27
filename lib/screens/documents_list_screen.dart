@@ -7,6 +7,7 @@ import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import 'document_detail_screen.dart';
 
@@ -437,7 +438,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CupertinoActivityIndicator(radius: 14));
+      return const AppSkeletonList(count: 8);
     }
 
     if (_errorMessage != null) {

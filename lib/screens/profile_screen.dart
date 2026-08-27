@@ -10,6 +10,7 @@ import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/push_notification_service.dart';
 import '../utils/media_url_utils.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/status_bubble.dart';
@@ -323,7 +324,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isLoading) {
       return const SliverFillRemaining(
         hasScrollBody: false,
-        child: Center(child: CupertinoActivityIndicator(radius: 14)),
+        child: AppPageLoader(),
       );
     }
 

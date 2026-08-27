@@ -8,6 +8,7 @@ import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/booking_pickers.dart';
 import 'compose_mail_screen.dart';
 import 'mail_message_screen.dart';
@@ -177,8 +178,15 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         child: SafeArea(
           child: Stack(
             children: [
-              _isLoadingFolders && _isLoadingMessages
-                  ? const Center(child: CupertinoActivityIndicator(radius: 14))
+              (_isLoadingFolders || _isLoadingMessages) && _messages.isEmpty
+                  ? ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      itemCount: 8,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (context, index) =>
+                          const AppSkeletonCardTile(),
+                    )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [

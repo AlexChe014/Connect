@@ -10,6 +10,7 @@ import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/booking_pickers.dart';
 import '../widgets/mail_body_content.dart';
 import 'compose_mail_screen.dart';
@@ -267,7 +268,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         ),
         child: SafeArea(
           child: _isLoading
-              ? const Center(child: CupertinoActivityIndicator(radius: 14))
+              ? const AppPageLoader()
               : message == null
               ? const AppEmptyState(message: 'Письмо не найдено')
               : ListView(

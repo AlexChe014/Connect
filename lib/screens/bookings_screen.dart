@@ -11,6 +11,7 @@ import 'package:connect/repositories/infrastructure_repository.dart';
 import 'package:connect/screens/create_booking_screen.dart';
 import 'package:connect/utils/booking_time_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/booking_pickers.dart';
 
@@ -311,7 +312,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       return const [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: CupertinoActivityIndicator(radius: 14)),
+          child: AppPageLoader(),
         ),
       ];
     }

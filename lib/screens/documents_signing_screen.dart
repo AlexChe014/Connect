@@ -230,7 +230,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
           sliver: SliverList.separated(
             itemCount: 6,
             separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => const AppSkeletonListTile(),
+            itemBuilder: (context, index) => const AppSkeletonCardTile(),
           ),
         ),
       ];

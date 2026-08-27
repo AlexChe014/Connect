@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../config/app_theme.dart';
@@ -133,6 +134,69 @@ class AppSkeletonList extends StatelessWidget {
       itemCount: count,
       itemBuilder: (context, index) =>
           AppSkeletonListTile(hasLeading: hasLeading),
+    );
+  }
+}
+
+/// Крупный центрированный индикатор первой загрузки (не список).
+class AppPageLoader extends StatelessWidget {
+  const AppPageLoader({super.key, this.label = 'Загрузка…'});
+
+  final String? label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CupertinoActivityIndicator(radius: 14),
+          if (label != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              label!,
+              style: TextStyle(
+                fontSize: 15,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Карточка-скелетон в стиле списков (чаты, сотрудники, почта).
+class AppSkeletonCardTile extends StatelessWidget {
+  const AppSkeletonCardTile({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: const Row(
+        children: [
+          AppSkeletonBox(width: 48, height: 48, borderRadius: 24),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeletonBox(width: 160, height: 14, borderRadius: 6),
+                SizedBox(height: 8),
+                AppSkeletonBox(height: 10, borderRadius: 6),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

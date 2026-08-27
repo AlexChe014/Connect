@@ -6,6 +6,7 @@ import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 
 class DocumentDetailScreen extends StatefulWidget {
   const DocumentDetailScreen({
@@ -322,7 +323,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CupertinoActivityIndicator(radius: 14));
+      return const AppPageLoader();
     }
 
     if (_errorMessage != null) {

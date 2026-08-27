@@ -10,6 +10,7 @@ import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import 'booking_detail_sheet.dart';
 import 'bookings_screen.dart';
@@ -26,7 +27,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime? _selectedDay;
 
   int? _userId;
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _error;
   final Map<DateTime, List<UserBooking>> _eventsByDay = {};
 
@@ -422,7 +423,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         .resolveFrom(context)
                         .withValues(alpha: 0.5),
                     alignment: Alignment.center,
-                    child: const CupertinoActivityIndicator(radius: 14),
+                    child: const AppPageLoader(),
                   ),
                 ),
               ),
