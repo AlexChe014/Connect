@@ -5,6 +5,8 @@ class DeviceTokenRepository {
   DeviceTokenRepository._();
   static final DeviceTokenRepository instance = DeviceTokenRepository._();
 
+  /// `POST /devices/fcm`. Пользователь берётся из Bearer-токена,
+  /// клиент передаёт только FCM-токен устройства и платформу.
   Future<void> registerToken({
     required String token,
     required String platform,

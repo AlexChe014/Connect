@@ -145,17 +145,47 @@ class PushNotificationService {
     );
   }
 
+  /// После успешного логина: разрешение → FCM-токен в БД → топики.
+  Future<void> registerAfterLogin() async {
+    await requestPermissions();
+    await registerCurrentDevice();
+  }
+
   Future<void> registerCurrentDevice() async {
-    if (!_initialized) return;
+    if (kIsWeb) return;
+    if (!_initialized) {
+      await init();
+    }
+    if (!_initialized) {
+      AppLogger.d(
+        'Skip FCM register: Firebase is not initialized',
+        name: 'push',
+      );
+      return;
+    }
+    if (!AuthService.instance.isAuthenticated) {
+      AppLogger.d('Skip FCM register: user is not authenticated', name: 'push');
+      return;
+    }
 
     try {
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token == null || token.isEmpty) return;
+      final token = await _resolveFcmToken();
+      if (token == null || token.isEmpty) {
+        AppLogger.d(
+          'Skip FCM register: empty FCM token (APNs/Google Play not ready?)',
+          name: 'push',
+        );
+        return;
+      }
 
       _currentToken = token;
       await DeviceTokenRepository.instance.registerToken(
         token: token,
         platform: _platformName(),
+      );
+      AppLogger.d(
+        'FCM token registered on backend (${_platformName()})',
+        name: 'push',
       );
       await AppNavigationService.processPendingNavigation();
     } catch (e, st) {
@@ -165,6 +195,39 @@ class PushNotificationService {
         error: e,
         stackTrace: st,
       );
+    }
+  }
+
+  /// iOS отдаёт FCM-токен только после APNs. Без ожидания `getToken()`
+  /// часто возвращает null или кидает `apns-token-not-set`.
+  Future<String?> _resolveFcmToken() async {
+    if (Platform.isIOS) {
+      await _waitForApnsToken();
+    }
+
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token != null && token.isNotEmpty) return token;
+      } catch (e) {
+        AppLogger.d(
+          'FCM getToken attempt ${attempt + 1} failed: $e',
+          name: 'push',
+        );
+      }
+      await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+      if (Platform.isIOS) {
+        await _waitForApnsToken();
+      }
+    }
+    return null;
+  }
+
+  Future<void> _waitForApnsToken() async {
+    for (var i = 0; i < 6; i++) {
+      final apns = await FirebaseMessaging.instance.getAPNSToken();
+      if (apns != null && apns.isNotEmpty) return;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
     }
   }
 

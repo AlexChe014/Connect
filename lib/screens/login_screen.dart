@@ -5,6 +5,7 @@ import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../services/auth_service.dart';
 import '../services/location_gate_service.dart';
+import '../services/notification_preferences_service.dart';
 import '../services/push_notification_service.dart';
 import '../utils/app_feedback.dart';
 
@@ -78,8 +79,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      await PushNotificationService.instance.requestPermissions();
-      await PushNotificationService.instance.registerCurrentDevice();
+      await PushNotificationService.instance.registerAfterLogin();
+      await NotificationPreferencesService.instance.syncAll();
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(
           '/home',

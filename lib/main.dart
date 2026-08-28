@@ -49,7 +49,7 @@ class _ConnectAppState extends State<ConnectApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (AuthService.instance.isAuthenticated) {
-        await PushNotificationService.instance.requestPermissions();
+        await PushNotificationService.instance.registerAfterLogin();
         await NotificationPreferencesService.instance.syncAll();
         await LocationGateService.instance.verifyForCurrentUser();
       }
