@@ -153,6 +153,10 @@ class ChatRepository {
     );
   }
 
+  Future<void> markRead(int chatId) async {
+    await ApiClient.instance.post(ChatRoutes.readUrl(chatId));
+  }
+
   Map<String, dynamic>? _asJsonMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);

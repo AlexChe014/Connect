@@ -17,6 +17,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
+import '../widgets/menu_button.dart';
 import '../widgets/news_people_sheet.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
@@ -357,6 +358,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
             slivers: [
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('Лента'),
+                leading: const MenuButton(),
                 backgroundColor: CupertinoColors.systemGroupedBackground
                     .withValues(alpha: 0.9),
                 border: null,

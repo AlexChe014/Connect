@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connect/models/chat.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
@@ -5,6 +7,7 @@ import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
+import 'package:connect/widgets/menu_button.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -149,6 +152,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
               slivers: [
                 CupertinoSliverNavigationBar(
                   largeTitle: const Text('Чаты'),
+                  leading: const MenuButton(),
                   backgroundColor: CupertinoColors.systemGroupedBackground
                       .withValues(alpha: 0.9),
                   border: null,
@@ -284,6 +288,12 @@ class _NewDirectChatSheet extends StatefulWidget {
 
 class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
   final _chat = ChatService.instance;
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  List<ChatContact> _searchResults = const [];
+  bool _searching = false;
+  int _searchToken = 0;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -292,11 +302,14 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
     if (_chat.contacts.isEmpty) {
       _chat.loadContacts();
     }
+    _searchCtrl.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _chat.removeListener(_onChange);
+    _searchDebounce?.cancel();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -304,10 +317,57 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
     if (mounted) setState(() {});
   }
 
+  void _onSearchChanged() {
+    final query = _searchCtrl.text.trim();
+    setState(() {
+      _search = query.toLowerCase();
+      if (query.isEmpty) {
+        _searchResults = const [];
+        _searching = false;
+      }
+    });
+
+    _searchDebounce?.cancel();
+    if (query.isEmpty) return;
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _runSearch(query);
+    });
+  }
+
+  Future<void> _runSearch(String query) async {
+    final token = ++_searchToken;
+    setState(() => _searching = true);
+    try {
+      final results = await _chat.searchContacts(query);
+      if (!mounted || token != _searchToken) return;
+      setState(() {
+        _searchResults = results;
+        _searching = false;
+      });
+    } catch (_) {
+      if (!mounted || token != _searchToken) return;
+      setState(() => _searching = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final contacts = _chat.contacts;
-    final loading = _chat.isContactsLoading && contacts.isEmpty;
+    final allContacts = _chat.contacts;
+    List<ChatContact> contacts;
+    if (_search.isEmpty) {
+      contacts = allContacts;
+    } else {
+      final byId = <int, ChatContact>{
+        for (final c in allContacts)
+          if (c.fullName.toLowerCase().contains(_search)) c.userId: c,
+      };
+      for (final c in _searchResults) {
+        byId[c.userId] = c;
+      }
+      contacts = byId.values.toList()
+        ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    }
+    final loading = _chat.isContactsLoading && allContacts.isEmpty;
 
     return SafeArea(
       child: Column(
@@ -324,6 +384,13 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: CupertinoSearchTextField(
+              controller: _searchCtrl,
+              placeholder: 'Поиск',
+            ),
+          ),
           Expanded(
             child: loading
                 ? ListView.separated(
@@ -334,11 +401,20 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
                     itemBuilder: (context, index) =>
                         const AppSkeletonCardTile(),
                   )
+                : contacts.isEmpty && _searching
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CupertinoActivityIndicator()),
+                  )
                 : contacts.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'Нет доступных контактов',
-                      style: TextStyle(color: CupertinoColors.secondaryLabel),
+                      allContacts.isEmpty && _search.isEmpty
+                          ? 'Нет доступных контактов'
+                          : 'Ничего не найдено',
+                      style: const TextStyle(
+                        color: CupertinoColors.secondaryLabel,
+                      ),
                     ),
                   )
                 : ListView.builder(
@@ -425,6 +501,34 @@ class _ContactTile extends StatelessWidget {
   }
 }
 
+class _UnreadBadge extends StatelessWidget {
+  const _UnreadBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 20),
+      height: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: CupertinoColors.activeGreen,
+        borderRadius: BorderRadius.all(Radius.circular(10)),
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: CupertinoColors.white,
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatRow extends StatelessWidget {
   const _ChatRow({required this.chat, required this.time, required this.onTap});
 
@@ -490,15 +594,27 @@ class _ChatRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (time.isNotEmpty) ...[
+              if (time.isNotEmpty || chat.unreadCount > 0) ...[
                 const SizedBox(width: 8),
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (time.isNotEmpty)
+                      Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: CupertinoColors.tertiaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    if (chat.unreadCount > 0) ...[
+                      const SizedBox(height: 4),
+                      _UnreadBadge(count: chat.unreadCount),
+                    ],
+                  ],
                 ),
               ],
             ],

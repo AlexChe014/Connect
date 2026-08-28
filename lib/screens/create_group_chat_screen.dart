@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/app_loading.dart';
@@ -14,9 +16,15 @@ class CreateGroupChatScreen extends StatefulWidget {
 class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
   final _nameCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _searchCtrl = TextEditingController();
   final _selected = <int>{};
   bool _creating = false;
   String? _nameError;
+  String _search = '';
+  List<ChatContact> _searchResults = const [];
+  bool _searching = false;
+  int _searchToken = 0;
+  Timer? _searchDebounce;
   final _chat = ChatService.instance;
 
   @override
@@ -24,14 +32,50 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
     super.initState();
     _chat.addListener(_onChat);
     _chat.loadContacts();
+    _searchCtrl.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _chat.removeListener(_onChat);
+    _searchDebounce?.cancel();
     _nameCtrl.dispose();
     _descCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchCtrl.text.trim();
+    setState(() {
+      _search = query.toLowerCase();
+      if (query.isEmpty) {
+        _searchResults = const [];
+        _searching = false;
+      }
+    });
+
+    _searchDebounce?.cancel();
+    if (query.isEmpty) return;
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      _runSearch(query);
+    });
+  }
+
+  Future<void> _runSearch(String query) async {
+    final token = ++_searchToken;
+    setState(() => _searching = true);
+    try {
+      final results = await _chat.searchContacts(query);
+      if (!mounted || token != _searchToken) return;
+      setState(() {
+        _searchResults = results;
+        _searching = false;
+      });
+    } catch (_) {
+      if (!mounted || token != _searchToken) return;
+      setState(() => _searching = false);
+    }
   }
 
   void _onChat() {
@@ -83,8 +127,22 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final contacts = _chat.contacts.where((c) => c.userId > 0).toList();
-    final contactsLoading = _chat.isContactsLoading && contacts.isEmpty;
+    final allContacts = _chat.contacts.where((c) => c.userId > 0).toList();
+    List<ChatContact> contacts;
+    if (_search.isEmpty) {
+      contacts = allContacts;
+    } else {
+      final byId = <int, ChatContact>{
+        for (final c in allContacts)
+          if (c.fullName.toLowerCase().contains(_search)) c.userId: c,
+      };
+      for (final c in _searchResults) {
+        byId[c.userId] = c;
+      }
+      contacts = byId.values.toList()
+        ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    }
+    final contactsLoading = _chat.isContactsLoading && allContacts.isEmpty;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
@@ -118,43 +176,48 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
           fontSize: 16,
         ),
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.only(top: 12, bottom: 32),
+          child: Column(
             children: [
-              CupertinoFormSection.insetGrouped(
-                header: const Text('О ГРУППЕ'),
-                children: [
-                  CupertinoTextFormFieldRow(
-                    controller: _nameCtrl,
-                    prefix: const Text('Название'),
-                    placeholder: 'Например, Отдел продаж',
-                    textCapitalization: TextCapitalization.sentences,
-                    textAlign: TextAlign.end,
-                    autofocus: true,
-                    onChanged: (_) {
-                      if (_nameError != null) {
-                        setState(() => _nameError = null);
-                      }
-                    },
-                  ),
-                  CupertinoTextFormFieldRow(
-                    controller: _descCtrl,
-                    prefix: const Text('Описание'),
-                    placeholder: 'Необязательно',
-                    textCapitalization: TextCapitalization.sentences,
-                    textAlign: TextAlign.end,
-                    maxLines: 2,
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: CupertinoFormSection.insetGrouped(
+                  header: const Text('О ГРУППЕ'),
+                  children: [
+                    CupertinoTextFormFieldRow(
+                      controller: _nameCtrl,
+                      prefix: const Text('Название'),
+                      placeholder: 'Например, Отдел продаж',
+                      textCapitalization: TextCapitalization.sentences,
+                      textAlign: TextAlign.end,
+                      autofocus: true,
+                      onChanged: (_) {
+                        if (_nameError != null) {
+                          setState(() => _nameError = null);
+                        }
+                      },
+                    ),
+                    CupertinoTextFormFieldRow(
+                      controller: _descCtrl,
+                      prefix: const Text('Описание'),
+                      placeholder: 'Необязательно',
+                      textCapitalization: TextCapitalization.sentences,
+                      textAlign: TextAlign.end,
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
               ),
               if (_nameError != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                  child: Text(
-                    _nameError!,
-                    style: const TextStyle(
-                      color: CupertinoColors.systemRed,
-                      fontSize: 13,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _nameError!,
+                      style: const TextStyle(
+                        color: CupertinoColors.systemRed,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ),
@@ -171,59 +234,106 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              if (contactsLoading)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Column(
-                    children: List.generate(
-                      6,
-                      (index) => const Padding(
-                        padding: EdgeInsets.only(bottom: 8),
-                        child: AppSkeletonCardTile(),
-                      ),
-                    ),
-                  ),
-                )
-              else if (contacts.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  child: Text(
-                    'Нет доступных контактов',
-                    style: TextStyle(color: CupertinoColors.secondaryLabel),
-                  ),
-                )
-              else
-                CupertinoListSection.insetGrouped(
-                  children: contacts.map((c) {
-                    final checked = _selected.contains(c.userId);
-                    return CupertinoListTile(
-                      leading: MemberAvatar(
-                        displayName: c.fullName,
-                        avatarUrl: c.avatarUrl,
-                        radius: 18,
-                      ),
-                      title: Text(c.fullName),
-                      trailing: checked
-                          ? const Icon(
-                              CupertinoIcons.checkmark_circle_fill,
-                              color: CupertinoColors.activeBlue,
-                            )
-                          : const Icon(
-                              CupertinoIcons.circle,
-                              color: CupertinoColors.systemGrey3,
-                            ),
-                      onTap: () {
-                        setState(() {
-                          if (checked) {
-                            _selected.remove(c.userId);
-                          } else {
-                            _selected.add(c.userId);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: CupertinoSearchTextField(
+                  controller: _searchCtrl,
+                  placeholder: 'Поиск',
                 ),
+              ),
+              const SizedBox(height: 6),
+              Expanded(
+                child: contactsLoading
+                    ? ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                        itemCount: 6,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) =>
+                            const AppSkeletonCardTile(),
+                      )
+                    : contacts.isEmpty && _searching
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24),
+                        child: Center(child: CupertinoActivityIndicator()),
+                      )
+                    : contacts.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          allContacts.isEmpty && _search.isEmpty
+                              ? 'Нет доступных контактов'
+                              : 'Ничего не найдено',
+                          style: const TextStyle(
+                            color: CupertinoColors.secondaryLabel,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                        itemCount: contacts.length,
+                        itemBuilder: (context, index) {
+                          final c = contacts[index];
+                          final checked = _selected.contains(c.userId);
+                          final isFirst = index == 0;
+                          final isLast = index == contacts.length - 1;
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: CupertinoColors
+                                  .secondarySystemGroupedBackground
+                                  .resolveFrom(context),
+                              borderRadius: BorderRadius.vertical(
+                                top: isFirst
+                                    ? const Radius.circular(10)
+                                    : Radius.zero,
+                                bottom: isLast
+                                    ? const Radius.circular(10)
+                                    : Radius.zero,
+                              ),
+                              border: isLast
+                                  ? null
+                                  : Border(
+                                      bottom: BorderSide(
+                                        color: CupertinoColors.separator
+                                            .resolveFrom(context),
+                                        width: 0.5,
+                                      ),
+                                    ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: CupertinoListTile(
+                              leading: MemberAvatar(
+                                displayName: c.fullName,
+                                avatarUrl: c.avatarUrl,
+                                radius: 18,
+                              ),
+                              title: Text(c.fullName),
+                              trailing: checked
+                                  ? const Icon(
+                                      CupertinoIcons.checkmark_circle_fill,
+                                      color: CupertinoColors.activeBlue,
+                                    )
+                                  : const Icon(
+                                      CupertinoIcons.circle,
+                                      color: CupertinoColors.systemGrey3,
+                                    ),
+                              onTap: () {
+                                setState(() {
+                                  if (checked) {
+                                    _selected.remove(c.userId);
+                                  } else {
+                                    _selected.add(c.userId);
+                                  }
+                                });
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
             ],
           ),
         ),

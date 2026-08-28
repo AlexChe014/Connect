@@ -33,6 +33,7 @@ class Chat {
     this.members = const [],
     this.lastMessagePreview,
     this.lastMessageAt,
+    this.unreadCount = 0,
   });
 
   final String id;
@@ -53,6 +54,8 @@ class Chat {
   final List<ChatMemberSummary> members;
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
+  /// Количество непрочитанных входящих сообщений в чате.
+  final int unreadCount;
 
   bool canManage(int? userId) {
     if (userId == null) return false;
@@ -72,6 +75,7 @@ class Chat {
   Chat copyWithPreview({
     String? lastMessagePreview,
     DateTime? lastMessageAt,
+    int? unreadCount,
   }) {
     return Chat(
       id: id,
@@ -87,6 +91,7 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      unreadCount: unreadCount ?? this.unreadCount,
     );
   }
 
@@ -105,6 +110,26 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview,
       lastMessageAt: lastMessageAt,
+      unreadCount: unreadCount,
+    );
+  }
+
+  Chat copyWithUnreadCount(int unreadCount) {
+    return Chat(
+      id: id,
+      title: title,
+      avatarPath: avatarPath,
+      avatarUrl: avatarUrl,
+      peerAvatarPath: peerAvatarPath,
+      peerAvatarUrl: peerAvatarUrl,
+      peerUserId: peerUserId,
+      isGroup: isGroup,
+      description: description,
+      creatorId: creatorId,
+      members: members,
+      lastMessagePreview: lastMessagePreview,
+      lastMessageAt: lastMessageAt,
+      unreadCount: unreadCount,
     );
   }
 
@@ -118,6 +143,7 @@ class Chat {
     String? peerAvatarUrl,
     String? lastMessagePreview,
     DateTime? lastMessageAt,
+    int? unreadCount,
   }) {
     return Chat(
       id: id,
@@ -133,6 +159,7 @@ class Chat {
       members: members ?? this.members,
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      unreadCount: unreadCount ?? this.unreadCount,
     );
   }
 }

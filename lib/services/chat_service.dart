@@ -186,6 +186,38 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  /// Отмечает входящие сообщения чата как прочитанные — локально (счётчик,
+  /// список сообщений) и на сервере.
+  Future<void> markChatRead(String chatId) async {
+    final chatIntId = int.tryParse(chatId);
+    if (chatIntId == null) return;
+
+    var changed = false;
+
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx >= 0 && _chats[idx].unreadCount > 0) {
+      _chats[idx] = _chats[idx].copyWithUnreadCount(0);
+      changed = true;
+    }
+
+    final list = _messages[chatId];
+    if (list != null) {
+      for (var i = 0; i < list.length; i++) {
+        final m = list[i];
+        if (!m.isOutgoing && !m.isRead) {
+          list[i] = m.copyWithReadState(isRead: true);
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) notifyListeners();
+
+    try {
+      await ChatRepository.instance.markRead(chatIntId);
+    } catch (_) {}
+  }
+
   Future<void> loadContacts() async {
     if (_isContactsLoading) return;
     _isContactsLoading = true;
@@ -232,6 +264,43 @@ class ChatService extends ChangeNotifier {
       _isContactsLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<List<ChatContact>> searchContacts(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final result = <ChatContact>[];
+    final seen = <int>{};
+    String? nextUrl;
+    var pageNum = 1;
+    while (true) {
+      final page = await UsersRepository.instance.getPage(
+        url: nextUrl,
+        q: q,
+        page: pageNum,
+      );
+      for (final u in page.data) {
+        if (u.idAsInt == null || u.idAsInt == _selfUserId) continue;
+        final c = ChatContact.fromStaffUser(u);
+        if (c.userId > 0 && seen.add(c.userId)) result.add(c);
+      }
+
+      if (page.data.isEmpty || pageNum >= 20) break;
+
+      nextUrl = page.nextPageUrl;
+      if (nextUrl != null) {
+        pageNum = page.currentPage + 1;
+        continue;
+      }
+      if (page.lastPage != null && page.currentPage < page.lastPage!) {
+        if (page.currentPage < pageNum) break;
+        pageNum = page.currentPage + 1;
+        nextUrl = null;
+        continue;
+      }
+      break;
+    }
+    return result;
   }
 
   Future<void> _refreshSelfProfile() async {
@@ -366,6 +435,7 @@ class ChatService extends ChangeNotifier {
         _chats[idx] = chat.copyWithDetails(
           avatarPath: prev.avatarPath,
           title: chat.title.isNotEmpty ? chat.title : prev.title,
+          unreadCount: prev.unreadCount,
         );
       }
       notifyListeners();
@@ -398,6 +468,7 @@ class ChatService extends ChangeNotifier {
           avatarPath: prev.avatarPath,
           lastMessagePreview: prev.lastMessagePreview,
           lastMessageAt: prev.lastMessageAt,
+          unreadCount: prev.unreadCount,
         );
       }
       notifyListeners();
@@ -448,6 +519,7 @@ class ChatService extends ChangeNotifier {
           avatarPath: prev.avatarPath,
           lastMessagePreview: prev.lastMessagePreview,
           lastMessageAt: prev.lastMessageAt,
+          unreadCount: prev.unreadCount,
         );
       }
       notifyListeners();
@@ -526,6 +598,7 @@ class ChatService extends ChangeNotifier {
             repliedMessageId: updated.repliedMessageId,
             isRead: updated.isRead,
             authorAvatarUrl: updated.authorAvatarUrl,
+            readByRecipients: list[idx].readByRecipients,
           );
         }
       }
@@ -582,6 +655,7 @@ class ChatService extends ChangeNotifier {
       members: c.members,
       lastMessagePreview: c.lastMessagePreview,
       lastMessageAt: c.lastMessageAt,
+      unreadCount: c.unreadCount,
     );
     notifyListeners();
   }
@@ -623,6 +697,7 @@ class ChatService extends ChangeNotifier {
           repliedMessageId: sent.repliedMessageId,
           isRead: true,
           authorAvatarUrl: sent.authorAvatarUrl,
+          readByRecipients: sent.readByRecipients,
         ),
       );
     } catch (e) {

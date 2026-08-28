@@ -43,6 +43,7 @@ class ChatMapper {
       peerAvatarUrl: peer?.avatarUrl,
       lastMessagePreview: previewMessage?.preview,
       lastMessageAt: previewMessage?.createdAt,
+      unreadCount: _parseInt(json['unread_count']) ?? 0,
     );
   }
 
@@ -137,6 +138,7 @@ class ChatMapper {
       repliedMessageId: _parseInt(json['replied_message_id'])?.toString(),
       isRead: _isReadForUser(json, currentUserId, senderId),
       authorAvatarUrl: authorAvatarUrl,
+      readByRecipients: _isReadByRecipients(json, currentUserId, senderId),
     );
   }
 
@@ -250,6 +252,7 @@ class ChatMapper {
             repliedMessageId: m.repliedMessageId,
             isRead: m.isRead,
             authorAvatarUrl: m.authorAvatarUrl,
+            readByRecipients: m.readByRecipients,
           );
         })
         .toList(growable: false);
@@ -370,6 +373,25 @@ class ChatMapper {
       if (userId == currentUserId) {
         return _parseBool(map['read'], defaultValue: false);
       }
+    }
+    return true;
+  }
+
+  /// Для исходящих сообщений: прочитано ли всеми получателями.
+  static bool _isReadByRecipients(
+    Map<String, dynamic> json,
+    int currentUserId,
+    int? senderId,
+  ) {
+    if (senderId != currentUserId) return false;
+
+    final statuses = json['statuses'];
+    if (statuses is! List || statuses.isEmpty) return false;
+
+    for (final item in statuses) {
+      final map = _asJsonMap(item);
+      if (map == null) continue;
+      if (!_parseBool(map['read'], defaultValue: false)) return false;
     }
     return true;
   }

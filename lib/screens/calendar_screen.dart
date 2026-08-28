@@ -12,6 +12,7 @@ import '../services/auth_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/menu_button.dart';
 import 'booking_detail_sheet.dart';
 import 'bookings_screen.dart';
 
@@ -398,6 +399,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               slivers: [
                 CupertinoSliverNavigationBar(
                   largeTitle: const Text('Календарь'),
+                  leading: const MenuButton(),
                   backgroundColor: CupertinoColors.systemGroupedBackground
                       .withValues(alpha: 0.9),
                   border: null,
