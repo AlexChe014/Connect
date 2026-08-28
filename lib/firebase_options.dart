@@ -2,10 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
-/// Сгенерируйте этот файл командой:
-/// `dart pub global activate flutterfire_cli && flutterfire configure`
-///
-/// До настройки Firebase push-уведомления будут отключены.
+/// Конфигурация Firebase проекта `xonconnect-2a433`.
+/// Перегенерация: `flutterfire configure --project=xonconnect-2a433`
 class DefaultFirebaseOptions {
   static bool get isConfigured =>
       android.apiKey != 'REPLACE_ME' && android.appId != 'REPLACE_ME';
@@ -27,18 +25,18 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA4-sOUG_uWV3DzAufuBjsiyww4W5dQYmc',
-    appId: '1:826977386147:android:195502a2962d2db70c0916',
-    messagingSenderId: '826977386147',
-    projectId: 'xonconnect-app',
-    storageBucket: 'xonconnect-app.firebasestorage.app',
+    apiKey: 'AIzaSyBuVX7zdtSHBuWpfgTc0sBCATUa0G7nmts',
+    appId: '1:303524150014:android:48bfed566129d021c783af',
+    messagingSenderId: '303524150014',
+    projectId: 'xonconnect-2a433',
+    storageBucket: 'xonconnect-2a433.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCcXGOo7FNKkwQp-oQdcZK-iFrVXhr3yg8',
-    appId: '1:826977386147:ios:d6eb143d7bd0312e0c0916',
-    messagingSenderId: '826977386147',
-    projectId: 'xonconnect-app',
-    storageBucket: 'xonconnect-app.firebasestorage.app',
+    apiKey: 'AIzaSyB36fqozU1czYkU5AZEPD8TMnrJOsMoNHs',
+    appId: '1:303524150014:ios:3f8465275f5b05c5c783af',
+    messagingSenderId: '303524150014',
+    projectId: 'xonconnect-2a433',
+    storageBucket: 'xonconnect-2a433.firebasestorage.app',
     iosBundleId: 'com.example.connect',
   );
 }
