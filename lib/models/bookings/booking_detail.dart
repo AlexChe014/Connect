@@ -53,7 +53,7 @@ class BookingDetail {
   }
 
   factory BookingDetail.fromJson(Map<String, dynamic> json) {
-    final usersRaw = json['users'];
+    final usersRaw = json['participants'] ?? json['users'];
     final userIds = <int>[];
     final participants = <StaffUser>[];
 
@@ -61,9 +61,22 @@ class BookingDetail {
       for (final item in usersRaw) {
         if (item is Map) {
           final map = item.cast<String, dynamic>();
-          final user = StaffUser.fromJson(map);
+          // API отдаёт участников либо плоским объектом пользователя, либо
+          // pivot-записью вида {id, user_id, user: {...}} — разворачиваем
+          // вложенный `user`, как для участников чата (см. chat_mapper.dart).
+          final nestedUser = map['user'];
+          final userJson = nestedUser is Map
+              ? nestedUser.cast<String, dynamic>()
+              : map;
+          final resolvedId = BookingJson.parseInt(
+            userJson['id'] ?? map['id'] ?? map['user_id'],
+          );
+          final effectiveJson = resolvedId != null && userJson['id'] == null
+              ? {...userJson, 'id': resolvedId}
+              : userJson;
+          final user = StaffUser.fromJson(effectiveJson);
           if (user.id.isNotEmpty) participants.add(user);
-          final id = BookingJson.parseInt(map['id'] ?? map['user_id']) ?? user.idAsInt;
+          final id = resolvedId ?? user.idAsInt;
           if (id != null) userIds.add(id);
         } else {
           final id = BookingJson.parseInt(item);
