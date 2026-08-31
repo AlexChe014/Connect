@@ -33,6 +33,9 @@ class Chat {
     this.members = const [],
     this.lastMessagePreview,
     this.lastMessageAt,
+    this.unreadCount = 0,
+    this.isMuted = false,
+    this.isFavorite = false,
   });
 
   final String id;
@@ -53,6 +56,13 @@ class Chat {
   final List<ChatMemberSummary> members;
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
+  /// Количество непрочитанных входящих сообщений в чате.
+  final int unreadCount;
+  /// Отключены push-уведомления по чату — хранится только локально на
+  /// устройстве, сервер о статусе не знает.
+  final bool isMuted;
+  /// Чат отмечен как избранный — тоже только локальное состояние.
+  final bool isFavorite;
 
   bool canManage(int? userId) {
     if (userId == null) return false;
@@ -72,6 +82,7 @@ class Chat {
   Chat copyWithPreview({
     String? lastMessagePreview,
     DateTime? lastMessageAt,
+    int? unreadCount,
   }) {
     return Chat(
       id: id,
@@ -87,6 +98,9 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      unreadCount: unreadCount ?? this.unreadCount,
+      isMuted: isMuted,
+      isFavorite: isFavorite,
     );
   }
 
@@ -105,6 +119,30 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview,
       lastMessageAt: lastMessageAt,
+      unreadCount: unreadCount,
+      isMuted: isMuted,
+      isFavorite: isFavorite,
+    );
+  }
+
+  Chat copyWithUnreadCount(int unreadCount) {
+    return Chat(
+      id: id,
+      title: title,
+      avatarPath: avatarPath,
+      avatarUrl: avatarUrl,
+      peerAvatarPath: peerAvatarPath,
+      peerAvatarUrl: peerAvatarUrl,
+      peerUserId: peerUserId,
+      isGroup: isGroup,
+      description: description,
+      creatorId: creatorId,
+      members: members,
+      lastMessagePreview: lastMessagePreview,
+      lastMessageAt: lastMessageAt,
+      unreadCount: unreadCount,
+      isMuted: isMuted,
+      isFavorite: isFavorite,
     );
   }
 
@@ -118,6 +156,9 @@ class Chat {
     String? peerAvatarUrl,
     String? lastMessagePreview,
     DateTime? lastMessageAt,
+    int? unreadCount,
+    bool? isMuted,
+    bool? isFavorite,
   }) {
     return Chat(
       id: id,
@@ -133,6 +174,15 @@ class Chat {
       members: members ?? this.members,
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      unreadCount: unreadCount ?? this.unreadCount,
+      isMuted: isMuted ?? this.isMuted,
+      isFavorite: isFavorite ?? this.isFavorite,
     );
+  }
+
+  /// Локальный тумблер mute/избранного — единственное место, где эти флаги
+  /// меняются (см. [ChatPreferencesService]).
+  Chat copyWithFlags({bool? isMuted, bool? isFavorite}) {
+    return copyWithDetails(isMuted: isMuted, isFavorite: isFavorite);
   }
 }

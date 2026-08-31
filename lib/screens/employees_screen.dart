@@ -11,6 +11,7 @@ import '../services/chat_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
+import '../widgets/menu_button.dart';
 import 'employee_detail_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
@@ -274,8 +275,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             child: CustomScrollView(
               controller: _scrollController,
               slivers: [
-                const CupertinoSliverNavigationBar(
-                  largeTitle: Text('Сотрудники'),
+                CupertinoSliverNavigationBar(
+                  largeTitle: const Text('Сотрудники'),
+                  leading: const MenuButton(),
                   backgroundColor: CupertinoColors.systemGroupedBackground,
                   border: null,
                 ),

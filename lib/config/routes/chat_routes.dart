@@ -12,6 +12,9 @@ class ChatRoutes {
   static String messagesUrl(int chatId) =>
       '${ApiConfig.baseUrl}$_prefix/$chatId/messages';
 
+  static String readUrl(int chatId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/read';
+
   static String membersUrl(int chatId) =>
       '${ApiConfig.baseUrl}$_prefix/$chatId/members';
 

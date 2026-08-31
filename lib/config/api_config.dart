@@ -27,7 +27,8 @@ class ApiConfig {
   static String? get customBackendHost => _customBackendHost;
 
   /// Базовый URL API (без завершающего слеша)
-  static String get baseUrl => '${_normalizeHost(backendHost)}$_mobileSegment$_apiSegment';
+  static String get baseUrl =>
+      '${_normalizeHost(backendHost)}$_mobileSegment$_apiSegment';
 
   /// Базовый URL API для произвольного хоста (ещё не сохранённого в настройках).
   static String apiBaseUrlForHost(String host) {
@@ -56,12 +57,15 @@ class ApiConfig {
     }
   }
 
-  static bool isBackendHostValid(String? value) => _sanitizeBackendHost(value) != null;
+  static bool isBackendHostValid(String? value) =>
+      _sanitizeBackendHost(value) != null;
 
   /// Нормализованный хост для отображения в поле ввода (с `https://`).
-  static String? normalizeBackendHost(String? value) => _sanitizeBackendHost(value);
+  static String? normalizeBackendHost(String? value) =>
+      _sanitizeBackendHost(value);
 
-  static String _normalizeHost(String host) => host.replaceAll(RegExp(r'/+$'), '');
+  static String _normalizeHost(String host) =>
+      host.replaceAll(RegExp(r'/+$'), '');
 
   static String? _sanitizeBackendHost(String? raw) {
     if (raw == null) return null;
@@ -127,7 +131,8 @@ class ApiConfig {
     final backendHostName = backendUri?.host.toLowerCase();
     final filesHostName = publicUri.host.toLowerCase();
 
-    final shouldRewrite = host == 'localhost' ||
+    final shouldRewrite =
+        host == 'localhost' ||
         host == '127.0.0.1' ||
         (backendHostName != null &&
             host == backendHostName &&
@@ -165,8 +170,42 @@ class ApiConfig {
       if (basePath.isNotEmpty &&
           basePath != '/' &&
           !path.startsWith(basePath)) {
+        // Бэкенд иногда строит `next_page_url` от своего внутреннего пути
+        // (например `/api/user/filter`), не зная о префиксе реверс-прокси
+        // (у нас `baseUrl` — `/mobile/api`). Наивное «просто приклеить
+        // basePath спереди» в этом случае даёт `/mobile/api/api/user/filter`
+        // (404). Ищем максимальное перекрытие конца basePath с началом
+        // next-пути и добавляем только недостающий префикс.
+        final baseSegments = basePath
+            .split('/')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final nextSegments = path
+            .split('/')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        var overlap = 0;
+        for (var k = baseSegments.length; k > 0; k--) {
+          if (k > nextSegments.length) continue;
+          final baseTail = baseSegments.sublist(baseSegments.length - k);
+          final nextHead = nextSegments.sublist(0, k);
+          var matches = true;
+          for (var i = 0; i < k; i++) {
+            if (baseTail[i] != nextHead[i]) {
+              matches = false;
+              break;
+            }
+          }
+          if (matches) {
+            overlap = k;
+            break;
+          }
+        }
+        final missingPrefix = baseSegments
+            .sublist(0, baseSegments.length - overlap)
+            .join('/');
         final suffix = path.startsWith('/') ? path : '/$path';
-        path = '$basePath$suffix';
+        path = missingPrefix.isEmpty ? suffix : '/$missingPrefix$suffix';
       }
     }
 

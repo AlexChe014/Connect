@@ -6,8 +6,10 @@ import 'package:connect/repositories/mail_repository.dart';
 import 'package:connect/screens/booking_detail_sheet.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/documents_list_screen.dart';
+import 'package:connect/screens/documents_signing_screen.dart';
 import 'package:connect/screens/mail_inbox_screen.dart';
 import 'package:connect/screens/mail_message_screen.dart';
+import 'package:connect/screens/mail_screen.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:flutter/cupertino.dart';
@@ -113,11 +115,7 @@ class AppNavigationService {
     await navigator.pushNamedAndRemoveUntil(
       '/home',
       (route) => false,
-      arguments: {
-        'initialIndex': 0,
-        'homeSection': 'news',
-        'openNewsId': newsId,
-      },
+      arguments: {'initialIndex': 0, 'openNewsId': newsId},
     );
   }
 
@@ -138,7 +136,14 @@ class AppNavigationService {
     await navigator.pushNamedAndRemoveUntil(
       '/home',
       (route) => false,
-      arguments: {'initialIndex': 0, 'homeSection': 'documents'},
+      arguments: {'initialIndex': 0},
+    );
+
+    if (!navigator.mounted) return;
+    await navigator.push<void>(
+      CupertinoPageRoute<void>(
+        builder: (context) => const DocumentsSigningScreen(),
+      ),
     );
 
     final id = int.tryParse(serviceId);
@@ -188,7 +193,12 @@ class AppNavigationService {
     await navigator.pushNamedAndRemoveUntil(
       '/home',
       (route) => false,
-      arguments: {'initialIndex': 0, 'homeSection': 'mail'},
+      arguments: {'initialIndex': 0},
+    );
+
+    if (!navigator.mounted) return;
+    await navigator.push<void>(
+      CupertinoPageRoute<void>(builder: (context) => const MailScreen()),
     );
 
     final id = int.tryParse(connectionId);

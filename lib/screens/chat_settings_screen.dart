@@ -303,6 +303,37 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                         ),
                       ),
                     const SizedBox(height: 20),
+                    CupertinoListSection.insetGrouped(
+                      children: [
+                        CupertinoListTile(
+                          leading: _iconBadge(
+                            _chat.isFavorite
+                                ? CupertinoIcons.star_fill
+                                : CupertinoIcons.star,
+                            CupertinoColors.systemYellow,
+                          ),
+                          title: const Text('Избранное'),
+                          trailing: CupertinoSwitch(
+                            value: _chat.isFavorite,
+                            onChanged: (_) =>
+                                _service.toggleFavorite(_chat.id),
+                          ),
+                        ),
+                        CupertinoListTile(
+                          leading: _iconBadge(
+                            _chat.isMuted
+                                ? CupertinoIcons.bell_slash_fill
+                                : CupertinoIcons.bell_fill,
+                            CupertinoColors.systemGrey,
+                          ),
+                          title: const Text('Без звука'),
+                          trailing: CupertinoSwitch(
+                            value: _chat.isMuted,
+                            onChanged: (_) => _service.toggleMute(_chat.id),
+                          ),
+                        ),
+                      ],
+                    ),
                     if (_canManage && _chat.isGroup)
                       CupertinoListSection.insetGrouped(
                         children: [

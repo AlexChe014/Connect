@@ -73,7 +73,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _service.addListener(_onMsg);
-    _service.loadMessages(widget.chat.id, force: true);
+    _service
+        .loadMessages(widget.chat.id, force: true)
+        .whenComplete(() => _service.markChatRead(widget.chat.id));
   }
 
   @override
@@ -156,10 +158,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       navigationBar: CupertinoNavigationBar(
-        backgroundColor: CupertinoColors.systemGroupedBackground.withValues(
-          alpha: 0.94,
+        backgroundColor: CupertinoColors.secondarySystemGroupedBackground
+            .resolveFrom(context)
+            .withValues(alpha: 0.94),
+        border: Border(
+          bottom: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+            width: 0.5,
+          ),
         ),
-        border: null,
         middle: GestureDetector(
           onTap: _openSettings,
           child: Row(
@@ -208,7 +215,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           child: Column(
             children: [
               Expanded(
-                child: loading && list.isEmpty
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _focus.unfocus,
+                  child: loading && list.isEmpty
                     ? const AppPageLoader()
                     : loadError != null && list.isEmpty
                     ? AppEmptyState(
@@ -224,6 +234,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                       )
                     : ListView.builder(
                         reverse: true,
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                         itemCount: list.length,
                         itemBuilder: (context, i) {
@@ -269,6 +281,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           return tile;
                         },
                       ),
+                ),
               ),
               if (_replyingTo != null)
                 _ReplyBanner(
@@ -965,17 +978,63 @@ class _MessageTile extends StatelessWidget {
             ),
             if (showTime) ...[
               const SizedBox(height: 2),
-              Text(
-                _formatMsgTime(m.createdAt),
-                style: TextStyle(
-                  fontSize: 10,
-                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _formatMsgTime(m.createdAt),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: CupertinoColors.tertiaryLabel.resolveFrom(
+                        context,
+                      ),
+                    ),
+                  ),
+                  if (m.isOutgoing) ...[
+                    const SizedBox(width: 3),
+                    _ReadReceipt(read: m.readByRecipients),
+                  ],
+                ],
               ),
             ],
             const SizedBox(height: 6),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Индикатор доставки/прочтения исходящего сообщения:
+/// одна галочка — доставлено, две синие — прочитано получателем.
+class _ReadReceipt extends StatelessWidget {
+  const _ReadReceipt({required this.read});
+
+  final bool read;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = read
+        ? CupertinoColors.activeBlue
+        : CupertinoColors.tertiaryLabel.resolveFrom(context);
+
+    if (!read) {
+      return Icon(CupertinoIcons.checkmark, size: 12, color: color);
+    }
+
+    // В Cupertino-наборе иконок нет готовой "двойной галочки" —
+    // рисуем её как две перекрывающиеся одинарные (как в WhatsApp/Telegram).
+    return SizedBox(
+      width: 16,
+      height: 12,
+      child: Stack(
+        children: [
+          Icon(CupertinoIcons.checkmark, size: 12, color: color),
+          Positioned(
+            left: 4,
+            child: Icon(CupertinoIcons.checkmark, size: 12, color: color),
+          ),
+        ],
       ),
     );
   }

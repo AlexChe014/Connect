@@ -4,6 +4,7 @@ import 'package:connect/firebase_options.dart';
 import 'package:connect/repositories/device_token_repository.dart';
 import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/push_background_handler.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -269,10 +270,21 @@ class PushNotificationService {
     }
   }
 
-  void _onForegroundMessage(RemoteMessage message) {
+  Future<void> _onForegroundMessage(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
     if (!Platform.isAndroid) return;
+
+    if (message.data['type'] == 'chat_message') {
+      final chatId = message.data['chat_id'] as String?;
+      if (chatId != null && chatId.isNotEmpty) {
+        await ChatPreferencesService.instance.ensureLoaded();
+        // Мьют — чисто локальная настройка (см. ChatPreferencesService):
+        // сервер уже отправил пуш всем устройствам пользователя, здесь мы
+        // только не показываем баннер/звук на этом устройстве.
+        if (ChatPreferencesService.instance.isMuted(chatId)) return;
+      }
+    }
 
     final payload = _encodePayload(message.data);
     _localNotifications.show(

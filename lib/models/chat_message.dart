@@ -38,6 +38,7 @@ class ChatMessage {
     this.repliedMessageId,
     this.isRead = true,
     this.authorAvatarUrl,
+    this.readByRecipients = false,
   });
 
   final String id;
@@ -56,9 +57,33 @@ class ChatMessage {
   final String? repliedMessageId;
   final bool isRead;
   final String? authorAvatarUrl;
+  /// Для исходящих сообщений: прочитано ли всеми получателями (двойная галочка).
+  final bool readByRecipients;
 
   bool get hasMedia =>
       attachmentKind != ChatAttachmentKind.none &&
       ((localMediaPath != null && localMediaPath!.isNotEmpty) ||
           (remoteMediaUrl != null && remoteMediaUrl!.isNotEmpty));
+
+  ChatMessage copyWithReadState({bool? isRead, bool? readByRecipients}) {
+    return ChatMessage(
+      id: id,
+      chatId: chatId,
+      authorName: authorName,
+      isOutgoing: isOutgoing,
+      createdAt: createdAt,
+      text: text,
+      attachmentKind: attachmentKind,
+      localMediaPath: localMediaPath,
+      remoteMediaUrl: remoteMediaUrl,
+      fileName: fileName,
+      replyTo: replyTo,
+      forwardOf: forwardOf,
+      isSystem: isSystem,
+      repliedMessageId: repliedMessageId,
+      isRead: isRead ?? this.isRead,
+      authorAvatarUrl: authorAvatarUrl,
+      readByRecipients: readByRecipients ?? this.readByRecipients,
+    );
+  }
 }
