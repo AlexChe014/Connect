@@ -119,6 +119,30 @@ class ChatRepository {
     return ChatMessagesPage(messages: messages, members: members);
   }
 
+  /// Загружает всю историю сообщений чата постранично — для клиентской
+  /// фильтрации (медиа/файлы/ссылки в деталях чата), поскольку сервер не
+  /// умеет фильтровать сообщения по типу вложения.
+  Future<List<ChatMessage>> getAllMessages(
+    int chatId, {
+    required int currentUserId,
+    int maxPages = 200,
+  }) async {
+    final all = <ChatMessage>[];
+    String? pageUrl;
+    var pages = 0;
+    do {
+      final page = await getMessages(
+        chatId,
+        currentUserId: currentUserId,
+        pageUrl: pageUrl,
+      );
+      all.addAll(page.messages.data);
+      pageUrl = page.messages.hasMore ? page.messages.nextPageUrl : null;
+      pages++;
+    } while (pageUrl != null && pages < maxPages);
+    return all;
+  }
+
   Future<ChatMessage> sendTextMessage(
     int chatId, {
     required String text,

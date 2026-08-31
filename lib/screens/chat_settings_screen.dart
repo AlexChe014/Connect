@@ -1,4 +1,7 @@
 import 'package:connect/models/chat.dart';
+import 'package:connect/screens/chat_files_screen.dart';
+import 'package:connect/screens/chat_links_screen.dart';
+import 'package:connect/screens/chat_media_screen.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/cupertino.dart';
@@ -234,6 +237,24 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  void _openMedia() {
+    Navigator.of(context).push(
+      CupertinoPageRoute(builder: (context) => ChatMediaScreen(chatId: _chat.id)),
+    );
+  }
+
+  void _openFiles() {
+    Navigator.of(context).push(
+      CupertinoPageRoute(builder: (context) => ChatFilesScreen(chatId: _chat.id)),
+    );
+  }
+
+  void _openLinks() {
+    Navigator.of(context).push(
+      CupertinoPageRoute(builder: (context) => ChatLinksScreen(chatId: _chat.id)),
+    );
+  }
+
   Widget _iconBadge(IconData icon, Color color) {
     return Container(
       width: 29,
@@ -334,6 +355,37 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                         ),
                       ],
                     ),
+                    CupertinoListSection.insetGrouped(
+                      children: [
+                        CupertinoListTile(
+                          leading: _iconBadge(
+                            CupertinoIcons.photo_on_rectangle,
+                            CupertinoColors.systemBlue,
+                          ),
+                          title: const Text('Медиа'),
+                          trailing: const CupertinoListTileChevron(),
+                          onTap: _openMedia,
+                        ),
+                        CupertinoListTile(
+                          leading: _iconBadge(
+                            CupertinoIcons.doc_fill,
+                            CupertinoColors.systemIndigo,
+                          ),
+                          title: const Text('Файлы'),
+                          trailing: const CupertinoListTileChevron(),
+                          onTap: _openFiles,
+                        ),
+                        CupertinoListTile(
+                          leading: _iconBadge(
+                            CupertinoIcons.link,
+                            CupertinoColors.systemTeal,
+                          ),
+                          title: const Text('Ссылки'),
+                          trailing: const CupertinoListTileChevron(),
+                          onTap: _openLinks,
+                        ),
+                      ],
+                    ),
                     if (_canManage && _chat.isGroup)
                       CupertinoListSection.insetGrouped(
                         children: [
@@ -348,7 +400,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                           ),
                         ],
                       ),
-                    if (_chat.members.isNotEmpty) ...[
+                    if (_chat.isGroup && _chat.members.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                         child: Text(
