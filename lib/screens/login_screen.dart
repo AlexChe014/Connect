@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
-import '../config/app_icons.dart';
 import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../services/auth_service.dart';
@@ -17,7 +16,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _backendController = TextEditingController();
@@ -39,8 +37,36 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _showAlert(String message, {String title = 'Ошибка'}) {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Ок'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     final backend = _backendController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _errorMessage = 'Введите корректный email');
+      return;
+    }
+    if (password.isEmpty) {
+      setState(() => _errorMessage = 'Введите пароль');
+      return;
+    }
     if (backend.isNotEmpty && !ApiConfig.isBackendHostValid(backend)) {
       setState(() {
         _errorMessage = 'Некорректный адрес бэкенда. Пример: https://connect.xondev.ru';
@@ -55,14 +81,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await ApiConfig.setBackendHost(backend.isEmpty ? null : backend);
-      await AuthService.instance.login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+      await AuthService.instance.login(email, password);
 
-      final location = await LocationGateService.instance.verifyForEmail(
-        _emailController.text.trim(),
-      );
+      final location = await LocationGateService.instance.verifyForEmail(email);
       if (!location.allowed) {
         await AuthService.instance.logout();
         if (!mounted) return;
@@ -71,8 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
               'Не удалось подтвердить геопозицию.';
           _isLoading = false;
         });
-        await AppFeedback.showAlert(
-          context,
+        await _showAlert(
           location.message ?? 'Не удалось подтвердить геопозицию.',
           title: 'Геолокация',
         );
@@ -93,83 +113,86 @@ class _LoginScreenState extends State<LoginScreen> {
           _errorMessage = e.message;
           _isLoading = false;
         });
-        AppFeedback.showSnackBar(context, e);
       }
     } catch (e) {
       if (mounted) {
-        final message = AppFeedback.messageOf(
-          e,
-          fallback: 'Произошла ошибка. Попробуйте снова.',
-        );
         setState(() {
-          _errorMessage = message;
+          _errorMessage = AppFeedback.messageOf(
+            e,
+            fallback: 'Произошла ошибка. Попробуйте снова.',
+          );
           _isLoading = false;
         });
-        AppFeedback.showSnackBar(context, e);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxFormWidth =
+                  constraints.maxWidth >= 700 ? 480.0 : constraints.maxWidth;
 
-    return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final maxFormWidth =
-                constraints.maxWidth >= 700 ? 480.0 : constraints.maxWidth;
-
-            return Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: maxFormWidth,
-                    minHeight: (constraints.maxHeight - 48).clamp(0.0, double.infinity),
-                  ),
-                  child: Form(
-                    key: _formKey,
+              return Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: maxFormWidth,
+                      minHeight:
+                          (constraints.maxHeight - 48).clamp(0.0, double.infinity),
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        BrandingLoginLogo(height: 96),
+                        const BrandingLoginLogo(height: 96),
                         const SizedBox(height: 24),
-                        Text(
+                        const Text(
                           'Connect',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Корпоративный сервис для сотрудников компании',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: CupertinoColors.secondaryLabel
+                                .resolveFrom(context),
+                          ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: scheme.surfaceContainerHighest
-                                .withValues(alpha: 0.65),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: scheme.outlineVariant,
-                            ),
+                            color: CupertinoColors.secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Icon(
-                                Icons.info_outline,
-                                color: scheme.primary,
+                                CupertinoIcons.info_circle,
+                                color: CupertinoColors.activeBlue
+                                    .resolveFrom(context),
+                                size: 22,
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -177,99 +200,85 @@ class _LoginScreenState extends State<LoginScreen> {
                                   'Приложение предназначено только для сотрудников компании. '
                                   'Вход выполняется по корпоративной учётной записи. '
                                   'Регистрация для внешних пользователей недоступна.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: scheme.onSurfaceVariant,
-                                        height: 1.35,
-                                      ),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.35,
+                                    color: CupertinoColors.secondaryLabel
+                                        .resolveFrom(context),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 32),
-                        TextFormField(
-                          controller: _backendController,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          decoration: const InputDecoration(
-                            labelText: 'Адрес сервера',
-                            hintText: 'https://connect.xondev.ru',
-                            helperText: 'Указывайте адрес без /mobile',
-                            prefixIcon: Icon(Icons.link),
+                        const SizedBox(height: 28),
+                        CupertinoListSection.insetGrouped(
+                          margin: EdgeInsets.zero,
+                          footer: const Text(
+                            'Оставьте адрес сервера пустым, чтобы использовать '
+                            'сервер по умолчанию. Указывайте адрес без /mobile.',
                           ),
-                          validator: (v) {
-                            final value = v?.trim() ?? '';
-                            if (value.isEmpty) return null;
-                            if (!ApiConfig.isBackendHostValid(value)) {
-                              return 'Некорректный URL';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          autocorrect: false,
-                          decoration: const InputDecoration(
-                            labelText: 'Email',
-                            hintText: 'user@company.com',
-                            prefixIcon: AppIcon(AppIcons.profileMail),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Введите email';
-                            }
-                            if (!v.contains('@')) return 'Некорректный email';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: 'Пароль',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () => setState(
-                                () => _obscurePassword = !_obscurePassword,
+                          children: [
+                            _AuthField(
+                              controller: _backendController,
+                              placeholder: 'Адрес сервера',
+                              icon: CupertinoIcons.link,
+                              keyboardType: TextInputType.url,
+                              autocorrect: false,
+                            ),
+                            _AuthField(
+                              controller: _emailController,
+                              placeholder: 'Email',
+                              icon: CupertinoIcons.mail,
+                              keyboardType: TextInputType.emailAddress,
+                              autocorrect: false,
+                            ),
+                            _AuthField(
+                              controller: _passwordController,
+                              placeholder: 'Пароль',
+                              icon: CupertinoIcons.lock,
+                              obscureText: _obscurePassword,
+                              suffix: CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                                child: Icon(
+                                  _obscurePassword
+                                      ? CupertinoIcons.eye
+                                      : CupertinoIcons.eye_slash,
+                                  size: 20,
+                                  color: CupertinoColors.secondaryLabel
+                                      .resolveFrom(context),
+                                ),
                               ),
                             ),
-                          ),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Введите пароль';
-                            return null;
-                          },
+                          ],
                         ),
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 16),
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: scheme.errorContainer,
-                              borderRadius: BorderRadius.circular(8),
+                              color: CupertinoColors.systemRed
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: scheme.onErrorContainer,
+                                const Icon(
+                                  CupertinoIcons.exclamationmark_triangle,
+                                  color: CupertinoColors.systemRed,
+                                  size: 20,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _errorMessage!,
-                                    style: TextStyle(
-                                      color: scheme.onErrorContainer,
+                                    style: const TextStyle(
+                                      color: CupertinoColors.systemRed,
+                                      fontSize: 14,
                                     ),
                                   ),
                                 ),
@@ -278,36 +287,75 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                         const SizedBox(height: 24),
-                        FilledButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  if (_formKey.currentState!.validate()) {
-                                    _submit();
-                                  }
-                                },
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: CupertinoButton.filled(
+                            onPressed: _isLoading ? null : _submit,
+                            child: _isLoading
+                                ? const CupertinoActivityIndicator(
+                                    color: CupertinoColors.white,
+                                  )
+                                : const Text('Войти'),
                           ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('Войти'),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Поле авторизации в едином apple-style: иконка слева, плейсхолдер вместо
+/// лейбла, без Material-рамки — вписывается в [CupertinoListSection.insetGrouped].
+class _AuthField extends StatelessWidget {
+  const _AuthField({
+    required this.controller,
+    required this.placeholder,
+    required this.icon,
+    this.keyboardType,
+    this.autocorrect = true,
+    this.obscureText = false,
+    this.suffix,
+  });
+
+  final TextEditingController controller;
+  final String placeholder;
+  final IconData icon;
+  final TextInputType? keyboardType;
+  final bool autocorrect;
+  final bool obscureText;
+  final Widget? suffix;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoTextField(
+      controller: controller,
+      placeholder: placeholder,
+      keyboardType: keyboardType,
+      autocorrect: autocorrect,
+      obscureText: obscureText,
+      decoration: const BoxDecoration(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      prefix: Padding(
+        padding: const EdgeInsets.only(left: 4, right: 8),
+        child: Icon(
+          icon,
+          size: 20,
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+      suffix: suffix == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: suffix,
+            ),
     );
   }
 }
