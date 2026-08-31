@@ -187,7 +187,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       1 => const CalendarScreen(),
       2 => const ChatsListScreen(),
       3 => const FavoritesScreen(showAppBar: false),
-      _ => const ProfileScreen(),
+      _ => const ConnectorScreen(showAppBar: false),
     };
 
     return Scaffold(
@@ -206,7 +206,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 avatarUrl: _drawerAvatarUrl,
                 onProfileTap: () {
                   Navigator.pop(context);
-                  setState(() => _currentIndex = 4);
+                  Navigator.of(context).push(
+                    CupertinoPageRoute(builder: (_) => const ProfileScreen()),
+                  );
                 },
               ),
               const SizedBox(height: 10),
@@ -251,10 +253,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   _DrawerItem(
                     icon: CupertinoIcons.person_crop_circle,
                     label: 'Профиль',
-                    selected: _currentIndex == 4,
+                    selected: false,
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() => _currentIndex = 4);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(builder: (_) => const ProfileScreen()),
+                      );
                     },
                   ),
                 ],
@@ -284,19 +288,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       Navigator.of(context).push(
                         CupertinoPageRoute(
                           builder: (_) => const BookingsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.videocam,
-                    label: 'Коннектор',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const ConnectorScreen(),
                         ),
                       );
                     },
@@ -433,9 +424,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             label: 'Избранное',
           ),
           NavigationDestination(
-            icon: Icon(CupertinoIcons.person_crop_circle),
-            selectedIcon: Icon(CupertinoIcons.person_crop_circle_fill),
-            label: 'Профиль',
+            icon: Icon(CupertinoIcons.videocam),
+            selectedIcon: Icon(CupertinoIcons.videocam_fill),
+            label: 'Коннектор',
           ),
         ],
       ),

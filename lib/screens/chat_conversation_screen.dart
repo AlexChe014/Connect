@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:connect/models/chat.dart';
@@ -69,6 +70,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   int? _scrollToReversedIndex;
   bool _didInitialScroll = false;
 
+  bool _searchActive = false;
+  final _searchCtrl = TextEditingController();
+  List<int> _searchMatches = const [];
+  int _searchCursor = -1;
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
+
   @override
   void initState() {
     super.initState();
@@ -82,7 +90,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void dispose() {
     _service.removeListener(_onMsg);
     _textCtrl.dispose();
+    _searchCtrl.dispose();
     _focus.dispose();
+    _highlightTimer?.cancel();
     super.dispose();
   }
 
@@ -140,12 +150,106 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   Chat get _c => _service.chatById(widget.chat.id) ?? widget.chat;
 
-  void _openSettings() {
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(
+  Future<void> _openSettings() async {
+    final result = await Navigator.of(context).push<String>(
+      CupertinoPageRoute<String>(
         builder: (context) => ChatSettingsScreen(chat: _c),
       ),
     );
+    if (result == 'search' && mounted) {
+      _activateSearch();
+    }
+  }
+
+  void _activateSearch() {
+    setState(() {
+      _searchActive = true;
+      _searchMatches = const [];
+      _searchCursor = -1;
+    });
+  }
+
+  void _closeSearch() {
+    _highlightTimer?.cancel();
+    setState(() {
+      _searchActive = false;
+      _searchCtrl.clear();
+      _searchMatches = const [];
+      _searchCursor = -1;
+      _highlightedMessageId = null;
+    });
+    _focus.unfocus();
+  }
+
+  void _onSearchChanged(String value) {
+    final query = value.trim().toLowerCase();
+    final list = _service.messagesFor(widget.chat.id);
+    final matches = <int>[];
+    if (query.isNotEmpty) {
+      for (var i = 0; i < list.length; i++) {
+        final m = list[i];
+        if (m.isSystem) continue;
+        final text = m.text;
+        if (text == null || text.isEmpty) continue;
+        if (HtmlTextUtils.toPlainText(text).toLowerCase().contains(query)) {
+          matches.add(i);
+        }
+      }
+    }
+    setState(() {
+      _searchMatches = matches;
+      _searchCursor = matches.isEmpty ? -1 : matches.length - 1;
+    });
+    _gotoCurrentSearchMatch();
+  }
+
+  void _gotoCurrentSearchMatch() {
+    if (_searchCursor < 0 || _searchCursor >= _searchMatches.length) return;
+    final list = _service.messagesFor(widget.chat.id);
+    final chronoIdx = _searchMatches[_searchCursor];
+    if (chronoIdx >= list.length) return;
+    final reversedIdx = list.length - 1 - chronoIdx;
+    setState(() {
+      _scrollToReversedIndex = reversedIdx;
+      _highlightedMessageId = list[chronoIdx].id;
+    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _performSearchScroll(),
+    );
+  }
+
+  void _performSearchScroll() {
+    if (!mounted) return;
+    final ctx = _scrollTargetKey.currentContext;
+    if (ctx == null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _performSearchScroll(),
+      );
+      return;
+    }
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+      alignment: 0.35,
+    );
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      setState(() => _highlightedMessageId = null);
+    });
+  }
+
+  void _prevSearchResult() {
+    if (_searchCursor <= 0) return;
+    setState(() => _searchCursor--);
+    _gotoCurrentSearchMatch();
+  }
+
+  void _nextSearchResult() {
+    if (_searchCursor >= _searchMatches.length - 1) return;
+    setState(() => _searchCursor++);
+    _gotoCurrentSearchMatch();
   }
 
   @override
@@ -214,6 +318,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         child: SafeArea(
           child: Column(
             children: [
+              if (_searchActive) _buildSearchBar(context),
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
@@ -248,6 +353,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                               ? list[chronologicalIndex + 1]
                               : null;
                           final showAuthorHeader =
+                              c.isGroup &&
                               !m.isOutgoing &&
                               !m.isSystem &&
                               (previous == null ||
@@ -255,8 +361,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                           final tile = _MessageTile(
                             m: m,
                             showAuthorHeader: showAuthorHeader,
-                            showAvatarInHeader: c.isGroup && showAuthorHeader,
+                            showAvatarInHeader: showAuthorHeader,
                             showTime: _showMessageTime(m, next),
+                            highlighted: m.id == _highlightedMessageId,
                             onLongMenu: (action) {
                               if (action == _MsgAction.reply) {
                                 setState(() {
@@ -329,6 +436,65 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     ScaffoldMessenger.maybeOf(
       context,
     )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    final total = _searchMatches.length;
+    final pos = total == 0 ? 0 : _searchMatches.length - _searchCursor;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      decoration: BoxDecoration(
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: CupertinoSearchTextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              placeholder: 'Поиск по чату',
+              onChanged: _onSearchChanged,
+            ),
+          ),
+          if (_searchCtrl.text.trim().isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Text(
+              '$pos/$total',
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel,
+              ),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(32, 32),
+              onPressed: _searchCursor > 0 ? _prevSearchResult : null,
+              child: const Icon(CupertinoIcons.chevron_up, size: 20),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(32, 32),
+              onPressed: _searchCursor < total - 1 ? _nextSearchResult : null,
+              child: const Icon(CupertinoIcons.chevron_down, size: 20),
+            ),
+          ],
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(32, 32),
+            onPressed: _closeSearch,
+            child: const Icon(CupertinoIcons.xmark_circle_fill, size: 20),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _send() async {
@@ -761,6 +927,7 @@ class _MessageTile extends StatelessWidget {
     this.showAuthorHeader = false,
     this.showAvatarInHeader = false,
     this.showTime = true,
+    this.highlighted = false,
   });
 
   final ChatMessage m;
@@ -768,6 +935,17 @@ class _MessageTile extends StatelessWidget {
   final bool showAuthorHeader;
   final bool showAvatarInHeader;
   final bool showTime;
+  final bool highlighted;
+
+  Widget _wrapHighlight(BuildContext context, Widget child) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      color: highlighted
+          ? CupertinoColors.systemYellow.withValues(alpha: 0.20)
+          : const Color(0x00000000),
+      child: child,
+    );
+  }
 
   Future<void> _showActions(BuildContext context) async {
     final canEdit =
@@ -822,13 +1000,16 @@ class _MessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (m.isSystem) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 24),
-        child: Center(
-          child: ChatMessageText(
-            text: m.text ?? '',
-            color: CupertinoColors.secondaryLabel.resolveFrom(context),
-            fontSize: 12,
+      return _wrapHighlight(
+        context,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 24),
+          child: Center(
+            child: ChatMessageText(
+              text: m.text ?? '',
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              fontSize: 12,
+            ),
           ),
         ),
       );
@@ -846,7 +1027,9 @@ class _MessageTile extends StatelessWidget {
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
 
-    return Align(
+    return _wrapHighlight(
+      context,
+      Align(
       alignment: m.isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -1000,6 +1183,7 @@ class _MessageTile extends StatelessWidget {
             const SizedBox(height: 6),
           ],
         ),
+      ),
       ),
     );
   }
