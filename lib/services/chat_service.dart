@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/add_chat_members_request.dart';
 import 'package:connect/models/chat/create_chat_request.dart';
@@ -95,6 +97,11 @@ class ChatService extends ChangeNotifier {
   List<ChatContact> _contacts = const [];
   List<ChatContact> get contacts => List.unmodifiable(_contacts);
 
+  /// Чаты, для которых отметка "прочитано" не была подтверждена сервером
+  /// (например, из-за обрыва сети) — повторяем попытку при следующем
+  /// [refreshChats], чтобы статус не застревал непрочитанным на сервере.
+  final Set<String> _pendingReadSync = {};
+
   List<ChatMessage> messagesFor(String chatId) {
     final list = _messages[chatId];
     if (list == null) return const [];
@@ -151,6 +158,7 @@ class ChatService extends ChangeNotifier {
         ..clear()
         ..addAll(loaded.map(_applyLocalFlags));
       _error = null;
+      unawaited(_flushPendingReadSync());
     } catch (e) {
       _error = e is ApiException ? e.message : e.toString();
     } finally {
@@ -224,9 +232,33 @@ class ChatService extends ChangeNotifier {
 
     if (changed) notifyListeners();
 
+    await _syncReadStatus(chatId, chatIntId);
+  }
+
+  /// Отправляет отметку "прочитано" на сервер. При ошибке (сеть, таймаут,
+  /// сбой бэкенда) чат остаётся в [_pendingReadSync] и будет повторно
+  /// отправлен при следующем [refreshChats] — иначе локально сообщение уже
+  /// выглядит прочитанным, и повода снова открыть тот же чат может не быть,
+  /// из-за чего сервер (и портал) так и не узнают о прочтении.
+  Future<void> _syncReadStatus(String chatId, int chatIntId) async {
     try {
       await ChatRepository.instance.markRead(chatIntId);
-    } catch (_) {}
+      _pendingReadSync.remove(chatId);
+    } catch (_) {
+      _pendingReadSync.add(chatId);
+    }
+  }
+
+  Future<void> _flushPendingReadSync() async {
+    if (_pendingReadSync.isEmpty) return;
+    for (final chatId in List<String>.from(_pendingReadSync)) {
+      final chatIntId = int.tryParse(chatId);
+      if (chatIntId == null) {
+        _pendingReadSync.remove(chatId);
+        continue;
+      }
+      await _syncReadStatus(chatId, chatIntId);
+    }
   }
 
   Future<void> loadContacts() async {

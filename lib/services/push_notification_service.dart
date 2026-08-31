@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:connect/firebase_options.dart';
@@ -5,6 +6,7 @@ import 'package:connect/repositories/device_token_repository.dart';
 import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
+import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/push_background_handler.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -271,20 +273,27 @@ class PushNotificationService {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
-    if (!Platform.isAndroid) return;
-
+    var isMutedChat = false;
     if (message.data['type'] == 'chat_message') {
       final chatId = message.data['chat_id'] as String?;
       if (chatId != null && chatId.isNotEmpty) {
+        // Обновляем список чатов (счётчик непрочитанных, превью последнего
+        // сообщения), чтобы бейдж на экране чатов появился сразу, а не
+        // только после ручного pull-to-refresh или перезапуска приложения.
+        unawaited(ChatService.instance.refreshChats());
+
         await ChatPreferencesService.instance.ensureLoaded();
         // Мьют — чисто локальная настройка (см. ChatPreferencesService):
         // сервер уже отправил пуш всем устройствам пользователя, здесь мы
         // только не показываем баннер/звук на этом устройстве.
-        if (ChatPreferencesService.instance.isMuted(chatId)) return;
+        isMutedChat = ChatPreferencesService.instance.isMuted(chatId);
       }
     }
+
+    final notification = message.notification;
+    if (notification == null) return;
+    if (!Platform.isAndroid) return;
+    if (isMutedChat) return;
 
     final payload = _encodePayload(message.data);
     _localNotifications.show(
