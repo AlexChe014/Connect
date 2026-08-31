@@ -10,6 +10,7 @@ import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/users_repository.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:flutter/foundation.dart';
@@ -115,8 +116,17 @@ class ChatService extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+    await ChatPreferencesService.instance.ensureLoaded();
     await _refreshSelfProfile();
     await refreshChats();
+  }
+
+  Chat _applyLocalFlags(Chat c) {
+    final prefs = ChatPreferencesService.instance;
+    return c.copyWithFlags(
+      isMuted: prefs.isMuted(c.id),
+      isFavorite: prefs.isFavorite(c.id),
+    );
   }
 
   Future<void> refreshChats() async {
@@ -133,12 +143,13 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      await ChatPreferencesService.instance.ensureLoaded();
       final loaded = await ChatRepository.instance.getChats(
         currentUserId: userId,
       );
       _chats
         ..clear()
-        ..addAll(loaded);
+        ..addAll(loaded.map(_applyLocalFlags));
       _error = null;
     } catch (e) {
       _error = e is ApiException ? e.message : e.toString();
@@ -184,6 +195,38 @@ class ChatService extends ChangeNotifier {
       _messagesLoading[chatId] = false;
       notifyListeners();
     }
+  }
+
+  /// Отмечает входящие сообщения чата как прочитанные — локально (счётчик,
+  /// список сообщений) и на сервере.
+  Future<void> markChatRead(String chatId) async {
+    final chatIntId = int.tryParse(chatId);
+    if (chatIntId == null) return;
+
+    var changed = false;
+
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx >= 0 && _chats[idx].unreadCount > 0) {
+      _chats[idx] = _chats[idx].copyWithUnreadCount(0);
+      changed = true;
+    }
+
+    final list = _messages[chatId];
+    if (list != null) {
+      for (var i = 0; i < list.length; i++) {
+        final m = list[i];
+        if (!m.isOutgoing && !m.isRead) {
+          list[i] = m.copyWithReadState(isRead: true);
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) notifyListeners();
+
+    try {
+      await ChatRepository.instance.markRead(chatIntId);
+    } catch (_) {}
   }
 
   Future<void> loadContacts() async {
@@ -232,6 +275,43 @@ class ChatService extends ChangeNotifier {
       _isContactsLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<List<ChatContact>> searchContacts(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final result = <ChatContact>[];
+    final seen = <int>{};
+    String? nextUrl;
+    var pageNum = 1;
+    while (true) {
+      final page = await UsersRepository.instance.getPage(
+        url: nextUrl,
+        q: q,
+        page: pageNum,
+      );
+      for (final u in page.data) {
+        if (u.idAsInt == null || u.idAsInt == _selfUserId) continue;
+        final c = ChatContact.fromStaffUser(u);
+        if (c.userId > 0 && seen.add(c.userId)) result.add(c);
+      }
+
+      if (page.data.isEmpty || pageNum >= 20) break;
+
+      nextUrl = page.nextPageUrl;
+      if (nextUrl != null) {
+        pageNum = page.currentPage + 1;
+        continue;
+      }
+      if (page.lastPage != null && page.currentPage < page.lastPage!) {
+        if (page.currentPage < pageNum) break;
+        pageNum = page.currentPage + 1;
+        nextUrl = null;
+        continue;
+      }
+      break;
+    }
+    return result;
   }
 
   Future<void> _refreshSelfProfile() async {
@@ -366,6 +446,9 @@ class ChatService extends ChangeNotifier {
         _chats[idx] = chat.copyWithDetails(
           avatarPath: prev.avatarPath,
           title: chat.title.isNotEmpty ? chat.title : prev.title,
+          unreadCount: prev.unreadCount,
+          isMuted: prev.isMuted,
+          isFavorite: prev.isFavorite,
         );
       }
       notifyListeners();
@@ -398,6 +481,9 @@ class ChatService extends ChangeNotifier {
           avatarPath: prev.avatarPath,
           lastMessagePreview: prev.lastMessagePreview,
           lastMessageAt: prev.lastMessageAt,
+          unreadCount: prev.unreadCount,
+          isMuted: prev.isMuted,
+          isFavorite: prev.isFavorite,
         );
       }
       notifyListeners();
@@ -448,6 +534,9 @@ class ChatService extends ChangeNotifier {
           avatarPath: prev.avatarPath,
           lastMessagePreview: prev.lastMessagePreview,
           lastMessageAt: prev.lastMessageAt,
+          unreadCount: prev.unreadCount,
+          isMuted: prev.isMuted,
+          isFavorite: prev.isFavorite,
         );
       }
       notifyListeners();
@@ -526,6 +615,7 @@ class ChatService extends ChangeNotifier {
             repliedMessageId: updated.repliedMessageId,
             isRead: updated.isRead,
             authorAvatarUrl: updated.authorAvatarUrl,
+            readByRecipients: list[idx].readByRecipients,
           );
         }
       }
@@ -582,8 +672,32 @@ class ChatService extends ChangeNotifier {
       members: c.members,
       lastMessagePreview: c.lastMessagePreview,
       lastMessageAt: c.lastMessageAt,
+      unreadCount: c.unreadCount,
+      isMuted: c.isMuted,
+      isFavorite: c.isFavorite,
     );
     notifyListeners();
+  }
+
+  /// Локальный тумблер звука чата (см. [ChatPreferencesService]) —
+  /// на сервере такого понятия нет, поэтому пуши для замьюченного чата
+  /// на этом устройстве просто не показываются баннером/звуком.
+  Future<void> toggleMute(String chatId) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx < 0) return;
+    final next = !_chats[idx].isMuted;
+    _chats[idx] = _chats[idx].copyWithFlags(isMuted: next);
+    notifyListeners();
+    await ChatPreferencesService.instance.setMuted(chatId, next);
+  }
+
+  Future<void> toggleFavorite(String chatId) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx < 0) return;
+    final next = !_chats[idx].isFavorite;
+    _chats[idx] = _chats[idx].copyWithFlags(isFavorite: next);
+    notifyListeners();
+    await ChatPreferencesService.instance.setFavorite(chatId, next);
   }
 
   Future<void> sendText(
@@ -623,6 +737,7 @@ class ChatService extends ChangeNotifier {
           repliedMessageId: sent.repliedMessageId,
           isRead: true,
           authorAvatarUrl: sent.authorAvatarUrl,
+          readByRecipients: sent.readByRecipients,
         ),
       );
     } catch (e) {

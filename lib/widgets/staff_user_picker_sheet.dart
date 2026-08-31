@@ -32,13 +32,27 @@ class StaffUserPickerSheet extends StatefulWidget {
       backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
         context,
       ),
-      builder: (context) => SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.75,
-        child: StaffUserPickerSheet(
-          selectedIds: selectedIds,
-          onUserSelected: onUserSelected,
-        ),
-      ),
+      builder: (context) {
+        final mediaQuery = MediaQuery.of(context);
+        // Клавиатура (автофокус в поиске снят, но пользователь может открыть
+        // её сам) не должна выталкивать шторку за пределы экрана — иначе
+        // список и кнопка «Готово» уезжают за клавиатуру и выглядят так,
+        // будто скролл не работает.
+        final maxHeight =
+            (mediaQuery.size.height -
+                    mediaQuery.padding.top -
+                    mediaQuery.viewInsets.bottom -
+                    24)
+                .clamp(200.0, mediaQuery.size.height);
+        final height = (mediaQuery.size.height * 0.75).clamp(0.0, maxHeight);
+        return SizedBox(
+          height: height,
+          child: StaffUserPickerSheet(
+            selectedIds: selectedIds,
+            onUserSelected: onUserSelected,
+          ),
+        );
+      },
     );
   }
 
@@ -249,7 +263,6 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: CupertinoSearchTextField(
                 controller: _searchController,
-                autofocus: true,
                 placeholder: 'Фамилия, имя или email',
                 onSubmitted: (_) {
                   _debounce?.cancel();

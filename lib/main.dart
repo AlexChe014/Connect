@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart'
     show FlutterQuillLocalizations;
@@ -18,14 +19,20 @@ import 'screens/employees_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
 import 'screens/connector_screen.dart';
+import 'screens/disk_screen.dart';
+import 'screens/bonus_program_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'config/branding.dart';
+import 'repositories/profile_repository.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/location_gate_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
+import 'utils/media_url_utils.dart';
+import 'utils/user_display_name.dart';
+import 'widgets/chat_avatar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +70,22 @@ class _ConnectAppState extends State<ConnectApp> {
       title: 'Connect — Корпоративный сервис',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      builder: (context, child) {
+        // MaterialApp подставляет для текста без Material-предка красно-жёлтый
+        // debug-стиль (см. flutter/material/app.dart, _errorTextStyle). Экраны
+        // и диалоги приложения построены на Cupertino-виджетах без Material,
+        // поэтому здесь задаётся собственный DefaultTextStyle на уровне всего
+        // Navigator — это покрывает и showDialog/showCupertinoDialog/шторки.
+        return DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: child!,
+        );
+      },
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -79,15 +102,11 @@ class _ConnectAppState extends State<ConnectApp> {
           final initialIndex = args is Map
               ? (args['initialIndex'] as int?)
               : null;
-          final homeSection = args is Map
-              ? (args['homeSection'] as String?)
-              : null;
           final openNewsId = args is Map
               ? (args['openNewsId'] as String?)
               : null;
           return MainNavigationScreen(
             initialIndex: initialIndex ?? 0,
-            initialHomeSection: homeSection,
             openNewsId: openNewsId,
           );
         },
@@ -100,70 +119,73 @@ class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({
     super.key,
     this.initialIndex = 0,
-    this.initialHomeSection,
     this.openNewsId,
   });
 
   final int initialIndex;
-  final String? initialHomeSection;
   final String? openNewsId;
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-enum _HomeSection { news, bookings, connector, employees, mail, documents }
-
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   late int _currentIndex;
-  late _HomeSection _homeSection;
   bool _isDrawerOpen = false;
+  Map<String, dynamic>? _profile;
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex.clamp(0, 3);
-    _homeSection = _parseHomeSection(widget.initialHomeSection);
+    _currentIndex = widget.initialIndex.clamp(0, 4);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppNavigationService.processPendingNavigation();
     });
+    _loadDrawerProfile();
   }
 
-  _HomeSection _parseHomeSection(String? value) {
-    return switch (value) {
-      'bookings' => _HomeSection.bookings,
-      'connector' => _HomeSection.connector,
-      'employees' => _HomeSection.employees,
-      'mail' => _HomeSection.mail,
-      'documents' => _HomeSection.documents,
-      _ => _HomeSection.news,
-    };
-  }
-
-  Widget _homeBody() {
-    switch (_homeSection) {
-      case _HomeSection.news:
-        return NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId);
-      case _HomeSection.bookings:
-        return const BookingsScreen(showAppBar: false);
-      case _HomeSection.connector:
-        return const ConnectorScreen(showAppBar: false);
-      case _HomeSection.employees:
-        return const EmployeesScreen(showAppBar: false);
-      case _HomeSection.mail:
-        return const MailScreen(showAppBar: false);
-      case _HomeSection.documents:
-        return const DocumentsSigningScreen(showAppBar: false);
+  Future<void> _loadDrawerProfile() async {
+    final stored = await AuthService.instance.getStoredUser();
+    if (mounted && stored != null) setState(() => _profile = stored);
+    try {
+      final api = await ProfileRepository.instance.getProfile();
+      if (mounted && api.isNotEmpty) setState(() => _profile = api);
+    } catch (_) {
+      // Остаёмся на закэшированных данных из getStoredUser, если API недоступен.
     }
+  }
+
+  String get _drawerDisplayName => userDisplayNameFromJson(_profile ?? const {});
+
+  String? get _drawerAvatarUrl =>
+      MediaUrlUtils.normalizeFirstUrl(_profile?['media']);
+
+  String? get _drawerPosition {
+    final p = _profile;
+    if (p == null) return null;
+    for (final key in ['position', 'job_title', 'post', 'appointment']) {
+      final raw = p[key];
+      if (raw == null) continue;
+      if (raw is Map) {
+        final v = raw['name'] ?? raw['title'] ?? raw['label'];
+        final t = v?.toString().trim();
+        if (t != null && t.isNotEmpty) return t;
+        continue;
+      }
+      final t = raw.toString().trim();
+      if (t.isNotEmpty && !t.startsWith('{')) return t;
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final body = switch (_currentIndex) {
-      0 => _homeBody(),
+      0 => NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId),
       1 => const CalendarScreen(),
       2 => const ChatsListScreen(),
+      3 => const EmployeesScreen(showAppBar: false),
       _ => const ProfileScreen(),
     };
 
@@ -172,102 +194,104 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       drawerScrimColor: Colors.transparent,
       onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.surfaceElevated,
         child: SafeArea(
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                child: Column(children: [BrandingLoginLogo(height: 56)]),
+              _DrawerHeaderCard(
+                displayName: _drawerDisplayName,
+                position: _drawerPosition,
+                avatarUrl: _drawerAvatarUrl,
+                onProfileTap: () {
+                  Navigator.pop(context);
+                  setState(() => _currentIndex = 4);
+                },
               ),
-              CupertinoListSection.insetGrouped(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
+              const SizedBox(height: 10),
+              _DrawerMenuCard(
                 children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.square_grid_2x2,
-                    label: 'Лента',
-                    selected:
-                        _currentIndex == 0 && _homeSection == _HomeSection.news,
-                    onTap: () {
-                      setState(() {
-                        _homeSection = _HomeSection.news;
-                        _currentIndex = 0;
-                      });
-                      Navigator.pop(context);
-                    },
-                  ),
                   _DrawerItem(
                     icon: CupertinoIcons.bookmark,
                     label: 'Бронирования',
-                    selected:
-                        _currentIndex == 0 &&
-                        _homeSection == _HomeSection.bookings,
+                    selected: false,
                     onTap: () {
-                      setState(() {
-                        _homeSection = _HomeSection.bookings;
-                        _currentIndex = 0;
-                      });
                       Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const BookingsScreen(),
+                        ),
+                      );
                     },
                   ),
                   _DrawerItem(
                     icon: CupertinoIcons.videocam,
                     label: 'Коннектор',
-                    selected:
-                        _currentIndex == 0 &&
-                        _homeSection == _HomeSection.connector,
+                    selected: false,
                     onTap: () {
-                      setState(() {
-                        _homeSection = _HomeSection.connector;
-                        _currentIndex = 0;
-                      });
                       Navigator.pop(context);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.person_2,
-                    label: 'Сотрудники',
-                    selected:
-                        _currentIndex == 0 &&
-                        _homeSection == _HomeSection.employees,
-                    onTap: () {
-                      setState(() {
-                        _homeSection = _HomeSection.employees;
-                        _currentIndex = 0;
-                      });
-                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const ConnectorScreen(),
+                        ),
+                      );
                     },
                   ),
                   _DrawerItem(
                     icon: CupertinoIcons.mail,
                     label: 'Почта',
-                    selected:
-                        _currentIndex == 0 && _homeSection == _HomeSection.mail,
+                    selected: false,
                     onTap: () {
-                      setState(() {
-                        _homeSection = _HomeSection.mail;
-                        _currentIndex = 0;
-                      });
                       Navigator.pop(context);
+                      Navigator.of(
+                        context,
+                      ).push(CupertinoPageRoute(builder: (_) => const MailScreen()));
                     },
                   ),
                   _DrawerItem(
                     icon: CupertinoIcons.doc_text,
                     label: 'Согласование',
-                    selected:
-                        _currentIndex == 0 &&
-                        _homeSection == _HomeSection.documents,
+                    selected: false,
                     onTap: () {
-                      setState(() {
-                        _homeSection = _HomeSection.documents;
-                        _currentIndex = 0;
-                      });
                       Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const DocumentsSigningScreen(),
+                        ),
+                      );
                     },
                   ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.folder,
+                    label: 'Диск',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const DiskScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.gift,
+                    label: 'Бонусная программа',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const BonusProgramScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _DrawerMenuCard(
+                children: [
                   _DrawerItem(
                     icon: CupertinoIcons.book,
                     label: 'База знаний',
@@ -318,38 +342,165 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: CupertinoTabBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 0) {
-            _scaffoldKey.currentState?.openDrawer();
-            return;
-          }
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          HapticFeedback.selectionClick();
           setState(() => _currentIndex = index);
         },
-        backgroundColor: CupertinoColors.systemGroupedBackground
-            .resolveFrom(context)
-            .withValues(alpha: 0.94),
-        activeColor: CupertinoColors.activeBlue,
-        inactiveColor: CupertinoColors.systemGrey,
-        iconSize: 26,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.line_horizontal_3),
-            label: 'Меню',
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(CupertinoIcons.news),
+            selectedIcon: Icon(CupertinoIcons.news_solid),
+            label: 'Лента',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(CupertinoIcons.calendar),
             label: 'Календарь',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(CupertinoIcons.chat_bubble_2),
+            selectedIcon: Icon(CupertinoIcons.chat_bubble_2_fill),
             label: 'Чаты',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
+            icon: Icon(CupertinoIcons.person_2),
+            selectedIcon: Icon(CupertinoIcons.person_2_fill),
+            label: 'Сотрудники',
+          ),
+          NavigationDestination(
             icon: Icon(CupertinoIcons.person_crop_circle),
+            selectedIcon: Icon(CupertinoIcons.person_crop_circle_fill),
             label: 'Профиль',
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Карточка-шапка меню: лого приложения + профиль текущего пользователя.
+/// Белый фон карточки совпадает с фоном лого — благодаря этому у логотипа
+/// больше нет шва с серой подложкой меню.
+class _DrawerHeaderCard extends StatelessWidget {
+  const _DrawerHeaderCard({
+    required this.displayName,
+    required this.position,
+    required this.avatarUrl,
+    required this.onProfileTap,
+  });
+
+  final String displayName;
+  final String? position;
+  final String? avatarUrl;
+  final VoidCallback onProfileTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.onSurface.withValues(alpha: 0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          BrandingLoginLogo(height: 32),
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: AppColors.outline),
+          const SizedBox(height: 14),
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onProfileTap,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Row(
+                  children: [
+                    MemberAvatar(
+                      displayName: displayName,
+                      avatarUrl: avatarUrl,
+                      radius: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          if ((position ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              position!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      CupertinoIcons.chevron_right,
+                      size: 16,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Сгруппированный список пунктов меню в виде белой карточки с обводкой —
+/// вместо серого фона меню "просвечивающего" между пунктами.
+class _DrawerMenuCard extends StatelessWidget {
+  const _DrawerMenuCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.outline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: AppColors.outline),
+            children[i],
+          ],
         ],
       ),
     );
@@ -371,28 +522,42 @@ class _DrawerItem extends StatelessWidget {
   final VoidCallback onTap;
 
   /// `true` — пункт открывает внешнюю ссылку, а не раздел приложения:
-  /// вместо галочки «выбрано» показывает иконку внешней ссылки.
+  /// вместо синей заливки показывает иконку внешней ссылки.
   final bool isExternal;
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoListTile(
-      onTap: onTap,
-      leading: Icon(icon, size: 22, color: CupertinoColors.activeBlue),
-      title: Text(label),
-      trailing: isExternal
-          ? Icon(
-              CupertinoIcons.arrow_up_right_square,
-              size: 18,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-            )
-          : selected
-          ? const Icon(
-              CupertinoIcons.checkmark_alt,
-              size: 20,
-              color: CupertinoColors.activeBlue,
-            )
-          : null,
+    final tint = selected ? AppColors.primary : AppColors.onSurface;
+    return Material(
+      color: selected ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: tint),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: tint,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+              if (isExternal)
+                Icon(
+                  CupertinoIcons.arrow_up_right_square,
+                  size: 18,
+                  color: AppColors.onSurfaceVariant,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
