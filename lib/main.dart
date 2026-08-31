@@ -16,6 +16,7 @@ import 'screens/news_feed_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/employees_screen.dart';
+import 'screens/favorites_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
 import 'screens/connector_screen.dart';
@@ -185,7 +186,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       0 => NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId),
       1 => const CalendarScreen(),
       2 => const ChatsListScreen(),
-      3 => const EmployeesScreen(showAppBar: false),
+      3 => const FavoritesScreen(showAppBar: false),
       _ => const ProfileScreen(),
     };
 
@@ -211,6 +212,69 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               const SizedBox(height: 10),
               _DrawerMenuCard(
                 children: [
+                  _DrawerItem(
+                    icon: CupertinoIcons.news,
+                    label: 'Лента',
+                    selected: _currentIndex == 0,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 0);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.calendar,
+                    label: 'Календарь',
+                    selected: _currentIndex == 1,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 1);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.chat_bubble_2,
+                    label: 'Чаты',
+                    selected: _currentIndex == 2,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 2);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.star,
+                    label: 'Избранное',
+                    selected: _currentIndex == 3,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 3);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.person_crop_circle,
+                    label: 'Профиль',
+                    selected: _currentIndex == 4,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 4);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _DrawerMenuCard(
+                children: [
+                  _DrawerItem(
+                    icon: CupertinoIcons.person_2,
+                    label: 'Сотрудники',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const EmployeesScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   _DrawerItem(
                     icon: CupertinoIcons.bookmark,
                     label: 'Бронирования',
@@ -364,9 +428,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             label: 'Чаты',
           ),
           NavigationDestination(
-            icon: Icon(CupertinoIcons.person_2),
-            selectedIcon: Icon(CupertinoIcons.person_2_fill),
-            label: 'Сотрудники',
+            icon: Icon(CupertinoIcons.star),
+            selectedIcon: Icon(CupertinoIcons.star_fill),
+            label: 'Избранное',
           ),
           NavigationDestination(
             icon: Icon(CupertinoIcons.person_crop_circle),
