@@ -228,10 +228,13 @@ class ApiClient {
 
     String message = 'Ошибка запроса (${response.statusCode})';
     if (decoded is Map<String, dynamic>) {
+      final data = decoded['data'];
+      final nestedError = data is Map ? data['error']?.toString() : null;
       message =
           decoded['message'] as String? ??
           decoded['error'] as String? ??
           (decoded['errors'] as List?)?.join(', ') ??
+          nestedError ??
           message;
     }
 

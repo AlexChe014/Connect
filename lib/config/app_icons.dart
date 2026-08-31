@@ -84,6 +84,15 @@ abstract final class AppIcons {
   static const IconData cameraOn = TablerIcons.camera;
   static const IconData videoMeeting = TablerIcons.video;
   static const IconData scheduleMeeting = TablerIcons.calendar_plus;
+
+  // 15 — бонусная программа
+  static const IconData bonusWallet = TablerIcons.wallet;
+  static const IconData bonusHistory = TablerIcons.history;
+  static const IconData bonusTransfer = TablerIcons.arrows_left_right;
+  static const IconData bonusShop = TablerIcons.gift_filled;
+  static const IconData bonusWheel = TablerIcons.wheel;
+  static const IconData bonusTrophy = TablerIcons.trophy_filled;
+  static const IconData bonusSparkles = TablerIcons.sparkles;
 }
 
 /// Иконка из [AppIcons] с поддержкой размера и цвета из [IconTheme].

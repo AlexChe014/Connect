@@ -10,6 +10,7 @@ import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/users_repository.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:flutter/foundation.dart';
@@ -115,8 +116,17 @@ class ChatService extends ChangeNotifier {
     _isLoading = true;
     _error = null;
     notifyListeners();
+    await ChatPreferencesService.instance.ensureLoaded();
     await _refreshSelfProfile();
     await refreshChats();
+  }
+
+  Chat _applyLocalFlags(Chat c) {
+    final prefs = ChatPreferencesService.instance;
+    return c.copyWithFlags(
+      isMuted: prefs.isMuted(c.id),
+      isFavorite: prefs.isFavorite(c.id),
+    );
   }
 
   Future<void> refreshChats() async {
@@ -133,12 +143,13 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      await ChatPreferencesService.instance.ensureLoaded();
       final loaded = await ChatRepository.instance.getChats(
         currentUserId: userId,
       );
       _chats
         ..clear()
-        ..addAll(loaded);
+        ..addAll(loaded.map(_applyLocalFlags));
       _error = null;
     } catch (e) {
       _error = e is ApiException ? e.message : e.toString();
@@ -436,6 +447,8 @@ class ChatService extends ChangeNotifier {
           avatarPath: prev.avatarPath,
           title: chat.title.isNotEmpty ? chat.title : prev.title,
           unreadCount: prev.unreadCount,
+          isMuted: prev.isMuted,
+          isFavorite: prev.isFavorite,
         );
       }
       notifyListeners();
@@ -469,6 +482,8 @@ class ChatService extends ChangeNotifier {
           lastMessagePreview: prev.lastMessagePreview,
           lastMessageAt: prev.lastMessageAt,
           unreadCount: prev.unreadCount,
+          isMuted: prev.isMuted,
+          isFavorite: prev.isFavorite,
         );
       }
       notifyListeners();
@@ -520,6 +535,8 @@ class ChatService extends ChangeNotifier {
           lastMessagePreview: prev.lastMessagePreview,
           lastMessageAt: prev.lastMessageAt,
           unreadCount: prev.unreadCount,
+          isMuted: prev.isMuted,
+          isFavorite: prev.isFavorite,
         );
       }
       notifyListeners();
@@ -656,8 +673,31 @@ class ChatService extends ChangeNotifier {
       lastMessagePreview: c.lastMessagePreview,
       lastMessageAt: c.lastMessageAt,
       unreadCount: c.unreadCount,
+      isMuted: c.isMuted,
+      isFavorite: c.isFavorite,
     );
     notifyListeners();
+  }
+
+  /// Локальный тумблер звука чата (см. [ChatPreferencesService]) —
+  /// на сервере такого понятия нет, поэтому пуши для замьюченного чата
+  /// на этом устройстве просто не показываются баннером/звуком.
+  Future<void> toggleMute(String chatId) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx < 0) return;
+    final next = !_chats[idx].isMuted;
+    _chats[idx] = _chats[idx].copyWithFlags(isMuted: next);
+    notifyListeners();
+    await ChatPreferencesService.instance.setMuted(chatId, next);
+  }
+
+  Future<void> toggleFavorite(String chatId) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx < 0) return;
+    final next = !_chats[idx].isFavorite;
+    _chats[idx] = _chats[idx].copyWithFlags(isFavorite: next);
+    notifyListeners();
+    await ChatPreferencesService.instance.setFavorite(chatId, next);
   }
 
   Future<void> sendText(

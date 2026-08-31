@@ -52,5 +52,11 @@ android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 firebase.json
 
+# Release signing (upload keystore + пароли) — не для git
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+android/upload-keystore.jks
+
 # Claude Code local state
 .claude/

@@ -19,6 +19,8 @@ import 'screens/employees_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
 import 'screens/connector_screen.dart';
+import 'screens/disk_screen.dart';
+import 'screens/bonus_program_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'config/branding.dart';
@@ -68,6 +70,22 @@ class _ConnectAppState extends State<ConnectApp> {
       title: 'Connect — Корпоративный сервис',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      builder: (context, child) {
+        // MaterialApp подставляет для текста без Material-предка красно-жёлтый
+        // debug-стиль (см. flutter/material/app.dart, _errorTextStyle). Экраны
+        // и диалоги приложения построены на Cupertino-виджетах без Material,
+        // поэтому здесь задаётся собственный DefaultTextStyle на уровне всего
+        // Navigator — это покрывает и showDialog/showCupertinoDialog/шторки.
+        return DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: child!,
+        );
+      },
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -120,7 +138,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex.clamp(0, 3);
+    _currentIndex = widget.initialIndex.clamp(0, 4);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppNavigationService.processPendingNavigation();
     });
@@ -167,6 +185,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       0 => NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId),
       1 => const CalendarScreen(),
       2 => const ChatsListScreen(),
+      3 => const EmployeesScreen(showAppBar: false),
       _ => const ProfileScreen(),
     };
 
@@ -186,7 +205,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 avatarUrl: _drawerAvatarUrl,
                 onProfileTap: () {
                   Navigator.pop(context);
-                  setState(() => _currentIndex = 3);
+                  setState(() => _currentIndex = 4);
                 },
               ),
               const SizedBox(height: 10),
@@ -219,19 +238,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.person_2,
-                    label: 'Сотрудники',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const EmployeesScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
                     icon: CupertinoIcons.mail,
                     label: 'Почта',
                     selected: false,
@@ -251,6 +257,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       Navigator.of(context).push(
                         CupertinoPageRoute(
                           builder: (_) => const DocumentsSigningScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.folder,
+                    label: 'Диск',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const DiskScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.gift,
+                    label: 'Бонусная программа',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const BonusProgramScreen(),
                         ),
                       );
                     },
@@ -310,36 +342,35 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: CupertinoTabBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
           HapticFeedback.selectionClick();
           setState(() => _currentIndex = index);
         },
-        backgroundColor: CupertinoColors.systemGroupedBackground
-            .resolveFrom(context)
-            .withValues(alpha: 0.9),
-        activeColor: CupertinoColors.activeBlue,
-        inactiveColor: CupertinoColors.systemGrey,
-        iconSize: 26,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.square_grid_2x2),
-            activeIcon: Icon(CupertinoIcons.square_grid_2x2_fill),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(CupertinoIcons.news),
+            selectedIcon: Icon(CupertinoIcons.news_solid),
             label: 'Лента',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(CupertinoIcons.calendar),
             label: 'Календарь',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
             icon: Icon(CupertinoIcons.chat_bubble_2),
-            activeIcon: Icon(CupertinoIcons.chat_bubble_2_fill),
+            selectedIcon: Icon(CupertinoIcons.chat_bubble_2_fill),
             label: 'Чаты',
           ),
-          BottomNavigationBarItem(
+          NavigationDestination(
+            icon: Icon(CupertinoIcons.person_2),
+            selectedIcon: Icon(CupertinoIcons.person_2_fill),
+            label: 'Сотрудники',
+          ),
+          NavigationDestination(
             icon: Icon(CupertinoIcons.person_crop_circle),
-            activeIcon: Icon(CupertinoIcons.person_crop_circle_fill),
+            selectedIcon: Icon(CupertinoIcons.person_crop_circle_fill),
             label: 'Профиль',
           ),
         ],

@@ -158,10 +158,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       navigationBar: CupertinoNavigationBar(
-        backgroundColor: CupertinoColors.systemGroupedBackground.withValues(
-          alpha: 0.94,
+        backgroundColor: CupertinoColors.secondarySystemGroupedBackground
+            .resolveFrom(context)
+            .withValues(alpha: 0.94),
+        border: Border(
+          bottom: BorderSide(
+            color: CupertinoColors.separator.resolveFrom(context),
+            width: 0.5,
+          ),
         ),
-        border: null,
         middle: GestureDetector(
           onTap: _openSettings,
           child: Row(

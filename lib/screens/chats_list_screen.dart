@@ -8,9 +8,28 @@ import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/menu_button.dart';
+import 'package:connect/widgets/swipe_actions_row.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+enum _ChatFilter { all, direct, group, favorite }
+
+extension on _ChatFilter {
+  String get label => switch (this) {
+    _ChatFilter.all => 'Все',
+    _ChatFilter.direct => 'Личные',
+    _ChatFilter.group => 'Группы',
+    _ChatFilter.favorite => 'Избранные',
+  };
+
+  bool matches(Chat c) => switch (this) {
+    _ChatFilter.all => true,
+    _ChatFilter.direct => !c.isGroup,
+    _ChatFilter.group => c.isGroup,
+    _ChatFilter.favorite => c.isFavorite,
+  };
+}
 
 const _weekdayShort = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 
@@ -54,6 +73,10 @@ class ChatsListScreen extends StatefulWidget {
 
 class _ChatsListScreenState extends State<ChatsListScreen> {
   final _chat = ChatService.instance;
+  final _searchCtrl = TextEditingController();
+  final _swipeGroup = SwipeGroupController();
+  String _query = '';
+  _ChatFilter _filter = _ChatFilter.all;
 
   @override
   void initState() {
@@ -66,6 +89,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   @override
   void dispose() {
     _chat.removeListener(_onChats);
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -74,6 +98,67 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
     });
+  }
+
+  List<Chat> get _filteredChats {
+    var list = _chat.chats.where(_filter.matches);
+
+    final q = _query.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((c) {
+        if (c.title.toLowerCase().contains(q)) return true;
+        if ((c.lastMessagePreview ?? '').toLowerCase().contains(q)) {
+          return true;
+        }
+        return c.memberNames.any((n) => n.toLowerCase().contains(q));
+      });
+    }
+    return list.toList(growable: false);
+  }
+
+  String _emptyMessage() {
+    if (_query.trim().isNotEmpty) return 'Ничего не найдено';
+    return switch (_filter) {
+      _ChatFilter.all => 'Нет чатов',
+      _ChatFilter.direct => 'Нет личных чатов',
+      _ChatFilter.group => 'Нет групповых чатов',
+      _ChatFilter.favorite => 'Нет избранных чатов',
+    };
+  }
+
+  Widget _buildSearchAndFilters() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          CupertinoSearchTextField(
+            controller: _searchCtrl,
+            placeholder: 'Поиск',
+            onChanged: (v) => setState(() => _query = v),
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final f in _ChatFilter.values) ...[
+                  _FilterChip(
+                    label: f.label,
+                    selected: _filter == f,
+                    icon: f == _ChatFilter.favorite
+                        ? CupertinoIcons.star_fill
+                        : null,
+                    onTap: () => setState(() => _filter = f),
+                  ),
+                  if (f != _ChatFilter.values.last) const SizedBox(width: 8),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSliverBody() {
@@ -107,29 +192,128 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       );
     }
 
+    final filtered = _filteredChats;
+    if (filtered.isEmpty) {
+      return SliverFillRemaining(
+        child: AppEmptyState(
+          icon: _query.trim().isNotEmpty
+              ? CupertinoIcons.search
+              : CupertinoIcons.chat_bubble_2,
+          message: _emptyMessage(),
+        ),
+      );
+    }
+
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       sliver: SliverList.separated(
-        itemCount: _chat.chats.length,
+        itemCount: filtered.length,
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          final c = _chat.chats[index];
-          return _ChatRow(
-            chat: c,
-            time: c.lastMessageAt != null
-                ? _formatLastMessageTime(c.lastMessageAt!)
-                : '',
-            onTap: () {
-              Navigator.of(context).push(
-                CupertinoPageRoute<void>(
-                  builder: (context) => ChatConversationScreen(chat: c),
-                ),
-              );
-            },
+          final c = filtered[index];
+          return SwipeActionsRow(
+            id: c.id,
+            groupController: _swipeGroup,
+            actions: [
+              SwipeAction(
+                icon: c.isMuted
+                    ? CupertinoIcons.bell
+                    : CupertinoIcons.bell_slash_fill,
+                label: c.isMuted ? 'Со звуком' : 'Без звука',
+                color: CupertinoColors.systemGrey,
+                onTap: () => _chat.toggleMute(c.id),
+              ),
+              SwipeAction(
+                icon: CupertinoIcons.delete,
+                label: 'Удалить',
+                color: CupertinoColors.destructiveRed,
+                onTap: () => _confirmDeleteChat(c),
+              ),
+            ],
+            child: _ChatRow(
+              chat: c,
+              time: c.lastMessageAt != null
+                  ? _formatLastMessageTime(c.lastMessageAt!)
+                  : '',
+              onTap: () {
+                Navigator.of(context).push(
+                  CupertinoPageRoute<void>(
+                    builder: (context) => ChatConversationScreen(chat: c),
+                  ),
+                );
+              },
+              onLongPress: () => _showChatActions(c),
+            ),
           );
         },
       ),
     );
+  }
+
+  Future<void> _showChatActions(Chat c) async {
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(c.title),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'favorite'),
+            child: Text(
+              c.isFavorite ? 'Убрать из избранного' : 'В избранное',
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'mute'),
+            child: Text(c.isMuted ? 'Включить звук' : 'Без звука'),
+          ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, 'delete'),
+            child: const Text('Удалить'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case 'favorite':
+        _chat.toggleFavorite(c.id);
+      case 'mute':
+        _chat.toggleMute(c.id);
+      case 'delete':
+        _confirmDeleteChat(c);
+    }
+  }
+
+  Future<void> _confirmDeleteChat(Chat c) async {
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Удалить чат?'),
+        content: Text('Переписка с «${c.title}» будет удалена безвозвратно.'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final success = await _chat.deleteChat(c.id);
+    if (!mounted) return;
+    if (!success) {
+      _showMessage(_chat.lastActionError ?? 'Не удалось удалить чат');
+    }
   }
 
   @override
@@ -163,6 +347,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     child: const Icon(CupertinoIcons.add_circled, size: 28),
                   ),
                 ),
+                SliverToBoxAdapter(child: _buildSearchAndFilters()),
                 _buildSliverBody(),
               ],
             ),
@@ -502,9 +687,10 @@ class _ContactTile extends StatelessWidget {
 }
 
 class _UnreadBadge extends StatelessWidget {
-  const _UnreadBadge({required this.count});
+  const _UnreadBadge({required this.count, this.muted = false});
 
   final int count;
+  final bool muted;
 
   @override
   Widget build(BuildContext context) {
@@ -513,9 +699,11 @@ class _UnreadBadge extends StatelessWidget {
       height: 20,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        color: CupertinoColors.activeGreen,
-        borderRadius: BorderRadius.all(Radius.circular(10)),
+      decoration: BoxDecoration(
+        color: muted
+            ? CupertinoColors.systemGrey3.resolveFrom(context)
+            : CupertinoColors.activeBlue,
+        borderRadius: const BorderRadius.all(Radius.circular(10)),
       ),
       child: Text(
         count > 99 ? '99+' : '$count',
@@ -529,12 +717,79 @@ class _UnreadBadge extends StatelessWidget {
   }
 }
 
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected
+        ? CupertinoColors.activeBlue
+        : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
+          );
+    final fg = selected
+        ? CupertinoColors.white
+        : CupertinoColors.label.resolveFrom(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 13,
+                color: selected
+                    ? CupertinoColors.white
+                    : CupertinoColors.systemYellow,
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatRow extends StatelessWidget {
-  const _ChatRow({required this.chat, required this.time, required this.onTap});
+  const _ChatRow({
+    required this.chat,
+    required this.time,
+    required this.onTap,
+    this.onLongPress,
+  });
 
   final Chat chat;
   final String time;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -555,12 +810,39 @@ class _ChatRow extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ChatAvatar(chat: chat, radius: 24),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ChatAvatar(chat: chat, radius: 24),
+                  if (chat.isFavorite)
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 17,
+                        height: 17,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: CupertinoColors.systemBackground.resolveFrom(
+                            context,
+                          ),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.star_fill,
+                          size: 12,
+                          color: CupertinoColors.systemYellow,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -594,25 +876,43 @@ class _ChatRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (time.isNotEmpty || chat.unreadCount > 0) ...[
+              if (time.isNotEmpty || chat.unreadCount > 0 || chat.isMuted) ...[
                 const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (time.isNotEmpty)
-                      Text(
-                        time,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: CupertinoColors.tertiaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
+                    if (time.isNotEmpty || chat.isMuted)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (chat.isMuted) ...[
+                            Icon(
+                              CupertinoIcons.bell_slash_fill,
+                              size: 12,
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(
+                                context,
+                              ),
+                            ),
+                            if (time.isNotEmpty) const SizedBox(width: 4),
+                          ],
+                          if (time.isNotEmpty)
+                            Text(
+                              time,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: CupertinoColors.tertiaryLabel
+                                    .resolveFrom(context),
+                              ),
+                            ),
+                        ],
                       ),
                     if (chat.unreadCount > 0) ...[
                       const SizedBox(height: 4),
-                      _UnreadBadge(count: chat.unreadCount),
+                      _UnreadBadge(
+                        count: chat.unreadCount,
+                        muted: chat.isMuted,
+                      ),
                     ],
                   ],
                 ),

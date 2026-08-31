@@ -211,7 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   static final Uri _privacyPolicyUri = Uri.parse(
-    'https://xon-connect.ru/include/licenses_detail.php',
+    'https://xon-connect.ru/connect-app-privacy',
   );
 
   Future<void> _openPrivacyPolicy() async {
