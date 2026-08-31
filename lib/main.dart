@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart'
     show FlutterQuillLocalizations;
@@ -23,15 +24,19 @@ import 'config/app_theme.dart';
 import 'config/branding.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
+import 'services/branding_service.dart';
 import 'services/location_gate_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiOverlay);
   await initializeDateFormatting('ru_RU', null);
   await ApiConfig.init();
   await AuthService.instance.init();
+  await BrandingService.instance.init();
   await PushNotificationService.instance.init();
   runApp(const ConnectApp());
 }
@@ -58,40 +63,43 @@ class _ConnectAppState extends State<ConnectApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: AppNavigationService.navigatorKey,
-      title: 'Connect — Корпоративный сервис',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        FlutterQuillLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
-      locale: const Locale('ru', 'RU'),
-      initialRoute: AuthService.instance.isAuthenticated ? '/home' : '/login',
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/home': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments;
-          final initialIndex = args is Map
-              ? (args['initialIndex'] as int?)
-              : null;
-          final homeSection = args is Map
-              ? (args['homeSection'] as String?)
-              : null;
-          final openNewsId = args is Map
-              ? (args['openNewsId'] as String?)
-              : null;
-          return MainNavigationScreen(
-            initialIndex: initialIndex ?? 0,
-            initialHomeSection: homeSection,
-            openNewsId: openNewsId,
-          );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: AppTheme.systemUiOverlay,
+      child: MaterialApp(
+        navigatorKey: AppNavigationService.navigatorKey,
+        title: 'Connect — Корпоративный сервис',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          FlutterQuillLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('ru', 'RU'), Locale('en', 'US')],
+        locale: const Locale('ru', 'RU'),
+        initialRoute: AuthService.instance.isAuthenticated ? '/home' : '/login',
+        routes: {
+          '/login': (context) => const LoginScreen(),
+          '/home': (context) {
+            final args = ModalRoute.of(context)?.settings.arguments;
+            final initialIndex = args is Map
+                ? (args['initialIndex'] as int?)
+                : null;
+            final homeSection = args is Map
+                ? (args['homeSection'] as String?)
+                : null;
+            final openNewsId = args is Map
+                ? (args['openNewsId'] as String?)
+                : null;
+            return MainNavigationScreen(
+              initialIndex: initialIndex ?? 0,
+              initialHomeSection: homeSection,
+              openNewsId: openNewsId,
+            );
+          },
         },
-      },
+      ),
     );
   }
 }
@@ -166,6 +174,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       2 => const ChatsListScreen(),
       _ => const ProfileScreen(),
     };
+
+    final tabColor = CupertinoColors.systemGroupedBackground
+        .resolveFrom(context)
+        .withValues(alpha: 0.94);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -293,6 +305,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         children: [
           SafeArea(
             top: false,
+            bottom: false,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final content = body;
@@ -318,39 +331,49 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
         ],
       ),
-      bottomNavigationBar: CupertinoTabBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 0) {
-            _scaffoldKey.currentState?.openDrawer();
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
-        backgroundColor: CupertinoColors.systemGroupedBackground
-            .resolveFrom(context)
-            .withValues(alpha: 0.94),
-        activeColor: CupertinoColors.activeBlue,
-        inactiveColor: CupertinoColors.systemGrey,
-        iconSize: 26,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.line_horizontal_3),
-            label: 'Меню',
+      bottomNavigationBar: ColoredBox(
+        color: tabColor,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewPaddingOf(context).bottom,
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.calendar),
-            label: 'Календарь',
+          child: MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            child: CupertinoTabBar(
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                if (index == 0) {
+                  _scaffoldKey.currentState?.openDrawer();
+                  return;
+                }
+                setState(() => _currentIndex = index);
+              },
+              backgroundColor: tabColor,
+              activeColor: CupertinoColors.activeBlue,
+              inactiveColor: CupertinoColors.systemGrey,
+              iconSize: 26,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.line_horizontal_3),
+                  label: 'Меню',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.calendar),
+                  label: 'Календарь',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.chat_bubble_2),
+                  label: 'Чаты',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.person_crop_circle),
+                  label: 'Профиль',
+                ),
+              ],
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.chat_bubble_2),
-            label: 'Чаты',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.person_crop_circle),
-            label: 'Профиль',
-          ),
-        ],
+        ),
       ),
     );
   }

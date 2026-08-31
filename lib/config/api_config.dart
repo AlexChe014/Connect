@@ -29,6 +29,12 @@ class ApiConfig {
   /// Базовый URL API (без завершающего слеша)
   static String get baseUrl => '${_normalizeHost(backendHost)}$_mobileSegment$_apiSegment';
 
+  /// Базовый URL API для произвольного хоста (ещё не сохранённого в настройках).
+  static String apiBaseUrlForHost(String host) {
+    final sanitized = _sanitizeBackendHost(host) ?? _normalizeHost(host.trim());
+    return '${_normalizeHost(sanitized)}$_mobileSegment$_apiSegment';
+  }
+
   /// Публичный хост для файлов/картинок (без завершающего слеша).
   static String get publicHost => _filesHost;
 
@@ -37,7 +43,7 @@ class ApiConfig {
 
   /// Устанавливает локальный хост бэкенда.
   ///
-  /// Пользователь вводит хост без `/mobile`, например `https://connect.xondev.ru`.
+  /// Если схема не указана, автоматически добавляется `https://`.
   /// Пустое значение сбрасывает настройку к дефолтному адресу.
   static Future<void> setBackendHost(String? value) async {
     final prefs = await SharedPreferences.getInstance();
@@ -52,28 +58,44 @@ class ApiConfig {
 
   static bool isBackendHostValid(String? value) => _sanitizeBackendHost(value) != null;
 
+  /// Нормализованный хост для отображения в поле ввода (с `https://`).
+  static String? normalizeBackendHost(String? value) => _sanitizeBackendHost(value);
+
   static String _normalizeHost(String host) => host.replaceAll(RegExp(r'/+$'), '');
 
   static String? _sanitizeBackendHost(String? raw) {
     if (raw == null) return null;
-    final trimmed = raw.trim();
+    var trimmed = raw.trim();
     if (trimmed.isEmpty) return null;
 
-    var normalized = trimmed.replaceAll(RegExp(r'/+$'), '');
-    if (normalized.toLowerCase().endsWith('/mobile')) {
-      normalized = normalized.substring(0, normalized.length - '/mobile'.length);
+    trimmed = trimmed.replaceAll(RegExp(r'/+$'), '');
+    if (trimmed.toLowerCase().endsWith('/mobile')) {
+      trimmed = trimmed.substring(0, trimmed.length - '/mobile'.length);
+      trimmed = trimmed.replaceAll(RegExp(r'/+$'), '');
     }
-    if (normalized.isEmpty) return null;
+    if (trimmed.isEmpty) return null;
 
-    final uri = Uri.tryParse(normalized);
+    final lower = trimmed.toLowerCase();
+    if (!lower.startsWith('https://')) {
+      if (lower.startsWith('http://')) {
+        trimmed = 'https://${trimmed.substring(7)}';
+      } else {
+        final withoutSlashes = trimmed.replaceFirst(RegExp(r'^/+'), '');
+        trimmed = 'https://$withoutSlashes';
+      }
+    }
+
+    final uri = Uri.tryParse(trimmed);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
       return null;
     }
-    if (uri.scheme != 'http' && uri.scheme != 'https') {
+    if (uri.scheme != 'https' && uri.scheme != 'http') {
       return null;
     }
 
-    return uri.replace(path: '', query: null, fragment: null).toString();
+    return _normalizeHost(
+      uri.replace(path: '', query: null, fragment: null).toString(),
+    );
   }
 
   /// Нормализация URL файлов от бэкенда.

@@ -145,7 +145,7 @@ class NewsItem {
       imageUrls: imageUrls,
       likesCount: likesCount,
       viewsCount: viewsCount,
-      isLiked: _parseBool(json['is_liked'] ?? json['isLiked']),
+      isLiked: _parseIsLiked(json),
       isViewed: _parseBool(json['is_viewed'] ?? json['isViewed']),
       isPinned: _parseBool(json['is_pinned'] ?? json['isPinned']),
       author: author,
@@ -187,6 +187,28 @@ class NewsItem {
     if (v == null) return 0;
     if (v is int) return v;
     return int.tryParse(v.toString()) ?? 0;
+  }
+
+  static bool _parseIsLiked(Map<String, dynamic> json) {
+    for (final key in [
+      'is_liked',
+      'isLiked',
+      'has_like',
+      'has_liked',
+      'user_liked',
+    ]) {
+      if (!json.containsKey(key)) continue;
+      final v = json[key];
+      if (v is Map) return v.isNotEmpty;
+      if (v is List) return v.isNotEmpty;
+      if (v is bool) return v;
+      if (v is num) return v == 1;
+      final s = v.toString().trim().toLowerCase();
+      if (s == 'true' || s == 'yes') return true;
+      if (s == 'false' || s == '0' || s == 'no' || s.isEmpty) return false;
+      if (s == '1') return true;
+    }
+    return false;
   }
 
   static bool _parseBool(Object? v) {

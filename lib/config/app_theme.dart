@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Общая цветовая палитра и тема приложения.
 abstract final class AppColors {
@@ -44,6 +45,18 @@ abstract final class AppSpacing {
 
 abstract final class AppTheme {
   AppTheme._();
+
+  /// Светлый фон → тёмные системные иконки (назад / домой / недавние).
+  /// Иначе на Android без жестов кнопки навигации сливаются с таббаром.
+  static const SystemUiOverlayStyle systemUiOverlay = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarContrastEnforced: true,
+  );
 
   static ThemeData get light {
     const radius = AppColors.radius;
@@ -133,6 +146,7 @@ abstract final class AppTheme {
         backgroundColor: AppColors.surfaceElevated,
         foregroundColor: AppColors.onSurface,
         surfaceTintColor: Colors.transparent,
+        systemOverlayStyle: systemUiOverlay,
         shape: Border(
           bottom: BorderSide(color: AppColors.outline, width: 1),
         ),

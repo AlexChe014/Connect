@@ -4,6 +4,7 @@ import '../config/app_icons.dart';
 import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../services/auth_service.dart';
+import '../services/branding_service.dart';
 import '../services/location_gate_service.dart';
 import '../services/notification_preferences_service.dart';
 import '../services/push_notification_service.dart';
@@ -21,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _backendController = TextEditingController();
+  final _backendFocus = FocusNode();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _errorMessage;
@@ -29,18 +31,47 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _backendController.text = ApiConfig.customBackendHost ?? '';
+    _backendFocus.addListener(_onBackendFocusChange);
+    BrandingService.instance.refresh();
   }
 
   @override
   void dispose() {
+    _backendFocus
+      ..removeListener(_onBackendFocusChange)
+      ..dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _backendController.dispose();
     super.dispose();
   }
 
+  void _onBackendFocusChange() {
+    if (!_backendFocus.hasFocus) {
+      _normalizeBackendField();
+    }
+  }
+
+  String? _normalizeBackendField() {
+    final raw = _backendController.text.trim();
+    if (raw.isEmpty) {
+      BrandingService.instance.refresh();
+      return '';
+    }
+    final normalized = ApiConfig.normalizeBackendHost(raw);
+    if (normalized == null) return null;
+    if (normalized != _backendController.text) {
+      _backendController.value = TextEditingValue(
+        text: normalized,
+        selection: TextSelection.collapsed(offset: normalized.length),
+      );
+    }
+    BrandingService.instance.refresh(host: normalized);
+    return normalized;
+  }
+
   Future<void> _submit() async {
-    final backend = _backendController.text.trim();
+    final backend = _normalizeBackendField() ?? _backendController.text.trim();
     if (backend.isNotEmpty && !ApiConfig.isBackendHostValid(backend)) {
       setState(() {
         _errorMessage = 'Некорректный адрес бэкенда. Пример: https://connect.xondev.ru';
@@ -59,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailController.text.trim(),
         _passwordController.text,
       );
+      await BrandingService.instance.refresh();
 
       final location = await LocationGateService.instance.verifyForEmail(
         _emailController.text.trim(),
@@ -192,14 +224,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 32),
                         TextFormField(
                           controller: _backendController,
+                          focusNode: _backendFocus,
                           keyboardType: TextInputType.url,
                           autocorrect: false,
+                          textInputAction: TextInputAction.next,
                           decoration: const InputDecoration(
                             labelText: 'Адрес сервера',
                             hintText: 'https://connect.xondev.ru',
-                            helperText: 'Указывайте адрес без /mobile',
                             prefixIcon: Icon(Icons.link),
                           ),
+                          onFieldSubmitted: (_) => _normalizeBackendField(),
+                          onEditingComplete: _normalizeBackendField,
                           validator: (v) {
                             final value = v?.trim() ?? '';
                             if (value.isEmpty) return null;

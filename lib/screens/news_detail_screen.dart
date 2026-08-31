@@ -104,21 +104,21 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     final wasLiked = _news.isLiked;
     try {
       if (wasLiked) {
-        await NewsRepository.instance.removeLike(_news.id);
+        final count = await NewsRepository.instance.removeLike(_news.id);
         if (!mounted) return;
         setState(() {
           _news = _news.copyWith(
             isLiked: false,
-            likesCount: (_news.likesCount - 1).clamp(0, 1 << 30),
+            likesCount: count ?? (_news.likesCount - 1).clamp(0, 1 << 30),
           );
         });
       } else {
-        await NewsRepository.instance.addLike(_news.id);
+        final count = await NewsRepository.instance.addLike(_news.id);
         if (!mounted) return;
         setState(() {
           _news = _news.copyWith(
             isLiked: true,
-            likesCount: _news.likesCount + 1,
+            likesCount: count ?? _news.likesCount + 1,
           );
         });
       }

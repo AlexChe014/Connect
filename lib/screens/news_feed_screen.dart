@@ -210,21 +210,24 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     final wasLiked = item.isLiked;
     try {
       if (wasLiked) {
-        await NewsRepository.instance.removeLike(id);
+        final count = await NewsRepository.instance.removeLike(id);
         if (!mounted) return false;
         _updateItem(
           id,
           (n) => n.copyWith(
             isLiked: false,
-            likesCount: (n.likesCount - 1).clamp(0, 1 << 30),
+            likesCount: count ?? (n.likesCount - 1).clamp(0, 1 << 30),
           ),
         );
       } else {
-        await NewsRepository.instance.addLike(id);
+        final count = await NewsRepository.instance.addLike(id);
         if (!mounted) return false;
         _updateItem(
           id,
-          (n) => n.copyWith(isLiked: true, likesCount: n.likesCount + 1),
+          (n) => n.copyWith(
+            isLiked: true,
+            likesCount: count ?? n.likesCount + 1,
+          ),
         );
       }
       return true;
@@ -413,120 +416,134 @@ class _NewsCard extends StatelessWidget {
           boxShadow: AppColors.cardPhotoShadow,
         ),
         clipBehavior: Clip.antiAlias,
-        child: GestureDetector(
-          onTap: onOpen,
-          behavior: HitTestBehavior.opaque,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Фото целиком (contain) + блюр-копия того же снимка по краям —
-              // портретные фото не обрезаются, но карточка остаётся 16:9.
-              if (hasImage)
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                        child: AppNetworkImage(
-                          url: news.imageUrl,
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      ColoredBox(color: Colors.black.withValues(alpha: 0.18)),
-                      AppNetworkImage(
-                        url: news.imageUrl,
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.contain,
-                      ),
-                    ],
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        if (news.author != null) ...[
-                          _AuthorChip(
-                            authorName: news.author!.fullName,
-                            avatarUrl: news.author!.avatarUrl,
-                          ),
-                          const SizedBox(width: 10),
-                        ],
-                        Icon(
-                          CupertinoIcons.calendar,
-                          size: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          dateLabel,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(
-                              context,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: onOpen,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasImage)
+                    AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ImageFiltered(
+                            imageFilter: ImageFilter.blur(
+                              sigmaX: 24,
+                              sigmaY: 24,
+                            ),
+                            child: AppNetworkImage(
+                              url: news.imageUrl,
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.cover,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      news.title,
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        height: 1.25,
+                          ColoredBox(
+                            color: Colors.black.withValues(alpha: 0.18),
+                          ),
+                          AppNetworkImage(
+                            url: news.imageUrl,
+                            width: double.infinity,
+                            height: double.infinity,
+                            fit: BoxFit.contain,
+                          ),
+                        ],
                       ),
                     ),
-                    if (news.contentHtml.trim().isNotEmpty ||
-                        news.content.trim().isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _ExpandableSummary(
-                        text: news.contentHtml.trim().isNotEmpty
-                            ? news.contentHtml
-                            : news.content,
-                        fontSize: 15,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                      AppSpacing.lg,
+                      0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _StatChip(
-                          icon: CupertinoIcons.eye,
-                          label: '${news.viewsCount}',
-                          onTap: onShowViewers,
+                        Row(
+                          children: [
+                            if (news.author != null) ...[
+                              _AuthorChip(
+                                authorName: news.author!.fullName,
+                                avatarUrl: news.author!.avatarUrl,
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            Icon(
+                              CupertinoIcons.calendar,
+                              size: 13,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context),
+                              ),
+                            ),
+                          ],
                         ),
-                        const Spacer(),
-                        _StatChip(
-                          icon: CupertinoIcons.chat_bubble,
-                          onTap: onOpen,
+                        const SizedBox(height: 8),
+                        Text(
+                          news.title,
+                          style: const TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                            height: 1.25,
+                          ),
                         ),
-                        const SizedBox(width: 16),
-                        _LikeButton(
-                          count: news.likesCount,
-                          isLiked: news.isLiked,
-                          isLoading: isLikeInFlight,
-                          onPressed: onLike,
-                          onCountTap: onShowLikers,
-                        ),
+                        if (news.contentHtml.trim().isNotEmpty ||
+                            news.content.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          _ExpandableSummary(
+                            text: news.contentHtml.trim().isNotEmpty
+                                ? news.contentHtml
+                                : news.content,
+                            fontSize: 15,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ],
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(
+                children: [
+                  _StatChip(
+                    icon: CupertinoIcons.eye,
+                    label: '${news.viewsCount}',
+                    onTap: onShowViewers,
+                  ),
+                  const Spacer(),
+                  _StatChip(
+                    icon: CupertinoIcons.chat_bubble,
+                    onTap: onOpen,
+                  ),
+                  const SizedBox(width: 16),
+                  _LikeButton(
+                    count: news.likesCount,
+                    isLiked: news.isLiked,
+                    isLoading: isLikeInFlight,
+                    onPressed: onLike,
+                    onCountTap: onShowLikers,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
