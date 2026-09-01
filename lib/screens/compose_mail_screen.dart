@@ -91,6 +91,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
   Future<void> _send() async {
     if (!_validate()) return;
+    FocusManager.instance.primaryFocus?.unfocus();
 
     setState(() => _isSending = true);
     try {
