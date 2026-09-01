@@ -125,6 +125,21 @@ class ChatMapper {
       json: json,
     );
 
+    final forwardedMessageId = _parseInt(json['forwarded_message_id']);
+    MessageReference? forwardOf;
+    if (forwardedMessageId != null) {
+      final forwardedFromUser = _asJsonMap(json['forwarded_from_user']);
+      forwardOf = MessageReference(
+        messageId: forwardedMessageId.toString(),
+        authorName: forwardedFromUser != null
+            ? userDisplayNameFromJson(forwardedFromUser)
+            : 'Пользователь',
+        textPreview: resolved.text?.trim().isNotEmpty == true
+            ? HtmlTextUtils.toPlainText(resolved.text!)
+            : 'Сообщение',
+      );
+    }
+
     return ChatMessage(
       id: id,
       chatId: chatId,
@@ -134,6 +149,7 @@ class ChatMapper {
       text: resolved.text,
       attachmentKind: resolved.attachmentKind,
       remoteMediaUrl: resolved.remoteMediaUrl,
+      forwardOf: forwardOf,
       isSystem: type == 'SYSTEM',
       repliedMessageId: _parseInt(json['replied_message_id'])?.toString(),
       isRead: _isReadForUser(json, currentUserId, senderId),

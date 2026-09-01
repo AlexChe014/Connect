@@ -8,6 +8,18 @@ import 'package:connect/models/mail/mail_message.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:http/http.dart' as http;
 
+class MailMessagePage {
+  const MailMessagePage({
+    required this.messages,
+    required this.hasMore,
+    required this.nextPage,
+  });
+
+  final List<MailMessage> messages;
+  final bool hasMore;
+  final int nextPage;
+}
+
 class CreateMailConnectionRequest {
   final String service;
   final String email;
@@ -249,21 +261,27 @@ class MailRepository {
     return _parseMessageList(decoded, 'Не удалось получить письма');
   }
 
-  Future<List<MailMessage>> getMessagesByService(int connectionId) async {
+  Future<MailMessagePage> getMessagesByService(
+    int connectionId, {
+    int page = 1,
+  }) async {
     final decoded = await ApiClient.instance.get(
       MailRoutes.getByServiceUrl(connectionId),
+      queryParameters: {'page': '$page'},
     );
-    return _parseMessageList(decoded, 'Не удалось получить письма');
+    return _parseMessagePage(decoded, 'Не удалось получить письма');
   }
 
-  Future<List<MailMessage>> getMessagesByFolder({
+  Future<MailMessagePage> getMessagesByFolder({
     required int connectionId,
     required int folderId,
+    int page = 1,
   }) async {
     final decoded = await ApiClient.instance.get(
       MailRoutes.getByFolderUrl(connectionId, folderId),
+      queryParameters: {'page': '$page'},
     );
-    return _parseMessageList(decoded, 'Не удалось получить письма');
+    return _parseMessagePage(decoded, 'Не удалось получить письма');
   }
 
   Future<MailMessage> getMessage({
@@ -529,6 +547,41 @@ class MailRepository {
         .map(MailMessage.fromJson)
         .where((m) => m.id > 0 || m.subject != '(без темы)')
         .toList();
+  }
+
+  MailMessagePage _parseMessagePage(
+    Map<String, dynamic> decoded,
+    String errorMessage,
+  ) {
+    final messages = _parseMessageList(decoded, errorMessage);
+    final data = _unwrapMailData(decoded, errorMessage);
+    if (data is Map) {
+      final currentPage = _parseIntValue(data['current_page']);
+      final lastPage = _parseIntValue(data['last_page']);
+      if (currentPage != null && lastPage != null) {
+        return MailMessagePage(
+          messages: messages,
+          hasMore: currentPage < lastPage,
+          nextPage: currentPage + 1,
+        );
+      }
+      final nextPageUrl = data['next_page_url'];
+      if (nextPageUrl != null) {
+        return MailMessagePage(
+          messages: messages,
+          hasMore: true,
+          nextPage: (_parseIntValue(data['current_page']) ?? 1) + 1,
+        );
+      }
+    }
+    return MailMessagePage(messages: messages, hasMore: false, nextPage: 1);
+  }
+
+  int? _parseIntValue(Object? v) {
+    if (v == null) return null;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString().trim());
   }
 
   Object? _unwrapMailData(Map<String, dynamic> decoded, String errorMessage) {

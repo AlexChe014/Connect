@@ -20,6 +20,48 @@ class MailFolder {
     return n == 'inbox' || n == 'входящие';
   }
 
+  bool get isSent {
+    return _matches(const [
+      'sent',
+      'sent items',
+      'sent messages',
+      'отправленные',
+    ]);
+  }
+
+  bool get isDrafts {
+    return _matches(const ['drafts', 'draft', 'черновики']);
+  }
+
+  bool get isTrash {
+    return _matches(const [
+      'trash',
+      'deleted',
+      'deleted items',
+      'bin',
+      'корзина',
+      'удаленные',
+      'удалённые',
+    ]);
+  }
+
+  bool get isSpam {
+    return _matches(const ['spam', 'junk', 'junk e-mail', 'спам']);
+  }
+
+  bool get isArchive {
+    return _matches(const ['archive', 'all mail', 'архив']);
+  }
+
+  bool _matches(List<String> candidates) {
+    final original = originalName?.trim().toLowerCase();
+    final n = name.trim().toLowerCase();
+    for (final candidate in candidates) {
+      if (original == candidate || n == candidate) return true;
+    }
+    return false;
+  }
+
   factory MailFolder.fromJson(Map<String, dynamic> json) {
     final originalName = _optionalString(json, [
       'original_name',

@@ -12,6 +12,34 @@ class MailFoldersScreen extends StatelessWidget {
   final List<MailFolder> folders;
   final MailFolder? selected;
 
+  static (IconData, CupertinoDynamicColor) _iconFor(MailFolder folder) {
+    if (folder.isInbox) {
+      return (CupertinoIcons.tray_full, CupertinoColors.systemTeal);
+    }
+    if (folder.isSent) {
+      return (
+        CupertinoIcons.paperplane,
+        CupertinoColors.secondaryLabel,
+      );
+    }
+    if (folder.isDrafts) {
+      return (CupertinoIcons.doc_text, CupertinoColors.secondaryLabel);
+    }
+    if (folder.isSpam) {
+      return (
+        CupertinoIcons.hand_thumbsdown,
+        CupertinoColors.secondaryLabel,
+      );
+    }
+    if (folder.isTrash) {
+      return (CupertinoIcons.trash, CupertinoColors.systemRed);
+    }
+    if (folder.isArchive) {
+      return (CupertinoIcons.archivebox, CupertinoColors.secondaryLabel);
+    }
+    return (CupertinoIcons.folder, CupertinoColors.activeBlue);
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -35,40 +63,40 @@ class MailFoldersScreen extends StatelessWidget {
               margin: EdgeInsets.zero,
               children: [
                 for (final folder in folders)
-                  CupertinoListTile(
-                    leading: Icon(
-                      folder.isInbox
-                          ? CupertinoIcons.tray_full
-                          : CupertinoIcons.folder,
-                      color: CupertinoColors.activeBlue,
-                    ),
-                    title: Text(folder.name),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if ((folder.unreadCount ?? 0) > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: Text(
-                              '${folder.unreadCount}',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: CupertinoColors.secondaryLabel
-                                    .resolveFrom(context),
+                  Builder(
+                    builder: (tileContext) {
+                      final (icon, color) = _iconFor(folder);
+                      return CupertinoListTile(
+                        leading: Icon(icon, color: color.resolveFrom(tileContext)),
+                        title: Text(folder.name),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if ((folder.unreadCount ?? 0) > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Text(
+                                  '${folder.unreadCount}',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: CupertinoColors.secondaryLabel
+                                        .resolveFrom(tileContext),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        if (selected != null &&
-                            selected!.id == folder.id &&
-                            selected!.name == folder.name)
-                          const Icon(
-                            CupertinoIcons.check_mark,
-                            color: CupertinoColors.activeBlue,
-                            size: 18,
-                          ),
-                      ],
-                    ),
-                    onTap: () => Navigator.of(context).pop(folder),
+                            if (selected != null &&
+                                selected!.id == folder.id &&
+                                selected!.name == folder.name)
+                              const Icon(
+                                CupertinoIcons.check_mark,
+                                color: CupertinoColors.activeBlue,
+                                size: 18,
+                              ),
+                          ],
+                        ),
+                        onTap: () => Navigator.of(context).pop(folder),
+                      );
+                    },
                   ),
               ],
             ),

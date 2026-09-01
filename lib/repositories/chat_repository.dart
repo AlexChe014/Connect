@@ -148,6 +148,7 @@ class ChatRepository {
     required String text,
     required int currentUserId,
     int? repliedMessageId,
+    int? forwardedMessageId,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
@@ -160,6 +161,9 @@ class ChatRepository {
     if (repliedMessageId != null) {
       // Спецификация описывает только `text`, но бэкенд поддерживает треды.
       body['replied_message_id'] = repliedMessageId;
+    }
+    if (forwardedMessageId != null) {
+      body['forwarded_message_id'] = forwardedMessageId;
     }
 
     final decoded = await ApiClient.instance.post(

@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show RefreshIndicator, ScaffoldMessenger, SnackBar;
+    show Colors, RefreshIndicator, Scaffold, ScaffoldMessenger, SnackBar;
 
 import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
@@ -164,36 +164,43 @@ class _MailScreenState extends State<MailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator(
-            onRefresh: _loadConnections,
-            child: CustomScrollView(
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('Почта'),
-                  backgroundColor: CupertinoColors.systemGroupedBackground
-                      .withValues(alpha: 0.9),
-                  border: null,
-                  trailing: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    onPressed: _openCreateConnection,
-                    child: const Icon(CupertinoIcons.add_circled, size: 28),
+    // Wrapped in a Material Scaffold purely so ScaffoldMessenger has a local
+    // Scaffold to attach SnackBars to — this screen is pushed on top of the
+    // app's only Scaffold (MainNavigationScreen's), which sits hidden behind
+    // it, so error SnackBars would otherwise render invisibly there.
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: RefreshIndicator(
+              onRefresh: _loadConnections,
+              child: CustomScrollView(
+                slivers: [
+                  CupertinoSliverNavigationBar(
+                    largeTitle: const Text('Почта'),
+                    backgroundColor: CupertinoColors.systemGroupedBackground
+                        .withValues(alpha: 0.9),
+                    border: null,
+                    trailing: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      onPressed: _openCreateConnection,
+                      child: const Icon(CupertinoIcons.add_circled, size: 28),
+                    ),
                   ),
-                ),
-                ..._buildContentSlivers(),
-              ],
+                  ..._buildContentSlivers(),
+                ],
+              ),
             ),
           ),
         ),
