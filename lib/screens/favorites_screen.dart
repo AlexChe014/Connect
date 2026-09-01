@@ -5,6 +5,7 @@ import '../config/app_theme.dart';
 import '../models/bookings/bookable_object.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
+import '../services/app_navigation_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
@@ -26,7 +27,7 @@ class FavoritesScreen extends StatefulWidget {
 
 enum _FavoritesSegment { users, objects }
 
-class _FavoritesScreenState extends State<FavoritesScreen> {
+class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
   _FavoritesSegment _segment = _FavoritesSegment.users;
 
   bool _isLoading = true;
@@ -36,6 +37,30 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    AppNavigationService.routeObserver.subscribe(
+      this,
+      ModalRoute.of(context)! as PageRoute<dynamic>,
+    );
+  }
+
+  @override
+  void dispose() {
+    AppNavigationService.routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // Экран остаётся смонтированным под запушенными поверх него route (эта
+    // вкладка не пересоздаётся при переходах через боковое меню), поэтому
+    // избранное, изменённое там, не подхватится без явной перезагрузки при
+    // возврате сюда.
     _load();
   }
 
@@ -81,7 +106,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       () => _objects = _objects.where((o) => o.id != object.id).toList(),
     );
     try {
-      await FavoritesRepository.instance.toggleObject(object.id);
+      await FavoritesRepository.instance.toggleObject(
+        object.id,
+        favoriteTypeId: object.favoriteTypeId,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _objects = [..._objects, object]);

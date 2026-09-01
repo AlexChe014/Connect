@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show RefreshIndicator, ScaffoldMessenger, SnackBar;
+import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 
 import '../models/mail/mail_connection.dart';
@@ -9,8 +10,8 @@ import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
-import '../widgets/booking_pickers.dart';
 import 'compose_mail_screen.dart';
+import 'mail_folders_screen.dart';
 import 'mail_message_screen.dart';
 
 class MailInboxScreen extends StatefulWidget {
@@ -28,11 +29,30 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   MailFolder? _selectedFolder;
   bool _isLoadingFolders = true;
   bool _isLoadingMessages = false;
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
+
+  List<MailMessage> get _visibleMessages {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return _messages;
+    return _messages.where((m) {
+      return m.subject.toLowerCase().contains(query) ||
+          m.from.toLowerCase().contains(query) ||
+          m.previewBody.toLowerCase().contains(query);
+    }).toList();
+  }
 
   @override
   void initState() {
     super.initState();
     _loadFolders();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadFolders() async {
@@ -131,18 +151,57 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
 
   Future<void> _showFolderPicker() async {
     if (_folders.isEmpty) return;
-    final picked = await showBookingOptionSheet<MailFolder>(
-      context: context,
-      title: 'Папки',
-      options: _folders,
-      current: _selectedFolder ?? _folders.first,
-      labelOf: (folder) => folder.unreadCount != null
-          ? '${folder.name} (${folder.unreadCount})'
-          : folder.name,
+    final picked = await Navigator.of(context).push<MailFolder>(
+      CupertinoPageRoute<MailFolder>(
+        builder: (context) => MailFoldersScreen(
+          folders: _folders,
+          selected: _selectedFolder,
+        ),
+      ),
     );
     if (picked == null) return;
     setState(() => _selectedFolder = picked);
     _loadMessages();
+  }
+
+  Future<void> _toggleRead(MailMessage message) async {
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    try {
+      final updated = message.isRead
+          ? await MailRepository.instance.markUnread(
+              connectionId: widget.connection.id,
+              messageId: message.id,
+            )
+          : await MailRepository.instance.markRead(
+              connectionId: widget.connection.id,
+              messageId: message.id,
+            );
+      if (!mounted || index == -1) return;
+      setState(() => _messages[index] = updated);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить статус письма')),
+      );
+    }
+  }
+
+  Future<void> _deleteMessage(MailMessage message) async {
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index == -1) return;
+    setState(() => _messages.removeAt(index));
+    try {
+      await MailRepository.instance.deleteMessage(
+        connectionId: widget.connection.id,
+        messageId: message.id,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _messages.insert(index, message));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось удалить письмо')),
+      );
+    }
   }
 
   @override
@@ -159,14 +218,35 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         ),
         backgroundColor: CupertinoColors.systemGroupedBackground,
         border: null,
-        trailing: _folders.isEmpty
-            ? null
-            : CupertinoButton(
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchController.clear();
+                    _searchQuery = '';
+                  }
+                });
+              },
+              child: Icon(
+                _isSearching ? CupertinoIcons.xmark : CupertinoIcons.search,
+                size: 24,
+              ),
+            ),
+            if (_folders.isNotEmpty)
+              CupertinoButton(
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
                 onPressed: _showFolderPicker,
                 child: const Icon(CupertinoIcons.folder, size: 24),
               ),
+          ],
+        ),
       ),
       child: DefaultTextStyle(
         style: TextStyle(
@@ -203,6 +283,17 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                             ),
                           ),
                         ),
+                        if (_isSearching)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            child: CupertinoSearchTextField(
+                              controller: _searchController,
+                              placeholder: 'Поиск писем',
+                              autofocus: true,
+                              onChanged: (value) =>
+                                  setState(() => _searchQuery = value),
+                            ),
+                          ),
                         Expanded(
                           child: RefreshIndicator(
                             onRefresh: _loadMessages,
@@ -244,14 +335,17 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                       ],
                                     ),
                                   ),
-                                if (_messages.isEmpty && !_isLoadingMessages)
+                                if (_visibleMessages.isEmpty &&
+                                    !_isLoadingMessages)
                                   SizedBox(
                                     height:
                                         MediaQuery.sizeOf(context).height *
                                         0.35,
                                     child: AppEmptyState(
                                       icon: CupertinoIcons.tray,
-                                      message: _selectedFolder != null
+                                      message: _searchQuery.isNotEmpty
+                                          ? 'Ничего не найдено'
+                                          : _selectedFolder != null
                                           ? 'В папке «${_selectedFolder!.name}» нет писем'
                                           : 'Нет писем',
                                     ),
@@ -259,14 +353,19 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                 else ...[
                                   for (
                                     var i = 0;
-                                    i < _messages.length;
+                                    i < _visibleMessages.length;
                                     i++
                                   ) ...[
                                     if (i > 0) const SizedBox(height: 8),
                                     _MessageTile(
-                                      message: _messages[i],
+                                      message: _visibleMessages[i],
                                       dateFormat: dateFormat,
-                                      onTap: () => _openMessage(_messages[i]),
+                                      onTap: () =>
+                                          _openMessage(_visibleMessages[i]),
+                                      onToggleRead: () =>
+                                          _toggleRead(_visibleMessages[i]),
+                                      onDelete: () =>
+                                          _deleteMessage(_visibleMessages[i]),
                                     ),
                                   ],
                                   if (_isLoadingMessages)
@@ -325,28 +424,66 @@ class _MessageTile extends StatelessWidget {
     required this.message,
     required this.dateFormat,
     required this.onTap,
+    required this.onToggleRead,
+    required this.onDelete,
   });
 
   final MailMessage message;
   final DateFormat dateFormat;
   final VoidCallback onTap;
+  final VoidCallback onToggleRead;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final isUnread = !message.isRead;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
+    return Slidable(
+      key: ValueKey(message.id),
+      startActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        extentRatio: 0.28,
+        children: [
+          CustomSlidableAction(
+            onPressed: (_) => onToggleRead(),
+            backgroundColor: CupertinoColors.activeBlue,
+            borderRadius: BorderRadius.circular(12),
+            child: Icon(
+              isUnread
+                  ? CupertinoIcons.envelope_open
+                  : CupertinoIcons.envelope_badge,
+              color: CupertinoColors.white,
+            ),
+          ),
+        ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
+      endActionPane: ActionPane(
+        motion: const DrawerMotion(),
+        extentRatio: 0.28,
+        children: [
+          CustomSlidableAction(
+            onPressed: (_) => onDelete(),
+            backgroundColor: CupertinoColors.systemRed,
+            borderRadius: BorderRadius.circular(12),
+            child: const Icon(
+              CupertinoIcons.trash,
+              color: CupertinoColors.white,
+            ),
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,6 +589,7 @@ class _MessageTile extends StatelessWidget {
                 ),
               ),
             ],
+          ),
           ),
         ),
       ),

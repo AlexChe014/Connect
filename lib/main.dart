@@ -68,6 +68,7 @@ class _ConnectAppState extends State<ConnectApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: AppNavigationService.navigatorKey,
+      navigatorObservers: [AppNavigationService.routeObserver],
       title: 'Connect — Корпоративный сервис',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,

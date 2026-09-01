@@ -39,6 +39,7 @@ class ChatMessage {
     this.isRead = true,
     this.authorAvatarUrl,
     this.readByRecipients = false,
+    this.reactions = const <String>[],
   });
 
   final String id;
@@ -59,6 +60,8 @@ class ChatMessage {
   final String? authorAvatarUrl;
   /// Для исходящих сообщений: прочитано ли всеми получателями (двойная галочка).
   final bool readByRecipients;
+  /// Эмодзи-реакции текущего пользователя на сообщение (локальные, без синхронизации с сервером).
+  final List<String> reactions;
 
   bool get hasMedia =>
       attachmentKind != ChatAttachmentKind.none &&
@@ -84,6 +87,30 @@ class ChatMessage {
       isRead: isRead ?? this.isRead,
       authorAvatarUrl: authorAvatarUrl,
       readByRecipients: readByRecipients ?? this.readByRecipients,
+      reactions: reactions,
+    );
+  }
+
+  ChatMessage copyWithReactions(List<String> reactions) {
+    return ChatMessage(
+      id: id,
+      chatId: chatId,
+      authorName: authorName,
+      isOutgoing: isOutgoing,
+      createdAt: createdAt,
+      text: text,
+      attachmentKind: attachmentKind,
+      localMediaPath: localMediaPath,
+      remoteMediaUrl: remoteMediaUrl,
+      fileName: fileName,
+      replyTo: replyTo,
+      forwardOf: forwardOf,
+      isSystem: isSystem,
+      repliedMessageId: repliedMessageId,
+      isRead: isRead,
+      authorAvatarUrl: authorAvatarUrl,
+      readByRecipients: readByRecipients,
+      reactions: reactions,
     );
   }
 }

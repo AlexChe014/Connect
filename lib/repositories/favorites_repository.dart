@@ -12,11 +12,14 @@ class FavoritesRepository {
   /// `favoritable_type` для полиморфного избранного. `GET
   /// /user/favorites/types` документирован как `{id, name}[]`, но реально
   /// отдаёт голые id без названий (`[1, 7, 2]`) — сопоставить их с типом
-  /// сущности через API невозможно. Значения ниже подтверждены по факту:
-  /// `favoritable_type` уже избранных записей с бэкенда — `7` у сотрудника,
-  /// `1` у объекта бронирования (переговорка/парковка).
+  /// сущности через API невозможно. Значения ниже подтверждены по факту
+  /// (сверено с `BookingObjectType.typeId`, используемым для тех же сущностей
+  /// в `/booking/get-free`): `7` — сотрудник, `1` — переговорка, `2` —
+  /// рабочее место. Объекты бронирования не имеют единого типа — у каждого
+  /// свой `favoriteTypeId` (см. `BookableObject`), эта константа — только
+  /// запасной вариант, если он почему-то не проставлен.
   static const int _userFavoritableType = 7;
-  static const int _objectFavoritableType = 1;
+  static const int _fallbackObjectFavoritableType = 1;
 
   /// `data` в ответе `/favorites/toggle` имеет разную форму для добавления
   /// и удаления (не всегда логическое значение, как в документации) —
@@ -37,18 +40,25 @@ class FavoritesRepository {
 
   Future<void> toggleUser(int userId) => _toggle(_userFavoritableType, userId);
 
-  Future<void> toggleObject(int objectId) =>
-      _toggle(_objectFavoritableType, objectId);
+  Future<void> toggleObject(int objectId, {int? favoriteTypeId}) =>
+      _toggle(favoriteTypeId ?? _fallbackObjectFavoritableType, objectId);
 
   /// `/user/favorites/*` возвращает не сами сущности, а записи `Favorite`
   /// (`{id, favoritable_type, favoritable_id, favoritable: {...}}`) —
-  /// нужная сущность лежит во вложенном `favoritable`.
+  /// нужная сущность лежит во вложенном `favoritable`, а `favoritable_type`
+  /// нужно перенести внутрь неё, иначе `BookableObject` не будет знать свой
+  /// собственный тип (нужен, чтобы потом верно убрать объект из избранного).
   static Map<String, dynamic>? _unwrapFavoritable(Object? e) {
     if (e is! Map) return null;
     final map = e.cast<String, dynamic>();
     final nested = map['favoritable'];
-    if (nested is Map) return nested.cast<String, dynamic>();
-    return map;
+    if (nested is! Map) return map;
+    final result = nested.cast<String, dynamic>();
+    final favoritableType = map['favoritable_type'];
+    if (favoritableType != null) {
+      result['favoritable_type'] = favoritableType;
+    }
+    return result;
   }
 
   Future<List<StaffUser>> getFavoriteUsers() async {

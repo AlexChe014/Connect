@@ -427,18 +427,6 @@ class _DiskFileTile extends StatelessWidget {
   final DiskFile file;
   final VoidCallback onTap;
 
-  IconData get _icon {
-    if (file.isImage) return CupertinoIcons.photo;
-    final mime = file.mime ?? '';
-    if (mime.contains('pdf')) return CupertinoIcons.doc_richtext;
-    if (mime.startsWith('video/')) return CupertinoIcons.videocam_fill;
-    if (mime.startsWith('audio/')) return CupertinoIcons.music_note;
-    if (mime.contains('zip') || mime.contains('archive')) {
-      return CupertinoIcons.archivebox;
-    }
-    return CupertinoIcons.doc_fill;
-  }
-
   String? get _subtitle {
     final parts = <String>[
       if (file.size != null) _formatSize(file.size!),
@@ -458,7 +446,7 @@ class _DiskFileTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return _DiskTileContainer(
       onTap: onTap,
-      leading: _DiskIconBadge(icon: _icon, color: CupertinoColors.systemGrey),
+      leading: _DiskFormatBadge(file: file),
       title: file.name,
       subtitle: _subtitle,
       trailing: file.isShared
@@ -489,6 +477,73 @@ class _DiskIconBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(9),
       ),
       child: Icon(icon, size: 19, color: color),
+    );
+  }
+}
+
+/// Иконка файла в стиле Files на iPhone: белая «страница» с цветным
+/// лейблом формата снизу вместо превью, которого у нас нет.
+class _DiskFormatBadge extends StatelessWidget {
+  const _DiskFormatBadge({required this.file});
+
+  final DiskFile file;
+
+  String get _extension {
+    final dot = file.name.lastIndexOf('.');
+    if (dot <= 0 || dot == file.name.length - 1) return '';
+    final ext = file.name.substring(dot + 1).toUpperCase();
+    return ext.length > 4 ? ext.substring(0, 4) : ext;
+  }
+
+  Color get _color {
+    final mime = file.mime ?? '';
+    final ext = _extension.toLowerCase();
+    if (file.isImage) return CupertinoColors.systemOrange;
+    if (mime.contains('pdf') || ext == 'pdf') return CupertinoColors.systemRed;
+    if (mime.startsWith('video/')) return CupertinoColors.systemPurple;
+    if (mime.startsWith('audio/')) return CupertinoColors.systemPink;
+    if (mime.contains('zip') || mime.contains('archive') || const ['zip', 'rar', '7z'].contains(ext)) {
+      return CupertinoColors.systemBrown;
+    }
+    if (const ['xls', 'xlsx', 'csv'].contains(ext)) return CupertinoColors.systemGreen;
+    if (const ['doc', 'docx'].contains(ext)) return CupertinoColors.systemBlue;
+    if (const ['ppt', 'pptx'].contains(ext)) return CupertinoColors.systemOrange;
+    return CupertinoColors.systemGrey;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final extension = _extension;
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(CupertinoIcons.doc_fill, size: 34, color: CupertinoColors.systemGrey4),
+          if (extension.isNotEmpty)
+            Positioned(
+              bottom: 5,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _color,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  extension,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    color: CupertinoColors.white,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -578,6 +633,7 @@ class _DiskImagePreviewScreen extends StatefulWidget {
 class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
   Uint8List? _bytes;
   bool _isLoading = true;
+  bool _isSaving = false;
   String? _errorMessage;
 
   @override
@@ -607,6 +663,36 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
     }
   }
 
+  Future<void> _download() async {
+    setState(() => _isSaving = true);
+    try {
+      final bytes = _bytes ?? await DiskRepository.instance.downloadFile(widget.file.path);
+      if (!mounted) return;
+      await FilePicker.platform.saveFile(fileName: widget.file.name, bytes: bytes);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Не удалось сохранить файл', e);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showError(String fallback, Object error) {
+    final message = error is ApiException ? error.message : fallback;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildUnsupportedFormat() {
+    return AppEmptyState(
+      icon: CupertinoIcons.photo,
+      message: 'Этот формат изображения нельзя посмотреть здесь',
+      onRetry: _isSaving ? null : _download,
+      retryLabel: 'Скачать файл',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
@@ -615,15 +701,29 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
         middle: Text(widget.file.name, style: const TextStyle(color: CupertinoColors.white)),
         backgroundColor: CupertinoColors.black,
         border: null,
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => DiskShareSheet.show(
-            context,
-            path: widget.file.path,
-            name: widget.file.name,
-          ),
-          child: const Icon(CupertinoIcons.share, color: CupertinoColors.white),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: _isSaving ? null : _download,
+              child: _isSaving
+                  ? const CupertinoActivityIndicator(color: CupertinoColors.white)
+                  : const Icon(CupertinoIcons.arrow_down_to_line, color: CupertinoColors.white),
+            ),
+            const SizedBox(width: 16),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => DiskShareSheet.show(
+                context,
+                path: widget.file.path,
+                name: widget.file.name,
+              ),
+              child: const Icon(CupertinoIcons.share, color: CupertinoColors.white),
+            ),
+          ],
         ),
       ),
       child: SafeArea(
@@ -637,7 +737,11 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
                   onRetry: _load,
                 )
               : InteractiveViewer(
-                  child: Image.memory(_bytes!, fit: BoxFit.contain),
+                  child: Image.memory(
+                    _bytes!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => _buildUnsupportedFormat(),
+                  ),
                 ),
         ),
       ),

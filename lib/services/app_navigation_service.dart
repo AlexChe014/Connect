@@ -27,6 +27,14 @@ class AppNavigationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  /// Регистрируется в `MaterialApp.navigatorObservers`. Экраны, которые
+  /// остаются смонтированными "под" запушенными поверх них route (например,
+  /// вкладки нижней навигации, не пересоздающиеся при `Navigator.push`),
+  /// используют его через `RouteAware`/`didPopNext`, чтобы перечитать данные
+  /// при возврате, а не только в `initState`.
+  static final RouteObserver<PageRoute<dynamic>> routeObserver =
+      RouteObserver<PageRoute<dynamic>>();
+
   static String? _pendingChatId;
   static String? _pendingNewsId;
   static String? _pendingDocumentServiceId;

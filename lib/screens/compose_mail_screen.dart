@@ -1,11 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
+import 'package:flutter/material.dart'
+    show Colors, Scaffold, ScaffoldMessenger, SnackBar;
 import 'package:http/http.dart' as http;
 
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/api_client.dart';
 
 class _PendingAttachment {
   final String filename;
@@ -15,11 +17,7 @@ class _PendingAttachment {
 }
 
 class ComposeMailScreen extends StatefulWidget {
-  const ComposeMailScreen({
-    super.key,
-    required this.connection,
-    this.replyTo,
-  });
+  const ComposeMailScreen({super.key, required this.connection, this.replyTo});
 
   final MailConnection connection;
   final MailMessage? replyTo;
@@ -116,11 +114,14 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       );
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Не удалось отправить письмо')),
-      );
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось отправить письмо';
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
@@ -128,147 +129,155 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Новое письмо'),
+    // Wrapped in a Material Scaffold purely so ScaffoldMessenger has a local
+    // Scaffold to attach SnackBars to — this screen is pushed on top of the
+    // app's only Scaffold (MainNavigationScreen's), which sits hidden behind
+    // it, so error/success SnackBars would otherwise render invisibly there.
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _isSending ? null : () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
-        ),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _isSending ? null : _send,
-          child: _isSending
-              ? const CupertinoActivityIndicator()
-              : const Text(
-                  'Отправить',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-        ),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            children: [
-              Text(
-                'От: ${widget.connection.email}',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                ),
-              ),
-              const SizedBox(height: 12),
-              CupertinoFormSection.insetGrouped(
-                margin: EdgeInsets.zero,
-                children: [
-                  CupertinoTextFormFieldRow(
-                    controller: _toController,
-                    prefix: const Text('Кому'),
-                    placeholder: 'email@example.com',
-                    keyboardType: TextInputType.emailAddress,
-                    textAlign: TextAlign.end,
-                    enabled: !_isSending,
-                    onChanged: (_) {
-                      if (_toError != null) setState(() => _toError = null);
-                    },
+        navigationBar: CupertinoNavigationBar(
+          middle: const Text('Новое письмо'),
+          backgroundColor: CupertinoColors.systemGroupedBackground,
+          border: null,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: _isSending ? null : () => Navigator.pop(context),
+            child: const Icon(CupertinoIcons.back, size: 26),
+          ),
+          trailing: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: _isSending ? null : _send,
+            child: _isSending
+                ? const CupertinoActivityIndicator()
+                : const Text(
+                    'Отправить',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  CupertinoTextFormFieldRow(
-                    controller: _subjectController,
-                    prefix: const Text('Тема'),
-                    textAlign: TextAlign.end,
-                    enabled: !_isSending,
-                    onChanged: (_) {
-                      if (_subjectError != null) {
-                        setState(() => _subjectError = null);
-                      }
-                    },
+          ),
+        ),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                Text(
+                  'От: ${widget.connection.email}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
-                ],
-              ),
-              if (_toError != null || _subjectError != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                  child: Text(
-                    _toError ?? _subjectError!,
-                    style: const TextStyle(
-                      color: CupertinoColors.systemRed,
-                      fontSize: 13,
+                ),
+                const SizedBox(height: 12),
+                CupertinoFormSection.insetGrouped(
+                  margin: EdgeInsets.zero,
+                  children: [
+                    CupertinoTextFormFieldRow(
+                      controller: _toController,
+                      prefix: const Text('Кому'),
+                      placeholder: 'email@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      textAlign: TextAlign.end,
+                      enabled: !_isSending,
+                      onChanged: (_) {
+                        if (_toError != null) setState(() => _toError = null);
+                      },
                     ),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              Container(
-                decoration: BoxDecoration(
-                  color: CupertinoColors.secondarySystemGroupedBackground
-                      .resolveFrom(context),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: CupertinoTextField(
-                  controller: _bodyController,
-                  minLines: 8,
-                  maxLines: null,
-                  enabled: !_isSending,
-                  placeholder: 'Текст письма',
-                  decoration: const BoxDecoration(),
-                  padding: EdgeInsets.zero,
-                ),
-              ),
-              const SizedBox(height: 20),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: _isSending ? null : _pickAttachments,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(CupertinoIcons.paperclip, size: 18),
-                    SizedBox(width: 6),
-                    Text('Прикрепить файлы'),
+                    CupertinoTextFormFieldRow(
+                      controller: _subjectController,
+                      prefix: const Text('Тема'),
+                      textAlign: TextAlign.end,
+                      enabled: !_isSending,
+                      onChanged: (_) {
+                        if (_subjectError != null) {
+                          setState(() => _subjectError = null);
+                        }
+                      },
+                    ),
                   ],
                 ),
-              ),
-              if (_attachments.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                CupertinoListSection.insetGrouped(
-                  margin: EdgeInsets.zero,
-                  children: List.generate(_attachments.length, (index) {
-                    final attachment = _attachments[index];
-                    return CupertinoListTile(
-                      leading: const Icon(CupertinoIcons.doc),
-                      title: Text(
-                        attachment.filename,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                if (_toError != null || _subjectError != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                    child: Text(
+                      _toError ?? _subjectError!,
+                      style: const TextStyle(
+                        color: CupertinoColors.systemRed,
+                        fontSize: 13,
                       ),
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed:
-                            _isSending ? null : () => _removeAttachment(index),
-                        child: const Icon(
-                          CupertinoIcons.xmark_circle_fill,
-                          size: 20,
-                          color: CupertinoColors.systemGrey,
-                        ),
-                      ),
-                    );
-                  }),
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.secondarySystemGroupedBackground
+                        .resolveFrom(context),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: CupertinoTextField(
+                    controller: _bodyController,
+                    minLines: 8,
+                    maxLines: null,
+                    enabled: !_isSending,
+                    placeholder: 'Текст письма',
+                    decoration: const BoxDecoration(),
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
+                const SizedBox(height: 20),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _isSending ? null : _pickAttachments,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(CupertinoIcons.paperclip, size: 18),
+                      SizedBox(width: 6),
+                      Text('Прикрепить файлы'),
+                    ],
+                  ),
+                ),
+                if (_attachments.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  CupertinoListSection.insetGrouped(
+                    margin: EdgeInsets.zero,
+                    children: List.generate(_attachments.length, (index) {
+                      final attachment = _attachments[index];
+                      return CupertinoListTile(
+                        leading: const Icon(CupertinoIcons.doc),
+                        title: Text(
+                          attachment.filename,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: _isSending
+                              ? null
+                              : () => _removeAttachment(index),
+                          child: const Icon(
+                            CupertinoIcons.xmark_circle_fill,
+                            size: 20,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

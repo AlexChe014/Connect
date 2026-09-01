@@ -77,6 +77,21 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   String? _highlightedMessageId;
   Timer? _highlightTimer;
 
+  /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
+  final Map<String, List<String>> _localReactions = {};
+
+  void _toggleReaction(ChatMessage m, String emoji) {
+    setState(() {
+      final current = List<String>.from(_localReactions[m.id] ?? m.reactions);
+      if (current.contains(emoji)) {
+        current.remove(emoji);
+      } else {
+        current.add(emoji);
+      }
+      _localReactions[m.id] = current;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -358,12 +373,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                               !m.isSystem &&
                               (previous == null ||
                                   !_sameChatAuthor(previous, m));
+                          final localReactions = _localReactions[m.id];
+                          final displayMessage = localReactions == null
+                              ? m
+                              : m.copyWithReactions(localReactions);
                           final tile = _MessageTile(
-                            m: m,
+                            m: displayMessage,
                             showAuthorHeader: showAuthorHeader,
                             showAvatarInHeader: showAuthorHeader,
                             showTime: _showMessageTime(m, next),
                             highlighted: m.id == _highlightedMessageId,
+                            onReact: (emoji) => _toggleReaction(m, emoji),
                             onLongMenu: (action) {
                               if (action == _MsgAction.reply) {
                                 setState(() {
@@ -710,6 +730,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
 enum _MsgAction { reply, forward, edit, delete }
 
+/// Фиксированный набор быстрых реакций, как в iMessage/Telegram.
+const List<String> _kQuickReactions = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
+
 class _ForwardTargetTile extends StatelessWidget {
   const _ForwardTargetTile({required this.chat, required this.onTap});
 
@@ -924,6 +947,7 @@ class _MessageTile extends StatelessWidget {
   const _MessageTile({
     required this.m,
     required this.onLongMenu,
+    required this.onReact,
     this.showAuthorHeader = false,
     this.showAvatarInHeader = false,
     this.showTime = true,
@@ -932,6 +956,7 @@ class _MessageTile extends StatelessWidget {
 
   final ChatMessage m;
   final void Function(_MsgAction) onLongMenu;
+  final void Function(String emoji) onReact;
   final bool showAuthorHeader;
   final bool showAvatarInHeader;
   final bool showTime;
@@ -956,6 +981,32 @@ class _MessageTile extends StatelessWidget {
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (context) => CupertinoActionSheet(
+        message: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: _kQuickReactions.map((emoji) {
+              final active = m.reactions.contains(emoji);
+              return GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  onReact(emoji);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? CupertinoColors.activeBlue.withValues(alpha: 0.15)
+                        : null,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () {
@@ -1063,7 +1114,10 @@ class _MessageTile extends StatelessWidget {
                   ],
                 ),
               ),
-            GestureDetector(
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                GestureDetector(
               onLongPress: () => _showActions(context),
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -1159,6 +1213,49 @@ class _MessageTile extends StatelessWidget {
                 ),
               ),
             ),
+                if (m.reactions.isNotEmpty)
+                  Positioned(
+                    bottom: -10,
+                    left: m.isOutgoing ? 8 : null,
+                    right: m.isOutgoing ? null : 8,
+                    child: GestureDetector(
+                      onTap: () => _showActions(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemBackground.resolveFrom(
+                            context,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: CupertinoColors.separator.resolveFrom(
+                              context,
+                            ),
+                            width: 0.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CupertinoColors.black.withValues(
+                                alpha: 0.06,
+                              ),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          m.reactions.join(' '),
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (m.reactions.isNotEmpty) const SizedBox(height: 8),
             if (showTime) ...[
               const SizedBox(height: 2),
               Row(

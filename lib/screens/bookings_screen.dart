@@ -253,7 +253,9 @@ class _BookingsScreenState extends State<BookingsScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _results = items;
+        _results = items
+            .map((o) => o.withFavoriteTypeId(type.typeId))
+            .toList();
         _isResultsLoading = false;
       });
     } catch (e) {
@@ -988,7 +990,10 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
       _isFavorite = !_isFavorite;
     });
     try {
-      await FavoritesRepository.instance.toggleObject(widget.object.id);
+      await FavoritesRepository.instance.toggleObject(
+        widget.object.id,
+        favoriteTypeId: widget.object.favoriteTypeId,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _isFavorite = !_isFavorite);

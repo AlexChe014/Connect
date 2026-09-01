@@ -10,6 +10,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import 'mail_connection_form_screen.dart';
 import 'mail_inbox_screen.dart';
+import 'mail_provider_picker_screen.dart';
 
 class MailScreen extends StatefulWidget {
   const MailScreen({super.key, this.showAppBar = true});
@@ -90,7 +91,7 @@ class _MailScreenState extends State<MailScreen> {
   Future<void> _openCreateConnection() async {
     final created = await Navigator.of(context).push<bool>(
       CupertinoPageRoute<bool>(
-        builder: (context) => const MailConnectionFormScreen(),
+        builder: (context) => const MailProviderPickerScreen(),
       ),
     );
     if (created == true) await _loadConnections();

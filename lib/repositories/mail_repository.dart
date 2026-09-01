@@ -9,45 +9,94 @@ import 'package:connect/services/api_client.dart';
 import 'package:http/http.dart' as http;
 
 class CreateMailConnectionRequest {
-  final String host;
-  final int port;
+  final String service;
   final String email;
   final String password;
+  final String? username;
+  final String? customImapHost;
+  final int? customImapPort;
+  final String? customImapEncryption;
+  final String? smtpHost;
+  final int? smtpPort;
+  final String? smtpEncryption;
+  final bool? canSend;
 
   const CreateMailConnectionRequest({
-    required this.host,
-    required this.port,
+    required this.service,
     required this.email,
     required this.password,
+    this.username,
+    this.customImapHost,
+    this.customImapPort,
+    this.customImapEncryption,
+    this.smtpHost,
+    this.smtpPort,
+    this.smtpEncryption,
+    this.canSend,
   });
 
-  Map<String, dynamic> toJson() => {
-        'host': host,
-        'port': port,
-        'email': email,
-        'password': password,
-      };
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{
+      'service': service,
+      'email': email,
+      'password': password,
+    };
+    if (username != null) map['username'] = username;
+    if (customImapHost != null) map['custom_imap_host'] = customImapHost;
+    if (customImapPort != null) map['custom_imap_port'] = customImapPort;
+    if (customImapEncryption != null) {
+      map['custom_imap_encryption'] = customImapEncryption;
+    }
+    if (smtpHost != null) map['smtp_host'] = smtpHost;
+    if (smtpPort != null) map['smtp_port'] = smtpPort;
+    if (smtpEncryption != null) map['smtp_encryption'] = smtpEncryption;
+    if (canSend != null) map['can_send'] = canSend;
+    return map;
+  }
 }
 
 class UpdateMailConnectionRequest {
-  final String? host;
-  final int? port;
+  final String? service;
   final String? email;
   final String? password;
+  final String? username;
+  final String? customImapHost;
+  final int? customImapPort;
+  final String? customImapEncryption;
+  final String? smtpHost;
+  final int? smtpPort;
+  final String? smtpEncryption;
+  final bool? canSend;
 
   const UpdateMailConnectionRequest({
-    this.host,
-    this.port,
+    this.service,
     this.email,
     this.password,
+    this.username,
+    this.customImapHost,
+    this.customImapPort,
+    this.customImapEncryption,
+    this.smtpHost,
+    this.smtpPort,
+    this.smtpEncryption,
+    this.canSend,
   });
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
-    if (host != null) map['host'] = host;
-    if (port != null) map['port'] = port;
+    if (service != null) map['service'] = service;
     if (email != null) map['email'] = email;
     if (password != null) map['password'] = password;
+    if (username != null) map['username'] = username;
+    if (customImapHost != null) map['custom_imap_host'] = customImapHost;
+    if (customImapPort != null) map['custom_imap_port'] = customImapPort;
+    if (customImapEncryption != null) {
+      map['custom_imap_encryption'] = customImapEncryption;
+    }
+    if (smtpHost != null) map['smtp_host'] = smtpHost;
+    if (smtpPort != null) map['smtp_port'] = smtpPort;
+    if (smtpEncryption != null) map['smtp_encryption'] = smtpEncryption;
+    if (canSend != null) map['can_send'] = canSend;
     return map;
   }
 }
@@ -101,13 +150,20 @@ class MailRepository {
   // --- Connections ---
 
   Future<List<MailConnection>> getConnectionsByUser(int userId) async {
-    final decoded = await ApiClient.instance.get(MailRoutes.connectionsByUserUrl(userId));
-    final items = _unwrapMailList(decoded, 'Не удалось получить почтовые подключения');
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.connectionsByUserUrl(userId),
+    );
+    final items = _unwrapMailList(
+      decoded,
+      'Не удалось получить почтовые подключения',
+    );
     return items.map(MailConnection.fromJson).where((c) => c.id > 0).toList();
   }
 
   Future<MailConnection> getConnection(int connectionId) async {
-    final decoded = await ApiClient.instance.get(MailRoutes.connectionByIdUrl(connectionId));
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.connectionByIdUrl(connectionId),
+    );
     final data = _unwrapMailDataMap(
       decoded,
       defaultErrorMessage: 'Не удалось получить подключение',
@@ -116,8 +172,13 @@ class MailRepository {
   }
 
   Future<List<MailConnection>> getConnectionConfigs() async {
-    final decoded = await ApiClient.instance.get(MailRoutes.connectionConfigsUrl);
-    final items = _unwrapMailList(decoded, 'Не удалось получить конфиги подключений');
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.connectionConfigsUrl,
+    );
+    final items = _unwrapMailList(
+      decoded,
+      'Не удалось получить конфиги подключений',
+    );
     return items.map(MailConnection.fromJson).where((c) => c.id > 0).toList();
   }
 
@@ -131,7 +192,9 @@ class MailRepository {
     return decoded['success'] == true || decoded['success'] == 1;
   }
 
-  Future<MailConnection> createConnection(CreateMailConnectionRequest request) async {
+  Future<MailConnection> createConnection(
+    CreateMailConnectionRequest request,
+  ) async {
     final decoded = await ApiClient.instance.post(
       MailRoutes.createConnectionUrl,
       body: request.toJson(),
@@ -171,19 +234,25 @@ class MailRepository {
   // --- Mailboxes (folders) ---
 
   Future<List<MailFolder>> getMailboxes(int connectionId) async {
-    final decoded = await ApiClient.instance.get(MailRoutes.getMailboxesUrl(connectionId));
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.getMailboxesUrl(connectionId),
+    );
     return _parseMailboxList(decoded, 'Не удалось получить папки');
   }
 
   // --- Messages ---
 
   Future<List<MailMessage>> getMessagesByUser(int userId) async {
-    final decoded = await ApiClient.instance.get(MailRoutes.getByUserUrl(userId));
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.getByUserUrl(userId),
+    );
     return _parseMessageList(decoded, 'Не удалось получить письма');
   }
 
   Future<List<MailMessage>> getMessagesByService(int connectionId) async {
-    final decoded = await ApiClient.instance.get(MailRoutes.getByServiceUrl(connectionId));
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.getByServiceUrl(connectionId),
+    );
     return _parseMessageList(decoded, 'Не удалось получить письма');
   }
 
@@ -219,7 +288,9 @@ class MailRepository {
   }
 
   Future<List<MailMessage>> fetchMessages(int connectionId) async {
-    final decoded = await ApiClient.instance.get(MailRoutes.fetchMailUrl(connectionId));
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.fetchMailUrl(connectionId),
+    );
     return _parseMessageList(decoded, 'Не удалось получить письма с сервера');
   }
 
@@ -276,9 +347,7 @@ class MailRepository {
     );
   }
 
-  Future<void> deleteFewMessages({
-    required int connectionId,
-  }) async {
+  Future<void> deleteFewMessages({required int connectionId}) async {
     await ApiClient.instance.get(MailRoutes.deleteFewUrl(connectionId));
   }
 
@@ -327,7 +396,10 @@ class MailRepository {
 
   Future<List<MailConnection>> getSendableConnections() async {
     final decoded = await ApiClient.instance.get(MailRoutes.smtpSendableUrl);
-    final items = _unwrapMailList(decoded, 'Не удалось получить ящики для отправки');
+    final items = _unwrapMailList(
+      decoded,
+      'Не удалось получить ящики для отправки',
+    );
     return items.map(MailConnection.fromJson).where((c) => c.id > 0).toList();
   }
 
@@ -343,22 +415,23 @@ class MailRepository {
     return MailConnection.fromJson(data);
   }
 
-  Future<MailMessage> sendMail(SendMailRequest request) async {
+  Future<void> sendMail(SendMailRequest request) async {
     final fields = <String, String>{
       'to': request.to,
       'subject': request.subject,
     };
     final body = request.body?.trim();
     if (body != null && body.isNotEmpty) {
-      fields['body'] = body;
+      fields['body_text'] = body;
     }
     final decoded = await ApiClient.instance.postMultipart(
       MailRoutes.smtpSendUrl,
       fields: fields,
       files: request.attachments,
     );
-    final data = _unwrapMailDataMap(decoded, defaultErrorMessage: 'Не удалось отправить письмо');
-    return MailMessage.fromJson(data);
+    // Live API returns {success: true, data: true} on success (not an Email
+    // object, despite api-docs.json), so only the success flag can be checked.
+    _unwrapMailData(decoded, 'Не удалось отправить письмо');
   }
 
   Future<MailMessage> replyMail(ReplyMailRequest request) async {
@@ -373,7 +446,10 @@ class MailRepository {
       MailRoutes.smtpReplyUrl(request.messageId),
       body: body,
     );
-    final data = _unwrapMailDataMap(decoded, defaultErrorMessage: 'Не удалось ответить на письмо');
+    final data = _unwrapMailDataMap(
+      decoded,
+      defaultErrorMessage: 'Не удалось ответить на письмо',
+    );
     return MailMessage.fromJson(data);
   }
 
@@ -389,7 +465,10 @@ class MailRepository {
       MailRoutes.smtpForwardUrl(request.messageId),
       body: body,
     );
-    final data = _unwrapMailDataMap(decoded, defaultErrorMessage: 'Не удалось переслать письмо');
+    final data = _unwrapMailDataMap(
+      decoded,
+      defaultErrorMessage: 'Не удалось переслать письмо',
+    );
     return MailMessage.fromJson(data);
   }
 
@@ -464,7 +543,10 @@ class MailRepository {
     if (decoded.containsKey('data') && success == null) {
       return decoded['data'];
     }
-    if (success == false || success == 0 || success == '0' || success == 'false') {
+    if (success == false ||
+        success == 0 ||
+        success == '0' ||
+        success == 'false') {
       final message =
           decoded['message'] as String? ??
           decoded['error'] as String? ??
@@ -480,10 +562,7 @@ class MailRepository {
   ) {
     final data = _unwrapMailData(decoded, errorMessage);
     if (data is List) {
-      return data
-          .map(_asJsonMap)
-          .whereType<Map<String, dynamic>>()
-          .toList();
+      return data.map(_asJsonMap).whereType<Map<String, dynamic>>().toList();
     }
     return _extractJsonMaps(data);
   }
@@ -536,7 +615,10 @@ class MailRepository {
       return map;
     }
 
-    throw ApiException(200, 'Некорректный формат data (ожидался объект или список)');
+    throw ApiException(
+      200,
+      'Некорректный формат data (ожидался объект или список)',
+    );
   }
 
   Map<String, dynamic> _pickMessageFromList(List data, int messageId) {
@@ -558,7 +640,12 @@ class MailRepository {
   }
 
   int? _messageIdFromMap(Map<String, dynamic> map) {
-    final raw = map['id'] ?? map['uid'] ?? map['message_id'] ?? map['msg_id'] ?? map['msgno'];
+    final raw =
+        map['id'] ??
+        map['uid'] ??
+        map['message_id'] ??
+        map['msg_id'] ??
+        map['msgno'];
     if (raw is int) return raw;
     if (raw is num) return raw.toInt();
     if (raw is String) return int.tryParse(raw.trim());
@@ -643,4 +730,3 @@ class MailRepository {
     return const [];
   }
 }
-

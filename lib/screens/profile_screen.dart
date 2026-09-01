@@ -13,7 +13,6 @@ import '../utils/media_url_utils.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
-import '../widgets/menu_button.dart';
 import '../widgets/status_bubble.dart';
 import 'booking_detail_sheet.dart';
 import 'notifications_screen.dart';
@@ -633,7 +632,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             slivers: [
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('Профиль'),
-                leading: const MenuButton(),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
                 border: null,
               ),
