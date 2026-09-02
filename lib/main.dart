@@ -31,6 +31,7 @@ import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/branding_service.dart';
 import 'services/chat_service.dart';
+import 'services/incoming_call_service.dart';
 import 'services/location_gate_service.dart';
 import 'services/mail_unread_service.dart';
 import 'services/notification_preferences_service.dart';
@@ -50,6 +51,7 @@ void main() async {
   await AuthService.instance.init();
   await BrandingService.instance.init();
   await PushNotificationService.instance.init();
+  await IncomingCallService.instance.init();
   runApp(const ConnectApp());
 }
 

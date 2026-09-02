@@ -24,3 +24,6 @@
 }
 -keep public class com.horcrux.svg.** {*;}
 -dontwarn okio.**
+
+# flutter_callkit_incoming
+-keep class com.hiennv.flutter_callkit_incoming.** { *; }

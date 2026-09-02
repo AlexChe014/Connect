@@ -24,6 +24,18 @@ class ConnectorInviteService {
         'Подключиться:\n$link';
   }
 
+  /// Отправляет приглашение в указанный чат (групповой или личный).
+  Future<void> inviteChat({
+    required String chatId,
+    required ConnectorSession session,
+    String? topic,
+  }) async {
+    final chat = ChatService.instance;
+    await chat.init();
+    final text = inviteMessage(session: session, topic: topic);
+    await chat.sendText(chatId, text);
+  }
+
   /// Создаёт/открывает личный чат с каждым и отправляет ссылку.
   /// Возвращает число успешно отправленных приглашений.
   Future<int> inviteUsers({

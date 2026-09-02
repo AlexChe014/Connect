@@ -7,6 +7,8 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/models/incoming_call_payload.dart';
+import 'package:connect/services/incoming_call_service.dart';
 import 'package:connect/services/push_background_handler.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -190,6 +192,7 @@ class PushNotificationService {
         'FCM token registered on backend (${_platformName()})',
         name: 'push',
       );
+      await IncomingCallService.instance.refreshVoipRegistration();
       await AppNavigationService.processPendingNavigation();
     } catch (e, st) {
       AppLogger.e(
@@ -273,6 +276,11 @@ class PushNotificationService {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
+    if (IncomingCallPayload.isChatCall(message.data)) {
+      await IncomingCallService.instance.handlePushData(message.data);
+      return;
+    }
+
     var isMutedChat = false;
     if (message.data['type'] == 'chat_message') {
       final chatId = message.data['chat_id'] as String?;
@@ -354,10 +362,19 @@ class PushNotificationService {
         if (bookingId != null && bookingId.isNotEmpty) {
           AppNavigationService.storePendingBooking(bookingId);
         }
+      case 'chat_call':
+        final chatId = data['chat_id'];
+        if (chatId != null && chatId.toString().isNotEmpty) {
+          AppNavigationService.storePendingChat(chatId.toString());
+        }
     }
   }
 
   void _navigateFromData(Map<String, dynamic> data) {
+    if (IncomingCallPayload.isChatCall(data)) {
+      unawaited(IncomingCallService.instance.handlePushData(data));
+      return;
+    }
     AppNavigationService.openFromData(data);
   }
 

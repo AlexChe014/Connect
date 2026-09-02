@@ -1,5 +1,6 @@
 import 'package:connect/repositories/connector_repository.dart';
 import 'package:connect/utils/connector_launch.dart';
+import 'package:connect/utils/connector_url_utils.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +46,7 @@ class _ChatMessageTextState extends State<ChatMessageText> {
 
   Future<void> _openUrl(String raw) async {
     final url = raw.replaceAll(RegExp(r'[.,;:!?)]+$'), '');
-    final room = _connectorRoomFromUrl(url);
+    final room = connectorRoomFromUrl(url);
     if (room != null) {
       try {
         final session = await ConnectorRepository.instance.join(room);
@@ -59,16 +60,6 @@ class _ChatMessageTextState extends State<ChatMessageText> {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-  String? _connectorRoomFromUrl(String url) {
-    final uri = Uri.tryParse(url.trim());
-    if (uri == null) return null;
-    final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-    final idx = segments.indexOf('connector');
-    if (idx < 0 || idx + 1 >= segments.length) return null;
-    final room = segments[idx + 1].trim();
-    return room.isEmpty ? null : room;
   }
 
   @override
