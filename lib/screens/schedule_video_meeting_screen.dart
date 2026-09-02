@@ -357,7 +357,7 @@ class _ScheduleVideoMeetingScreenState
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: Text(
-                  'Встреча появится в календаре. Ссылка на ConnectHub '
+                  'Встреча появится в календаре. Ссылка на видеовстречу '
                   'будет создана автоматически.',
                   style: TextStyle(
                     fontSize: 13,

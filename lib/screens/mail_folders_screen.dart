@@ -66,9 +66,29 @@ class MailFoldersScreen extends StatelessWidget {
                   Builder(
                     builder: (tileContext) {
                       final (icon, color) = _iconFor(folder);
+                      final isNested = folder.depth > 0;
                       return CupertinoListTile(
-                        leading: Icon(icon, color: color.resolveFrom(tileContext)),
-                        title: Text(folder.name),
+                        leading: Padding(
+                          padding: EdgeInsetsDirectional.only(
+                            start: folder.depth * 20.0,
+                          ),
+                          child: Icon(
+                            icon,
+                            size: isNested ? 19 : 22,
+                            color: color.resolveFrom(tileContext),
+                          ),
+                        ),
+                        title: Text(
+                          folder.name,
+                          style: isNested
+                              ? TextStyle(
+                                  fontSize: 15,
+                                  color: CupertinoColors.label.resolveFrom(
+                                    tileContext,
+                                  ),
+                                )
+                              : null,
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

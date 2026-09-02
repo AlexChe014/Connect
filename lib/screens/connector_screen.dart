@@ -84,7 +84,7 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: Text(
-                  'Видеоконференции ConnectHub',
+                  'Видеоконференции',
                   style: TextStyle(
                     fontSize: 13,
                     color: CupertinoColors.secondaryLabel.resolveFrom(context),

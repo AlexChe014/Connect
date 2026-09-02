@@ -10,7 +10,6 @@ import '../widgets/chat_avatar.dart';
 import '../widgets/staff_user_picker_sheet.dart';
 
 const _kMinTransferPoints = 10;
-const _kQuickAmounts = [10, 50, 100];
 
 /// Перевод баллов другому сотруднику.
 class BonusTransferScreen extends StatefulWidget {
@@ -110,13 +109,6 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
     final balance = _balance;
     if (balance != null && points > balance.points) return false;
     return true;
-  }
-
-  void _setQuickAmount(int amount) {
-    _pointsController.text = amount.toString();
-    _pointsController.selection = TextSelection.collapsed(
-      offset: _pointsController.text.length,
-    );
   }
 
   void _pickRecipient() {
@@ -294,13 +286,6 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              _QuickAmountRow(
-                balancePoints: _balance?.points,
-                minPoints: _minTransferPoints,
-                maxPoints: _maxTransferPoints,
-                onSelect: _setQuickAmount,
-              ),
               const SizedBox(height: 16),
               CupertinoListSection.insetGrouped(
                 margin: EdgeInsets.zero,
@@ -402,86 +387,3 @@ class _BalanceChip extends StatelessWidget {
   }
 }
 
-/// Быстрые пресеты суммы перевода — меньше набора текста, больше вовлечения.
-class _QuickAmountRow extends StatelessWidget {
-  const _QuickAmountRow({
-    required this.balancePoints,
-    required this.minPoints,
-    required this.maxPoints,
-    required this.onSelect,
-  });
-
-  final int? balancePoints;
-  final int minPoints;
-  final int maxPoints;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    var amounts = _kQuickAmounts.where((a) => a >= minPoints);
-    if (maxPoints > 0) {
-      amounts = amounts.where((a) => a <= maxPoints);
-    }
-    final amountList = amounts.isEmpty ? [minPoints] : amounts.toList();
-
-    final canSelectAll =
-        balancePoints != null &&
-        balancePoints! >= minPoints &&
-        (maxPoints == 0 || balancePoints! <= maxPoints);
-
-    final chips = <_QuickAmountChip>[
-      for (final amount in amountList)
-        _QuickAmountChip(
-          label: '$amount',
-          enabled: balancePoints == null || balancePoints! >= amount,
-          onTap: () => onSelect(amount),
-        ),
-      if (canSelectAll)
-        _QuickAmountChip(
-          label: 'Всё',
-          enabled: true,
-          onTap: () => onSelect(balancePoints!),
-        ),
-    ];
-
-    return Wrap(spacing: 8, runSpacing: 8, children: chips);
-  }
-}
-
-class _QuickAmountChip extends StatelessWidget {
-  const _QuickAmountChip({
-    required this.label,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Opacity(
-        opacity: enabled ? 1 : 0.4,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: CupertinoColors.secondarySystemGroupedBackground
-                .resolveFrom(context),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: CupertinoColors.label.resolveFrom(context),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

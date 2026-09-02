@@ -8,6 +8,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import 'compose_mail_screen.dart';
@@ -222,6 +223,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
             );
       if (!mounted || index == -1) return;
       setState(() => _messages[index] = updated);
+      MailUnreadService.instance.refresh();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -239,6 +241,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         connectionId: widget.connection.id,
         messageId: message.id,
       );
+      if (!message.isRead) MailUnreadService.instance.refresh();
     } catch (_) {
       if (!mounted) return;
       setState(() => _messages.insert(index, message));

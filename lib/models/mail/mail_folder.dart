@@ -5,13 +5,27 @@ class MailFolder {
   final int? unreadCount;
   final int? totalCount;
 
+  /// Уровень вложенности в дереве папок (0 — верхний уровень), проставляется
+  /// при разборе ответа API из структуры `children`.
+  final int depth;
+
   const MailFolder({
     required this.id,
     required this.name,
     this.originalName,
     this.unreadCount,
     this.totalCount,
+    this.depth = 0,
   });
+
+  MailFolder copyWithDepth(int depth) => MailFolder(
+        id: id,
+        name: name,
+        originalName: originalName,
+        unreadCount: unreadCount,
+        totalCount: totalCount,
+        depth: depth,
+      );
 
   bool get isInbox {
     final original = originalName?.trim().toLowerCase();

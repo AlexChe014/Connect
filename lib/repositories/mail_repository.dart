@@ -20,6 +20,33 @@ class MailMessagePage {
   final int nextPage;
 }
 
+/// Письмо, найденное сквозным поиском — в отличие от [MailMessage] несёт
+/// с собой id и название подключения, т.к. результаты приходят сразу
+/// из нескольких почтовых ящиков.
+class MailSearchResult {
+  const MailSearchResult({
+    required this.message,
+    required this.connectionId,
+    this.connectionName,
+  });
+
+  final MailMessage message;
+  final int connectionId;
+  final String? connectionName;
+}
+
+class MailSearchPage {
+  const MailSearchPage({
+    required this.results,
+    required this.hasMore,
+    required this.nextPage,
+  });
+
+  final List<MailSearchResult> results;
+  final bool hasMore;
+  final int nextPage;
+}
+
 class CreateMailConnectionRequest {
   final String service;
   final String email;
@@ -305,6 +332,54 @@ class MailRepository {
     return MailMessage.fromJson(data);
   }
 
+  /// Поиск писем по теме и адресам среди всех подключений пользователя
+  /// (`GET /mail/search`) — работает по уже синхронизированным данным,
+  /// без обращения к IMAP.
+  Future<MailSearchPage> searchMessages(String query, {int page = 1}) async {
+    final decoded = await ApiClient.instance.get(
+      MailRoutes.searchUrl,
+      queryParameters: {'q': query, 'page': '$page'},
+    );
+    final errorMessage = 'Не удалось выполнить поиск по почте';
+    final data = _unwrapMailData(decoded, errorMessage);
+    final rawItems = _extractJsonMaps(data);
+
+    final results = <MailSearchResult>[];
+    for (final raw in rawItems) {
+      final connectionRaw = raw['connection'];
+      int? connectionId;
+      String? connectionName;
+      if (connectionRaw is Map) {
+        connectionId = _parseIntValue(connectionRaw['id']);
+        connectionName = connectionRaw['name']?.toString();
+      }
+      if (connectionId == null) continue;
+      results.add(
+        MailSearchResult(
+          message: MailMessage.fromJson(raw),
+          connectionId: connectionId,
+          connectionName: connectionName,
+        ),
+      );
+    }
+
+    var hasMore = false;
+    var nextPage = page + 1;
+    if (data is Map) {
+      final currentPage = _parseIntValue(data['current_page']);
+      final lastPage = _parseIntValue(data['last_page']);
+      if (currentPage != null && lastPage != null) {
+        hasMore = currentPage < lastPage;
+        nextPage = currentPage + 1;
+      } else if (data['next_page_url'] != null) {
+        hasMore = true;
+        nextPage = (currentPage ?? page) + 1;
+      }
+    }
+
+    return MailSearchPage(results: results, hasMore: hasMore, nextPage: nextPage);
+  }
+
   Future<List<MailMessage>> fetchMessages(int connectionId) async {
     final decoded = await ApiClient.instance.get(
       MailRoutes.fetchMailUrl(connectionId),
@@ -509,22 +584,22 @@ class MailRepository {
     return _parseFolderList(decoded, errorMessage);
   }
 
-  void _collectMailFolders(Object? item, List<MailFolder> out) {
+  void _collectMailFolders(Object? item, List<MailFolder> out, {int depth = 0}) {
     if (item is String) {
       final name = item.trim();
-      if (name.isNotEmpty) out.add(MailFolder(id: 0, name: name));
+      if (name.isNotEmpty) out.add(MailFolder(id: 0, name: name, depth: depth));
       return;
     }
     final map = _asJsonMap(item);
     if (map == null) return;
-    final folder = MailFolder.fromJson(map);
+    final folder = MailFolder.fromJson(map).copyWithDepth(depth);
     if (folder.id > 0 || folder.name.isNotEmpty) {
       out.add(folder);
     }
     final children = map['children'];
     if (children is List) {
       for (final child in children) {
-        _collectMailFolders(child, out);
+        _collectMailFolders(child, out, depth: depth + 1);
       }
     }
   }

@@ -84,6 +84,13 @@ class AppNavigationService {
       return;
     }
 
+    await navigator.pushNamedAndRemoveUntil(
+      '/home',
+      (route) => false,
+      arguments: {'initialIndex': 2},
+    );
+
+    if (!navigator.mounted) return;
     try {
       final chat = await ChatRepository.instance.getChat(
         int.parse(chatId),
@@ -102,8 +109,6 @@ class AppNavigationService {
         error: e,
         stackTrace: st,
       );
-      if (!navigator.mounted) return;
-      await navigator.pushNamed('/home', arguments: {'initialIndex': 2});
     }
   }
 
