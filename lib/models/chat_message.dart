@@ -39,7 +39,15 @@ class ChatMessage {
     this.isRead = true,
     this.authorAvatarUrl,
     this.readByRecipients = false,
+    this.reactions = const <String>[],
+    this.isEdited = false,
+    this.isDeleted = false,
   });
+
+  /// Сообщение можно редактировать в течение 15 минут после отправки.
+  static const Duration editWindow = Duration(seconds: 900);
+  /// Сообщение можно удалить в течение часа после отправки.
+  static const Duration deleteWindow = Duration(seconds: 3600);
 
   final String id;
   final String chatId;
@@ -59,11 +67,23 @@ class ChatMessage {
   final String? authorAvatarUrl;
   /// Для исходящих сообщений: прочитано ли всеми получателями (двойная галочка).
   final bool readByRecipients;
+  /// Эмодзи-реакции текущего пользователя на сообщение (локальные, без синхронизации с сервером).
+  final List<String> reactions;
+  /// Сообщение было отредактировано после отправки.
+  final bool isEdited;
+  /// Сообщение удалено — вместо содержимого показывается плашка "Сообщение удалено".
+  final bool isDeleted;
 
   bool get hasMedia =>
       attachmentKind != ChatAttachmentKind.none &&
       ((localMediaPath != null && localMediaPath!.isNotEmpty) ||
           (remoteMediaUrl != null && remoteMediaUrl!.isNotEmpty));
+
+  bool get canStillEdit =>
+      !isDeleted && DateTime.now().difference(createdAt) <= editWindow;
+
+  bool get canStillDelete =>
+      !isDeleted && DateTime.now().difference(createdAt) <= deleteWindow;
 
   ChatMessage copyWithReadState({bool? isRead, bool? readByRecipients}) {
     return ChatMessage(
@@ -84,6 +104,76 @@ class ChatMessage {
       isRead: isRead ?? this.isRead,
       authorAvatarUrl: authorAvatarUrl,
       readByRecipients: readByRecipients ?? this.readByRecipients,
+      reactions: reactions,
+      isEdited: isEdited,
+      isDeleted: isDeleted,
+    );
+  }
+
+  ChatMessage copyWithReactions(List<String> reactions) {
+    return ChatMessage(
+      id: id,
+      chatId: chatId,
+      authorName: authorName,
+      isOutgoing: isOutgoing,
+      createdAt: createdAt,
+      text: text,
+      attachmentKind: attachmentKind,
+      localMediaPath: localMediaPath,
+      remoteMediaUrl: remoteMediaUrl,
+      fileName: fileName,
+      replyTo: replyTo,
+      forwardOf: forwardOf,
+      isSystem: isSystem,
+      repliedMessageId: repliedMessageId,
+      isRead: isRead,
+      authorAvatarUrl: authorAvatarUrl,
+      readByRecipients: readByRecipients,
+      reactions: reactions,
+      isEdited: isEdited,
+      isDeleted: isDeleted,
+    );
+  }
+
+  ChatMessage copyWithEdited(String text) {
+    return ChatMessage(
+      id: id,
+      chatId: chatId,
+      authorName: authorName,
+      isOutgoing: isOutgoing,
+      createdAt: createdAt,
+      text: text,
+      attachmentKind: attachmentKind,
+      localMediaPath: localMediaPath,
+      remoteMediaUrl: remoteMediaUrl,
+      fileName: fileName,
+      replyTo: replyTo,
+      forwardOf: forwardOf,
+      isSystem: isSystem,
+      repliedMessageId: repliedMessageId,
+      isRead: isRead,
+      authorAvatarUrl: authorAvatarUrl,
+      readByRecipients: readByRecipients,
+      reactions: reactions,
+      isEdited: true,
+      isDeleted: isDeleted,
+    );
+  }
+
+  ChatMessage copyWithDeleted() {
+    return ChatMessage(
+      id: id,
+      chatId: chatId,
+      authorName: authorName,
+      isOutgoing: isOutgoing,
+      createdAt: createdAt,
+      isSystem: isSystem,
+      repliedMessageId: repliedMessageId,
+      isRead: isRead,
+      authorAvatarUrl: authorAvatarUrl,
+      readByRecipients: readByRecipients,
+      isEdited: isEdited,
+      isDeleted: true,
     );
   }
 }

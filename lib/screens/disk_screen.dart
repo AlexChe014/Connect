@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show RefreshIndicator, ScaffoldMessenger, SnackBar;
+import 'package:flutter/material.dart'
+    show RefreshIndicator, ScaffoldMessenger, SnackBar;
 import 'package:intl/intl.dart';
 
 import '../models/disk/disk_entry.dart';
@@ -28,12 +29,36 @@ class DiskScreen extends StatefulWidget {
   State<DiskScreen> createState() => _DiskScreenState();
 }
 
+/// Один уровень пути внутри «Диска» — хранится в [_DiskScreenState._pathStack]
+/// вместо того, чтобы пушить новый [DiskScreen] на каждую вложенную папку
+/// (раньше это раздувало стек `Navigator` на N уровней вложенности).
+class _DiskPathEntry {
+  const _DiskPathEntry({required this.path, this.title});
+
+  final String path;
+  final String? title;
+
+  String get displayName {
+    if (title != null && title!.isNotEmpty) return title!;
+    if (path.isEmpty) return 'Диск';
+    final segments = path.split('/').where((s) => s.isNotEmpty);
+    return segments.isEmpty ? 'Диск' : segments.last;
+  }
+}
+
 class _DiskScreenState extends State<DiskScreen> {
+  late final List<_DiskPathEntry> _pathStack = [
+    _DiskPathEntry(path: widget.path, title: widget.title),
+  ];
   DiskListing? _listing;
   bool _isLoading = true;
   bool _isBusy = false;
   String? _errorMessage;
+  int _loadToken = 0;
   final _swipeGroup = SwipeGroupController();
+
+  _DiskPathEntry get _current => _pathStack.last;
+  String get _currentPath => _current.path;
 
   @override
   void initState() {
@@ -42,20 +67,21 @@ class _DiskScreenState extends State<DiskScreen> {
   }
 
   Future<void> _load() async {
+    final token = ++_loadToken;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final listing = await DiskRepository.instance.listFolder(widget.path);
-      if (!mounted) return;
+      final listing = await DiskRepository.instance.listFolder(_currentPath);
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _listing = listing;
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _isLoading = false;
         _errorMessage = e is ApiException
@@ -73,7 +99,26 @@ class _DiskScreenState extends State<DiskScreen> {
   }
 
   String _joinPath(String name) =>
-      '${widget.path}/$name'.replaceAll(RegExp(r'/+'), '/');
+      '$_currentPath/$name'.replaceAll(RegExp(r'/+'), '/');
+
+  void _openFolder(DiskFolder folder) {
+    setState(() {
+      _pathStack.add(_DiskPathEntry(path: folder.path, title: folder.name));
+    });
+    _load();
+  }
+
+  void _popLevel() {
+    if (_pathStack.length <= 1) return;
+    setState(() => _pathStack.removeLast());
+    _load();
+  }
+
+  void _popToLevel(int index) {
+    if (index >= _pathStack.length - 1) return;
+    setState(() => _pathStack.removeRange(index + 1, _pathStack.length));
+    _load();
+  }
 
   Future<void> _createFolder() async {
     final controller = TextEditingController();
@@ -128,7 +173,7 @@ class _DiskScreenState extends State<DiskScreen> {
       await DiskRepository.instance.uploadFile(
         bytes: bytes,
         filename: file.name,
-        folder: widget.path,
+        folder: _currentPath,
       );
       if (!mounted) return;
       await _load();
@@ -273,44 +318,96 @@ class _DiskScreenState extends State<DiskScreen> {
     );
   }
 
-  void _openFolder(DiskFolder folder) {
-    Navigator.of(context).push(
-      CupertinoPageRoute<void>(
-        builder: (context) => DiskScreen(path: folder.path, title: folder.name),
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: _pathStack.length <= 1,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _popLevel();
+      },
+      child: CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        navigationBar: CupertinoNavigationBar(
+          leading: _pathStack.length > 1
+              ? CupertinoNavigationBarBackButton(onPressed: _popLevel)
+              : null,
+          middle: Text(_current.displayName),
+          backgroundColor: CupertinoColors.systemGroupedBackground,
+          border: null,
+          trailing: _isBusy
+              ? const CupertinoActivityIndicator()
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      onPressed: _createFolder,
+                      child: const Icon(
+                        CupertinoIcons.folder_badge_plus,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      onPressed: _uploadFile,
+                      child: const Icon(CupertinoIcons.cloud_upload, size: 24),
+                    ),
+                  ],
+                ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              if (_pathStack.length > 1) _buildBreadcrumb(),
+              Expanded(child: _buildBody()),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(widget.title ?? (widget.path.isEmpty ? 'Диск' : widget.path)),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-        trailing: _isBusy
-            ? const CupertinoActivityIndicator()
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    onPressed: _createFolder,
-                    child: const Icon(CupertinoIcons.folder_badge_plus, size: 24),
-                  ),
-                  const SizedBox(width: 8),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    onPressed: _uploadFile,
-                    child: const Icon(CupertinoIcons.cloud_upload, size: 24),
-                  ),
-                ],
+  Widget _buildBreadcrumb() {
+    return SizedBox(
+      height: 32,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        itemCount: _pathStack.length,
+        separatorBuilder: (context, index) => const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4),
+          child: Icon(
+            CupertinoIcons.chevron_forward,
+            size: 12,
+            color: CupertinoColors.tertiaryLabel,
+          ),
+        ),
+        itemBuilder: (context, index) {
+          final entry = _pathStack[index];
+          final isLast = index == _pathStack.length - 1;
+          return Center(
+            child: GestureDetector(
+              onTap: isLast ? null : () => _popToLevel(index),
+              child: Text(
+                entry.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+                  color: isLast
+                      ? CupertinoColors.label.resolveFrom(context)
+                      : CupertinoColors.activeBlue,
+                ),
               ),
+            ),
+          );
+        },
       ),
-      child: SafeArea(child: _buildBody()),
     );
   }
 
@@ -366,7 +463,10 @@ class _DiskScreenState extends State<DiskScreen> {
                   onTap: () => _deleteFolder(folder),
                 ),
               ],
-              child: _DiskFolderTile(folder: folder, onTap: () => _openFolder(folder)),
+              child: _DiskFolderTile(
+                folder: folder,
+                onTap: () => _openFolder(folder),
+              ),
             );
           }
 
@@ -427,23 +527,14 @@ class _DiskFileTile extends StatelessWidget {
   final DiskFile file;
   final VoidCallback onTap;
 
-  IconData get _icon {
-    if (file.isImage) return CupertinoIcons.photo;
-    final mime = file.mime ?? '';
-    if (mime.contains('pdf')) return CupertinoIcons.doc_richtext;
-    if (mime.startsWith('video/')) return CupertinoIcons.videocam_fill;
-    if (mime.startsWith('audio/')) return CupertinoIcons.music_note;
-    if (mime.contains('zip') || mime.contains('archive')) {
-      return CupertinoIcons.archivebox;
-    }
-    return CupertinoIcons.doc_fill;
-  }
-
   String? get _subtitle {
     final parts = <String>[
       if (file.size != null) _formatSize(file.size!),
       if (file.lastModified != null)
-        DateFormat('d MMM, HH:mm', 'ru_RU').format(file.lastModified!.toLocal()),
+        DateFormat(
+          'd MMM, HH:mm',
+          'ru_RU',
+        ).format(file.lastModified!.toLocal()),
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -458,7 +549,7 @@ class _DiskFileTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return _DiskTileContainer(
       onTap: onTap,
-      leading: _DiskIconBadge(icon: _icon, color: CupertinoColors.systemGrey),
+      leading: _DiskFormatBadge(file: file),
       title: file.name,
       subtitle: _subtitle,
       trailing: file.isShared
@@ -489,6 +580,81 @@ class _DiskIconBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(9),
       ),
       child: Icon(icon, size: 19, color: color),
+    );
+  }
+}
+
+/// Иконка файла в стиле Files на iPhone: белая «страница» с цветным
+/// лейблом формата снизу вместо превью, которого у нас нет.
+class _DiskFormatBadge extends StatelessWidget {
+  const _DiskFormatBadge({required this.file});
+
+  final DiskFile file;
+
+  String get _extension {
+    final dot = file.name.lastIndexOf('.');
+    if (dot <= 0 || dot == file.name.length - 1) return '';
+    final ext = file.name.substring(dot + 1).toUpperCase();
+    return ext.length > 4 ? ext.substring(0, 4) : ext;
+  }
+
+  Color get _color {
+    final mime = file.mime ?? '';
+    final ext = _extension.toLowerCase();
+    if (file.isImage) return CupertinoColors.systemOrange;
+    if (mime.contains('pdf') || ext == 'pdf') return CupertinoColors.systemRed;
+    if (mime.startsWith('video/')) return CupertinoColors.systemPurple;
+    if (mime.startsWith('audio/')) return CupertinoColors.systemPink;
+    if (mime.contains('zip') ||
+        mime.contains('archive') ||
+        const ['zip', 'rar', '7z'].contains(ext)) {
+      return CupertinoColors.systemBrown;
+    }
+    if (const ['xls', 'xlsx', 'csv'].contains(ext))
+      return CupertinoColors.systemGreen;
+    if (const ['doc', 'docx'].contains(ext)) return CupertinoColors.systemBlue;
+    if (const ['ppt', 'pptx'].contains(ext))
+      return CupertinoColors.systemOrange;
+    return CupertinoColors.systemGrey;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final extension = _extension;
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Icon(
+            CupertinoIcons.doc_fill,
+            size: 34,
+            color: CupertinoColors.systemGrey4,
+          ),
+          if (extension.isNotEmpty)
+            Positioned(
+              bottom: 5,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _color,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  extension,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    color: CupertinoColors.white,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -578,6 +744,7 @@ class _DiskImagePreviewScreen extends StatefulWidget {
 class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
   Uint8List? _bytes;
   bool _isLoading = true;
+  bool _isSaving = false;
   String? _errorMessage;
 
   @override
@@ -592,7 +759,9 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
       _errorMessage = null;
     });
     try {
-      final bytes = await DiskRepository.instance.downloadFile(widget.file.path);
+      final bytes = await DiskRepository.instance.downloadFile(
+        widget.file.path,
+      );
       if (!mounted) return;
       setState(() {
         _bytes = bytes;
@@ -602,9 +771,46 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = e is ApiException ? e.message : 'Не удалось открыть файл';
+        _errorMessage = e is ApiException
+            ? e.message
+            : 'Не удалось открыть файл';
       });
     }
+  }
+
+  Future<void> _download() async {
+    setState(() => _isSaving = true);
+    try {
+      final bytes =
+          _bytes ??
+          await DiskRepository.instance.downloadFile(widget.file.path);
+      if (!mounted) return;
+      await FilePicker.platform.saveFile(
+        fileName: widget.file.name,
+        bytes: bytes,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Не удалось сохранить файл', e);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showError(String fallback, Object error) {
+    final message = error is ApiException ? error.message : fallback;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildUnsupportedFormat() {
+    return AppEmptyState(
+      icon: CupertinoIcons.photo,
+      message: 'Этот формат изображения нельзя посмотреть здесь',
+      onRetry: _isSaving ? null : _download,
+      retryLabel: 'Скачать файл',
+    );
   }
 
   @override
@@ -612,18 +818,43 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.black,
       navigationBar: CupertinoNavigationBar(
-        middle: Text(widget.file.name, style: const TextStyle(color: CupertinoColors.white)),
+        middle: Text(
+          widget.file.name,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
         backgroundColor: CupertinoColors.black,
         border: null,
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => DiskShareSheet.show(
-            context,
-            path: widget.file.path,
-            name: widget.file.name,
-          ),
-          child: const Icon(CupertinoIcons.share, color: CupertinoColors.white),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: _isSaving ? null : _download,
+              child: _isSaving
+                  ? const CupertinoActivityIndicator(
+                      color: CupertinoColors.white,
+                    )
+                  : const Icon(
+                      CupertinoIcons.arrow_down_to_line,
+                      color: CupertinoColors.white,
+                    ),
+            ),
+            const SizedBox(width: 16),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => DiskShareSheet.show(
+                context,
+                path: widget.file.path,
+                name: widget.file.name,
+              ),
+              child: const Icon(
+                CupertinoIcons.share,
+                color: CupertinoColors.white,
+              ),
+            ),
+          ],
         ),
       ),
       child: SafeArea(
@@ -637,7 +868,12 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
                   onRetry: _load,
                 )
               : InteractiveViewer(
-                  child: Image.memory(_bytes!, fit: BoxFit.contain),
+                  child: Image.memory(
+                    _bytes!,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) =>
+                        _buildUnsupportedFormat(),
+                  ),
                 ),
         ),
       ),

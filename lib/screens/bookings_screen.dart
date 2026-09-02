@@ -7,6 +7,7 @@ import 'package:connect/models/infrastructure/building.dart';
 import 'package:connect/models/infrastructure/equipment.dart';
 import 'package:connect/models/infrastructure/space.dart';
 import 'package:connect/repositories/bookings_repository.dart';
+import 'package:connect/repositories/favorites_repository.dart';
 import 'package:connect/repositories/infrastructure_repository.dart';
 import 'package:connect/screens/create_booking_screen.dart';
 import 'package:connect/utils/booking_time_utils.dart';
@@ -252,7 +253,9 @@ class _BookingsScreenState extends State<BookingsScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _results = items;
+        _results = items
+            .map((o) => o.withFavoriteTypeId(type.typeId))
+            .toList();
         _isResultsLoading = false;
       });
     } catch (e) {
@@ -966,14 +969,45 @@ class _FiltersDisclosure extends StatelessWidget {
   }
 }
 
-class _BookableObjectTile extends StatelessWidget {
+class _BookableObjectTile extends StatefulWidget {
   final BookableObject object;
   final VoidCallback onTap;
 
   const _BookableObjectTile({required this.object, required this.onTap});
 
   @override
+  State<_BookableObjectTile> createState() => _BookableObjectTileState();
+}
+
+class _BookableObjectTileState extends State<_BookableObjectTile> {
+  late bool _isFavorite = widget.object.isFavorite;
+  bool _isToggling = false;
+
+  Future<void> _toggleFavorite() async {
+    if (_isToggling) return;
+    setState(() {
+      _isToggling = true;
+      _isFavorite = !_isFavorite;
+    });
+    try {
+      await FavoritesRepository.instance.toggleObject(
+        widget.object.id,
+        favoriteTypeId: widget.object.favoriteTypeId,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isFavorite = !_isFavorite);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить избранное')),
+      );
+    } finally {
+      if (mounted) setState(() => _isToggling = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final object = widget.object;
     final imageUrl = object.previewImageUrl;
     final description = (object.description ?? '').trim();
 
@@ -992,7 +1026,7 @@ class _BookableObjectTile extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: GestureDetector(
-          onTap: onTap,
+          onTap: widget.onTap,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -1007,6 +1041,32 @@ class _BookableObjectTile extends StatelessWidget {
                 )
               else
                 AppNetworkImage(url: imageUrl, fit: BoxFit.cover),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleFavorite,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isFavorite
+                          ? CupertinoIcons.star_fill
+                          : CupertinoIcons.star,
+                      size: 17,
+                      color: _isFavorite
+                          ? CupertinoColors.systemYellow
+                          : CupertinoColors.white,
+                    ),
+                  ),
+                ),
+              ),
               Positioned(
                 left: 0,
                 right: 0,

@@ -9,6 +9,10 @@ class MailConnection {
   final String? customImapHost;
   final int? customImapPort;
   final String? customImapEncryption;
+  final String? smtpHost;
+  final int? smtpPort;
+  final String? smtpEncryption;
+  final bool canSend;
   final bool isActive;
   final bool isDefault;
   final String? lastError;
@@ -24,6 +28,10 @@ class MailConnection {
     this.customImapHost,
     this.customImapPort,
     this.customImapEncryption,
+    this.smtpHost,
+    this.smtpPort,
+    this.smtpEncryption,
+    this.canSend = true,
     this.isActive = true,
     this.isDefault = false,
     this.lastError,
@@ -58,6 +66,10 @@ class MailConnection {
       customImapPort: _parseInt(json['imap_port'] ?? json['custom_imap_port']),
       customImapEncryption:
           _optionalString(json, ['imap_encryption', 'custom_imap_encryption']),
+      smtpHost: _optionalString(json, ['smtp_host']),
+      smtpPort: _parseInt(json['smtp_port']),
+      smtpEncryption: _optionalString(json, ['smtp_encryption']),
+      canSend: _parseBool(json['can_send'], defaultValue: true),
       isActive: _parseBool(json['is_active'], defaultValue: true),
       isDefault: _parseBool(json['is_default'], defaultValue: false),
       lastError: _optionalString(json, ['last_error', 'error', 'message']),

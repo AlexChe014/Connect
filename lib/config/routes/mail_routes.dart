@@ -31,6 +31,8 @@ class MailRoutes {
 
   // --- Messages ---
 
+  static String get searchUrl => '${ApiConfig.baseUrl}$_mailPrefix/search';
+
   static String getByUserUrl(int userId) =>
       '${ApiConfig.baseUrl}$_mailPrefix/get/user/$userId';
 

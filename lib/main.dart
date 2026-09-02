@@ -16,10 +16,12 @@ import 'screens/news_feed_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/employees_screen.dart';
+import 'screens/favorites_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/documents_signing_screen.dart';
 import 'screens/connector_screen.dart';
 import 'screens/disk_screen.dart';
+import 'screens/global_search_screen.dart';
 import 'screens/bonus_program_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
@@ -27,12 +29,16 @@ import 'config/branding.dart';
 import 'repositories/profile_repository.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
+import 'services/chat_service.dart';
 import 'services/location_gate_service.dart';
+import 'services/mail_unread_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
+import 'services/root_stack_observer.dart';
 import 'utils/media_url_utils.dart';
 import 'utils/user_display_name.dart';
 import 'widgets/chat_avatar.dart';
+import 'widgets/home_shortcut_button.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +73,10 @@ class _ConnectAppState extends State<ConnectApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: AppNavigationService.navigatorKey,
+      navigatorObservers: [
+        AppNavigationService.routeObserver,
+        RootStackObserver.instance,
+      ],
       title: 'Connect — Корпоративный сервис',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
@@ -83,7 +93,7 @@ class _ConnectAppState extends State<ConnectApp> {
             color: CupertinoColors.label.resolveFrom(context),
             fontSize: 16,
           ),
-          child: child!,
+          child: Stack(children: [child!, const HomeShortcutButton()]),
         );
       },
       localizationsDelegates: const [
@@ -129,10 +139,12 @@ class MainNavigationScreen extends StatefulWidget {
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen>
+    with WidgetsBindingObserver {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   late int _currentIndex;
   bool _isDrawerOpen = false;
+  bool _isProfileOpen = false;
   Map<String, dynamic>? _profile;
 
   @override
@@ -142,8 +154,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppNavigationService.processPendingNavigation();
     });
+    WidgetsBinding.instance.addObserver(this);
     _loadDrawerProfile();
+    ChatService.instance.addListener(_onChatsChanged);
+    ChatService.instance.init();
+    MailUnreadService.instance.addListener(_onMailUnreadChanged);
+    MailUnreadService.instance.refresh();
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    ChatService.instance.removeListener(_onChatsChanged);
+    MailUnreadService.instance.removeListener(_onMailUnreadChanged);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      MailUnreadService.instance.refresh();
+    }
+  }
+
+  void _onChatsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onMailUnreadChanged() {
+    if (mounted) setState(() {});
+  }
+
+  int get _unreadChatsCount =>
+      ChatService.instance.chats.fold<int>(0, (sum, c) => sum + c.unreadCount);
 
   Future<void> _loadDrawerProfile() async {
     final stored = await AuthService.instance.getStoredUser();
@@ -156,10 +199,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  String get _drawerDisplayName => userDisplayNameFromJson(_profile ?? const {});
+  String get _drawerDisplayName =>
+      userDisplayNameFromJson(_profile ?? const {});
 
   String? get _drawerAvatarUrl =>
       MediaUrlUtils.normalizeFirstUrl(_profile?['media']);
+
+  void _openProfile() {
+    setState(() => _isProfileOpen = true);
+    Navigator.of(
+      context,
+    ).push(CupertinoPageRoute(builder: (_) => const ProfileScreen())).then((_) {
+      if (mounted) setState(() => _isProfileOpen = false);
+    });
+  }
 
   String? get _drawerPosition {
     final p = _profile;
@@ -185,8 +238,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       0 => NewsFeedScreen(showAppBar: false, openNewsId: widget.openNewsId),
       1 => const CalendarScreen(),
       2 => const ChatsListScreen(),
-      3 => const EmployeesScreen(showAppBar: false),
-      _ => const ProfileScreen(),
+      3 => const FavoritesScreen(showAppBar: false),
+      _ => const ConnectorScreen(showAppBar: false),
     };
 
     return Scaffold(
@@ -205,12 +258,98 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 avatarUrl: _drawerAvatarUrl,
                 onProfileTap: () {
                   Navigator.pop(context);
-                  setState(() => _currentIndex = 4);
+                  _openProfile();
                 },
               ),
               const SizedBox(height: 10),
               _DrawerMenuCard(
                 children: [
+                  _DrawerItem(
+                    icon: CupertinoIcons.search,
+                    label: 'Поиск',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const GlobalSearchScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.news,
+                    label: 'Лента',
+                    selected: !_isProfileOpen && _currentIndex == 0,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 0);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.calendar,
+                    label: 'Календарь',
+                    selected: !_isProfileOpen && _currentIndex == 1,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 1);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.chat_bubble_2,
+                    label: 'Чаты',
+                    selected: !_isProfileOpen && _currentIndex == 2,
+                    badgeCount: _unreadChatsCount,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 2);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.star,
+                    label: 'Избранное',
+                    selected: !_isProfileOpen && _currentIndex == 3,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 3);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.videocam,
+                    label: 'Коннектор',
+                    selected: !_isProfileOpen && _currentIndex == 4,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() => _currentIndex = 4);
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: CupertinoIcons.person_crop_circle,
+                    label: 'Профиль',
+                    selected: _isProfileOpen,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openProfile();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _DrawerMenuCard(
+                children: [
+                  _DrawerItem(
+                    icon: CupertinoIcons.person_2,
+                    label: 'Сотрудники',
+                    selected: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        CupertinoPageRoute(
+                          builder: (_) => const EmployeesScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   _DrawerItem(
                     icon: CupertinoIcons.bookmark,
                     label: 'Бронирования',
@@ -225,27 +364,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.videocam,
-                    label: 'Коннектор',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const ConnectorScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
                     icon: CupertinoIcons.mail,
                     label: 'Почта',
                     selected: false,
+                    badgeCount: MailUnreadService.instance.unreadCount,
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.of(
-                        context,
-                      ).push(CupertinoPageRoute(builder: (_) => const MailScreen()));
+                      Navigator.of(context)
+                          .push(
+                            CupertinoPageRoute(
+                              builder: (_) => const MailScreen(),
+                            ),
+                          )
+                          .then((_) => MailUnreadService.instance.refresh());
                     },
                   ),
                   _DrawerItem(
@@ -268,9 +399,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const DiskScreen(),
-                        ),
+                        CupertinoPageRoute(builder: (_) => const DiskScreen()),
                       );
                     },
                   ),
@@ -348,30 +477,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           HapticFeedback.selectionClick();
           setState(() => _currentIndex = index);
         },
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(CupertinoIcons.news),
             selectedIcon: Icon(CupertinoIcons.news_solid),
             label: 'Лента',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(CupertinoIcons.calendar),
             label: 'Календарь',
           ),
           NavigationDestination(
-            icon: Icon(CupertinoIcons.chat_bubble_2),
-            selectedIcon: Icon(CupertinoIcons.chat_bubble_2_fill),
+            icon: Badge.count(
+              count: _unreadChatsCount,
+              isLabelVisible: _unreadChatsCount > 0,
+              child: const Icon(CupertinoIcons.chat_bubble_2),
+            ),
+            selectedIcon: Badge.count(
+              count: _unreadChatsCount,
+              isLabelVisible: _unreadChatsCount > 0,
+              child: const Icon(CupertinoIcons.chat_bubble_2_fill),
+            ),
             label: 'Чаты',
           ),
-          NavigationDestination(
-            icon: Icon(CupertinoIcons.person_2),
-            selectedIcon: Icon(CupertinoIcons.person_2_fill),
-            label: 'Сотрудники',
+          const NavigationDestination(
+            icon: Icon(CupertinoIcons.star),
+            selectedIcon: Icon(CupertinoIcons.star_fill),
+            label: 'Избранное',
           ),
-          NavigationDestination(
-            icon: Icon(CupertinoIcons.person_crop_circle),
-            selectedIcon: Icon(CupertinoIcons.person_crop_circle_fill),
-            label: 'Профиль',
+          const NavigationDestination(
+            icon: Icon(CupertinoIcons.videocam),
+            selectedIcon: Icon(CupertinoIcons.videocam_fill),
+            label: 'Коннектор',
           ),
         ],
       ),
@@ -514,6 +651,7 @@ class _DrawerItem extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.isExternal = false,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
@@ -525,11 +663,16 @@ class _DrawerItem extends StatelessWidget {
   /// вместо синей заливки показывает иконку внешней ссылки.
   final bool isExternal;
 
+  /// Число непрочитанного для этого раздела — 0 скрывает бейдж.
+  final int badgeCount;
+
   @override
   Widget build(BuildContext context) {
     final tint = selected ? AppColors.primary : AppColors.onSurface;
     return Material(
-      color: selected ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+      color: selected
+          ? AppColors.primary.withValues(alpha: 0.1)
+          : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -548,6 +691,27 @@ class _DrawerItem extends StatelessWidget {
                   ),
                 ),
               ),
+              if (badgeCount > 0) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemRed,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeCount > 99 ? '99+' : '$badgeCount',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               if (isExternal)
                 Icon(
                   CupertinoIcons.arrow_up_right_square,

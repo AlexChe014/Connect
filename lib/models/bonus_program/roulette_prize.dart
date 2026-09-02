@@ -26,7 +26,7 @@ class RoulettePrize {
           ? null
           : double.tryParse(rawPercent.toString()),
       isActive: json['is_active'] == true,
-      photoUrl: MediaUrlUtils.normalizeFirstUrl(json['photo']),
+      photoUrl: MediaUrlUtils.normalizeFirstOriginalUrl(json['photo']),
     );
   }
 }

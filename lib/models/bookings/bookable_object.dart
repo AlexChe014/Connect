@@ -37,6 +37,13 @@ class BookableObject {
   final bool isFavorite;
   final List<BookableObjectMedia> media;
 
+  /// `favoritable_type` для этого объекта в полиморфном избранном — разный
+  /// для переговорок, рабочих мест и т.д. (см. `FavoritesRepository`).
+  /// Приходит либо из записи `Favorite` (`GET /user/favorites/objects`),
+  /// либо проставляется вызывающим кодом из `BookingObjectType.typeId`,
+  /// которым был запрошен список объектов бронирования.
+  final int? favoriteTypeId;
+
   const BookableObject({
     required this.id,
     required this.isActive,
@@ -47,7 +54,21 @@ class BookableObject {
     this.spaceId,
     required this.isFavorite,
     this.media = const [],
+    this.favoriteTypeId,
   });
+
+  BookableObject withFavoriteTypeId(int favoriteTypeId) => BookableObject(
+    id: id,
+    isActive: isActive,
+    name: name,
+    description: description,
+    capacity: capacity,
+    order: order,
+    spaceId: spaceId,
+    isFavorite: isFavorite,
+    media: media,
+    favoriteTypeId: favoriteTypeId,
+  );
 
   String? get previewImageUrl => media.firstWhere(
         (m) => (m.previewUrl ?? '').isNotEmpty,
@@ -72,6 +93,7 @@ class BookableObject {
       spaceId: (json['space_id'] as num?)?.toInt(),
       isFavorite: favoriteRaw == true || favoriteRaw == 1 || favoriteRaw == '1',
       media: _parseMediaList(mediaRaw),
+      favoriteTypeId: (json['favoritable_type'] as num?)?.toInt(),
     );
   }
 

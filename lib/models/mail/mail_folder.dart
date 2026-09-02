@@ -5,19 +5,75 @@ class MailFolder {
   final int? unreadCount;
   final int? totalCount;
 
+  /// Уровень вложенности в дереве папок (0 — верхний уровень), проставляется
+  /// при разборе ответа API из структуры `children`.
+  final int depth;
+
   const MailFolder({
     required this.id,
     required this.name,
     this.originalName,
     this.unreadCount,
     this.totalCount,
+    this.depth = 0,
   });
+
+  MailFolder copyWithDepth(int depth) => MailFolder(
+        id: id,
+        name: name,
+        originalName: originalName,
+        unreadCount: unreadCount,
+        totalCount: totalCount,
+        depth: depth,
+      );
 
   bool get isInbox {
     final original = originalName?.trim().toLowerCase();
     if (original == 'inbox') return true;
     final n = name.trim().toLowerCase();
     return n == 'inbox' || n == 'входящие';
+  }
+
+  bool get isSent {
+    return _matches(const [
+      'sent',
+      'sent items',
+      'sent messages',
+      'отправленные',
+    ]);
+  }
+
+  bool get isDrafts {
+    return _matches(const ['drafts', 'draft', 'черновики']);
+  }
+
+  bool get isTrash {
+    return _matches(const [
+      'trash',
+      'deleted',
+      'deleted items',
+      'bin',
+      'корзина',
+      'удаленные',
+      'удалённые',
+    ]);
+  }
+
+  bool get isSpam {
+    return _matches(const ['spam', 'junk', 'junk e-mail', 'спам']);
+  }
+
+  bool get isArchive {
+    return _matches(const ['archive', 'all mail', 'архив']);
+  }
+
+  bool _matches(List<String> candidates) {
+    final original = originalName?.trim().toLowerCase();
+    final n = name.trim().toLowerCase();
+    for (final candidate in candidates) {
+      if (original == candidate || n == candidate) return true;
+    }
+    return false;
   }
 
   factory MailFolder.fromJson(Map<String, dynamic> json) {

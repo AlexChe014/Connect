@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar, showModalBottomSheet;
+import 'package:flutter/material.dart'
+    show ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:share_plus/share_plus.dart';
 
 import '../models/disk/disk_share.dart';
 import '../repositories/disk_repository.dart';
@@ -72,7 +74,7 @@ class _DiskShareSheetState extends State<DiskShareSheet> {
     )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _createPublicLink() async {
+  Future<void> _shareLink() async {
     setState(() => _isBusy = true);
     try {
       final data = await DiskRepository.instance.createPublicLink(widget.path);
@@ -81,8 +83,11 @@ class _DiskShareSheetState extends State<DiskShareSheet> {
       if (url != null && url.isNotEmpty) {
         await Clipboard.setData(ClipboardData(text: url));
         if (!mounted) return;
-        _showMessage('Ссылка скопирована в буфер обмена');
+        await SharePlus.instance.share(
+          ShareParams(text: url, subject: widget.name),
+        );
       }
+      if (!mounted) return;
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -108,9 +113,7 @@ class _DiskShareSheetState extends State<DiskShareSheet> {
           await _load();
         } catch (e) {
           if (!mounted) return;
-          _showMessage(
-            e is ApiException ? e.message : 'Не удалось поделиться',
-          );
+          _showMessage(e is ApiException ? e.message : 'Не удалось поделиться');
         } finally {
           if (mounted) setState(() => _isBusy = false);
         }
@@ -126,7 +129,9 @@ class _DiskShareSheetState extends State<DiskShareSheet> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _showMessage(e is ApiException ? e.message : 'Не удалось отозвать доступ');
+      _showMessage(
+        e is ApiException ? e.message : 'Не удалось отозвать доступ',
+      );
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -156,8 +161,8 @@ class _DiskShareSheetState extends State<DiskShareSheet> {
                   child: CupertinoButton(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     color: CupertinoColors.systemGrey5.resolveFrom(context),
-                    onPressed: _isBusy ? null : _createPublicLink,
-                    child: const Text('Скопировать ссылку'),
+                    onPressed: _isBusy ? null : _shareLink,
+                    child: const Text('Поделиться ссылкой'),
                   ),
                 ),
                 const SizedBox(width: 8),

@@ -11,13 +11,10 @@ import '../services/chat_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
-import '../widgets/menu_button.dart';
 import 'employee_detail_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
-  const EmployeesScreen({super.key, this.showAppBar = true});
-
-  final bool showAppBar;
+  const EmployeesScreen({super.key});
 
   @override
   State<EmployeesScreen> createState() => _EmployeesScreenState();
@@ -277,7 +274,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               slivers: [
                 CupertinoSliverNavigationBar(
                   largeTitle: const Text('Сотрудники'),
-                  leading: const MenuButton(),
+                  leading: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    onPressed: () => Navigator.pop(context),
+                    child: const Icon(CupertinoIcons.back, size: 26),
+                  ),
                   backgroundColor: CupertinoColors.systemGroupedBackground,
                   border: null,
                 ),

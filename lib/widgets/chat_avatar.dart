@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connect/models/chat.dart';
+import 'package:connect/services/birthday_directory.dart';
 import 'package:connect/utils/user_display_name.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -97,14 +99,30 @@ class ChatAvatar extends StatefulWidget {
 class _ChatAvatarState extends State<ChatAvatar> {
   bool _imageFailed = false;
 
+  @override
+  void initState() {
+    super.initState();
+    BirthdayDirectory.instance.addListener(_onBirthdaysLoaded);
+    BirthdayDirectory.instance.ensureLoaded();
+  }
+
+  @override
+  void dispose() {
+    BirthdayDirectory.instance.removeListener(_onBirthdaysLoaded);
+    super.dispose();
+  }
+
+  void _onBirthdaysLoaded() {
+    if (mounted) setState(() {});
+  }
+
   Widget _fallback() => _InitialsAvatar(
     initials: chatInitials(widget.chat),
     backgroundColor: chatAvatarColor(widget.chat.title),
     radius: widget.radius,
   );
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _avatar() {
     if (!_imageFailed) {
       final url = chatAvatarBestUrl(widget.chat);
       if (url != null) {
@@ -135,6 +153,47 @@ class _ChatAvatarState extends State<ChatAvatar> {
     }
 
     return _fallback();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = _avatar();
+    if (widget.chat.isGroup ||
+        !BirthdayDirectory.instance.isBirthdayToday(widget.chat.peerUserId)) {
+      return avatar;
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [avatar, BirthdayBadge(radius: widget.radius)],
+    );
+  }
+}
+
+/// Значок-торт 🎂 в углу аватара именинника.
+class BirthdayBadge extends StatelessWidget {
+  const BirthdayBadge({super.key, required this.radius});
+
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = (radius * 0.62).clamp(16.0, 22.0);
+    return Positioned(
+      right: -2,
+      bottom: -2,
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
+          ),
+          shape: BoxShape.circle,
+        ),
+        child: Text('🎂', style: TextStyle(fontSize: size * 0.62)),
+      ),
+    );
   }
 }
 
