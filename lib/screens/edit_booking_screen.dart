@@ -50,6 +50,7 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   }
 
   Future<void> _submit() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final theme = _themeController.text.trim();
     setState(() {
       _themeError = theme.isEmpty ? 'Укажите тему' : null;

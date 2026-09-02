@@ -455,51 +455,11 @@ class _ReelStrip extends StatelessWidget {
         child: Container(
           width: size,
           height: size,
-          padding: EdgeInsets.all(size * 0.08),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [CupertinoColors.white, Color(0xFFE3ECFF), Color(0xFFBFD3FF)],
-            ),
             border: isCurrent ? Border.all(color: const Color(0xFFFFD166), width: 2.5) : null,
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF2A1208).withValues(alpha: isCurrent ? 0.4 : 0.26),
-                blurRadius: isCurrent ? 14 : 8,
-                offset: const Offset(0, 6),
-              ),
-            ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(radius * 0.7),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Center(child: _PrizeThumb(prize: _prizeAt(i, n), size: size * 0.62)),
-                // Лёгкий глянцевый блик сверху — создаёт ощущение объёма.
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: size * 0.4,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          CupertinoColors.white.withValues(alpha: 0.55),
-                          CupertinoColors.white.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          child: Center(child: _PrizeThumb(prize: _prizeAt(i, n), size: size * 0.82)),
         ),
       ),
     );

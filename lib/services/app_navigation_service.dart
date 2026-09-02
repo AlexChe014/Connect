@@ -38,6 +38,14 @@ class AppNavigationService {
     });
   }
 
+  /// Регистрируется в `MaterialApp.navigatorObservers`. Экраны, которые
+  /// остаются смонтированными "под" запушенными поверх них route (например,
+  /// вкладки нижней навигации, не пересоздающиеся при `Navigator.push`),
+  /// используют его через `RouteAware`/`didPopNext`, чтобы перечитать данные
+  /// при возврате, а не только в `initState`.
+  static final RouteObserver<PageRoute<dynamic>> routeObserver =
+      RouteObserver<PageRoute<dynamic>>();
+
   static String? _pendingChatId;
   static String? _pendingNewsId;
   static String? _pendingDocumentServiceId;
@@ -87,6 +95,13 @@ class AppNavigationService {
       return;
     }
 
+    await navigator.pushNamedAndRemoveUntil(
+      '/home',
+      (route) => false,
+      arguments: {'initialIndex': 2},
+    );
+
+    if (!navigator.mounted) return;
     try {
       final chat = await ChatRepository.instance.getChat(
         int.parse(chatId),
@@ -105,8 +120,6 @@ class AppNavigationService {
         error: e,
         stackTrace: st,
       );
-      if (!navigator.mounted) return;
-      await navigator.pushNamed('/home', arguments: {'initialIndex': 2});
     }
   }
 

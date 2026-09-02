@@ -5,15 +5,62 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_theme.dart';
 import '../models/staff_user.dart';
+import '../repositories/favorites_repository.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/chat_service.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/status_bubble.dart';
 
-class EmployeeDetailScreen extends StatelessWidget {
+class EmployeeDetailScreen extends StatefulWidget {
   const EmployeeDetailScreen({super.key, required this.user});
 
   final StaffUser user;
+
+  @override
+  State<EmployeeDetailScreen> createState() => _EmployeeDetailScreenState();
+}
+
+class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
+  StaffUser get user => widget.user;
+
+  bool _isFavorite = false;
+  bool _isTogglingFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFavoriteState();
+  }
+
+  Future<void> _loadFavoriteState() async {
+    try {
+      final ids = await FavoritesRepository.instance.getFavoriteUserIds();
+      if (!mounted) return;
+      setState(() => _isFavorite = ids.contains(user.id));
+    } catch (_) {
+      // Молча остаёмся с состоянием "не в избранном" — не критично для экрана.
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    final id = user.idAsInt;
+    if (id == null || _isTogglingFavorite) return;
+    setState(() {
+      _isTogglingFavorite = true;
+      _isFavorite = !_isFavorite;
+    });
+    try {
+      await FavoritesRepository.instance.toggleUser(id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isFavorite = !_isFavorite);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить избранное')),
+      );
+    } finally {
+      if (mounted) setState(() => _isTogglingFavorite = false);
+    }
+  }
 
   Future<void> _openChat(BuildContext context) async {
     final peerId = user.idAsInt;
@@ -138,6 +185,18 @@ class EmployeeDetailScreen extends StatelessWidget {
           minimumSize: Size.zero,
           onPressed: () => Navigator.pop(context),
           child: const Icon(CupertinoIcons.back, size: 26),
+        ),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _toggleFavorite,
+          child: Icon(
+            _isFavorite ? CupertinoIcons.star_fill : CupertinoIcons.star,
+            size: 24,
+            color: _isFavorite
+                ? CupertinoColors.systemYellow
+                : CupertinoColors.label.resolveFrom(context),
+          ),
         ),
       ),
       child: DefaultTextStyle(

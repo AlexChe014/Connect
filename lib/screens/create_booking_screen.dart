@@ -159,6 +159,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
   }
 
   Future<void> _submit() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final rangeError = _validateDateTimeRange();
     if (rangeError != null) {
       _showMessage(rangeError);

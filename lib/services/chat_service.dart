@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/add_chat_members_request.dart';
 import 'package:connect/models/chat/create_chat_request.dart';
@@ -16,6 +18,9 @@ import 'package:connect/utils/html_text_utils.dart';
 import 'package:flutter/foundation.dart';
 
 String _messagePreview(ChatMessage m) {
+  if (m.isDeleted) {
+    return 'Сообщение удалено';
+  }
   if (m.forwardOf != null) {
     return 'Переслано: ${_snippet(m.text, m.fileName, m.attachmentKind)}';
   }
@@ -95,6 +100,11 @@ class ChatService extends ChangeNotifier {
   List<ChatContact> _contacts = const [];
   List<ChatContact> get contacts => List.unmodifiable(_contacts);
 
+  /// Чаты, для которых отметка "прочитано" не была подтверждена сервером
+  /// (например, из-за обрыва сети) — повторяем попытку при следующем
+  /// [refreshChats], чтобы статус не застревал непрочитанным на сервере.
+  final Set<String> _pendingReadSync = {};
+
   List<ChatMessage> messagesFor(String chatId) {
     final list = _messages[chatId];
     if (list == null) return const [];
@@ -151,6 +161,7 @@ class ChatService extends ChangeNotifier {
         ..clear()
         ..addAll(loaded.map(_applyLocalFlags));
       _error = null;
+      unawaited(_flushPendingReadSync());
     } catch (e) {
       _error = e is ApiException ? e.message : e.toString();
     } finally {
@@ -224,9 +235,33 @@ class ChatService extends ChangeNotifier {
 
     if (changed) notifyListeners();
 
+    await _syncReadStatus(chatId, chatIntId);
+  }
+
+  /// Отправляет отметку "прочитано" на сервер. При ошибке (сеть, таймаут,
+  /// сбой бэкенда) чат остаётся в [_pendingReadSync] и будет повторно
+  /// отправлен при следующем [refreshChats] — иначе локально сообщение уже
+  /// выглядит прочитанным, и повода снова открыть тот же чат может не быть,
+  /// из-за чего сервер (и портал) так и не узнают о прочтении.
+  Future<void> _syncReadStatus(String chatId, int chatIntId) async {
     try {
       await ChatRepository.instance.markRead(chatIntId);
-    } catch (_) {}
+      _pendingReadSync.remove(chatId);
+    } catch (_) {
+      _pendingReadSync.add(chatId);
+    }
+  }
+
+  Future<void> _flushPendingReadSync() async {
+    if (_pendingReadSync.isEmpty) return;
+    for (final chatId in List<String>.from(_pendingReadSync)) {
+      final chatIntId = int.tryParse(chatId);
+      if (chatIntId == null) {
+        _pendingReadSync.remove(chatId);
+        continue;
+      }
+      await _syncReadStatus(chatId, chatIntId);
+    }
   }
 
   Future<void> loadContacts() async {
@@ -589,6 +624,16 @@ class ChatService extends ChangeNotifier {
       return false;
     }
 
+    final existingIdx =
+        _messages[chatId]?.indexWhere((m) => m.id == messageId) ?? -1;
+    final existing = existingIdx >= 0 ? _messages[chatId]![existingIdx] : null;
+    if (existing != null && !existing.canStillEdit) {
+      _lastActionError =
+          'Редактирование доступно в течение 15 минут после отправки';
+      notifyListeners();
+      return false;
+    }
+
     try {
       final updated = await ChatManagementRepository.instance.updateMessage(
         chatIntId,
@@ -616,6 +661,8 @@ class ChatService extends ChangeNotifier {
             isRead: updated.isRead,
             authorAvatarUrl: updated.authorAvatarUrl,
             readByRecipients: list[idx].readByRecipients,
+            reactions: list[idx].reactions,
+            isEdited: true,
           );
         }
       }
@@ -632,14 +679,23 @@ class ChatService extends ChangeNotifier {
     final messageIntId = int.tryParse(messageId);
     if (chatIntId == null || messageIntId == null) return false;
 
+    final list = _messages[chatId];
+    final idx = list?.indexWhere((m) => m.id == messageId) ?? -1;
+    if (idx >= 0 && !list![idx].canStillDelete) {
+      _lastActionError = 'Удаление доступно в течение часа после отправки';
+      notifyListeners();
+      return false;
+    }
+
     try {
       _lastActionError = null;
       await ChatManagementRepository.instance.deleteMessage(
         chatIntId,
         messageIntId,
       );
-      final list = _messages[chatId];
-      list?.removeWhere((m) => m.id == messageId);
+      if (idx >= 0) {
+        list![idx] = list[idx].copyWithDeleted();
+      }
       _upsertLastMessage(chatId);
       notifyListeners();
       return true;
@@ -756,12 +812,65 @@ class ChatService extends ChangeNotifier {
     // Отправка медиа через API пока не подключена.
   }
 
-  void forwardMessage(
+  Future<bool> forwardMessage(
     String targetChatId,
     ChatMessage source, {
     required String sourceChatId,
-  }) {
-    // Пересылка через API пока не подключена.
+  }) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(targetChatId);
+    final sourceMessageId = int.tryParse(source.id);
+    if (userId == null || chatIntId == null || sourceMessageId == null) {
+      return false;
+    }
+
+    final text = source.text?.trim();
+    if (text == null || text.isEmpty) {
+      _lastActionError = 'Пересылка вложений пока не поддерживается';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      _lastActionError = null;
+      final sent = await ChatRepository.instance.sendTextMessage(
+        chatIntId,
+        text: text,
+        currentUserId: userId,
+        forwardedMessageId: sourceMessageId,
+      );
+
+      _appendMessage(
+        targetChatId,
+        ChatMessage(
+          id: sent.id,
+          chatId: sent.chatId,
+          authorName: sent.authorName,
+          isOutgoing: sent.isOutgoing,
+          createdAt: sent.createdAt,
+          text: sent.text ?? text,
+          forwardOf:
+              sent.forwardOf ??
+              MessageReference(
+                messageId: source.id,
+                authorName: source.authorName,
+                textPreview: text,
+              ),
+          isRead: true,
+          authorAvatarUrl: sent.authorAvatarUrl,
+          readByRecipients: sent.readByRecipients,
+        ),
+      );
+      return true;
+    } on ApiException catch (e) {
+      _lastActionError = e.message;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _lastActionError = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   void _upsertLastMessage(String chatId) {

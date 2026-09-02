@@ -31,6 +31,7 @@ class _CreateInstantMeetingScreenState
 
   Future<void> _submit() async {
     if (_isSubmitting) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _isSubmitting = true);
 
     try {

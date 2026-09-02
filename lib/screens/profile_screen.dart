@@ -13,7 +13,6 @@ import '../utils/media_url_utils.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
-import '../widgets/menu_button.dart';
 import '../widgets/status_bubble.dart';
 import 'booking_detail_sheet.dart';
 import 'notifications_screen.dart';
@@ -210,8 +209,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return DateTime.tryParse(s.contains('T') ? s : s.replaceFirst(' ', 'T'));
   }
 
+  bool _isSameMonthDay(DateTime a, DateTime b) =>
+      a.month == b.month && a.day == b.day;
+
   static final Uri _privacyPolicyUri = Uri.parse(
-    'https://xon-connect.ru/connect-app-privacy',
+    'https://xon-connect.ru/include/licenses_detail.php',
   );
 
   Future<void> _openPrivacyPolicy() async {
@@ -405,6 +407,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             displayName: _displayName,
             position: position,
             status: status,
+            isBirthdayToday: birthday != null && _isSameMonthDay(
+              birthday,
+              DateTime.now(),
+            ),
           ),
           if (contactTiles.isNotEmpty) ...[
             const SizedBox(height: 20),
@@ -626,7 +632,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             slivers: [
               CupertinoSliverNavigationBar(
                 largeTitle: const Text('Профиль'),
-                leading: const MenuButton(),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
                 border: null,
               ),
@@ -645,12 +650,14 @@ class _ProfileHeaderCard extends StatelessWidget {
     required this.displayName,
     this.position,
     this.status,
+    this.isBirthdayToday = false,
   });
 
   final String? avatarUrl;
   final String displayName;
   final String? position;
   final String? status;
+  final bool isBirthdayToday;
 
   @override
   Widget build(BuildContext context) {
@@ -667,10 +674,16 @@ class _ProfileHeaderCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            MemberAvatar(
-              displayName: displayName,
-              avatarUrl: avatarUrl,
-              radius: 44,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                MemberAvatar(
+                  displayName: displayName,
+                  avatarUrl: avatarUrl,
+                  radius: 44,
+                ),
+                if (isBirthdayToday) const BirthdayBadge(radius: 44),
+              ],
             ),
             const SizedBox(height: 12),
             Text(

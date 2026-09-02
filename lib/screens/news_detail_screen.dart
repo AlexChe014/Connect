@@ -193,6 +193,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   Future<void> _sendComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty || _sendingComment) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _sendingComment = true);
     try {
       await CommentsRepository.instance.create(newsId: _news.id, text: text);
