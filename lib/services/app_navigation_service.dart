@@ -27,6 +27,17 @@ class AppNavigationService {
   static final GlobalKey<NavigatorState> navigatorKey =
       GlobalKey<NavigatorState>();
 
+  /// Сбрасывает стек и открывает форму входа. Безопасно вызывать из
+  /// HTTP-колбэков: навигация откладывается на следующий кадр.
+  static void goToLogin() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = navigatorKey.currentState;
+      if (nav == null || !nav.mounted) return;
+      if (ModalRoute.of(nav.context)?.settings.name == '/login') return;
+      nav.pushNamedAndRemoveUntil('/login', (route) => false);
+    });
+  }
+
   static String? _pendingChatId;
   static String? _pendingNewsId;
   static String? _pendingDocumentServiceId;

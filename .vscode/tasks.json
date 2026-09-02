@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Android: App Bundle (Play Store)",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "build",
+        "appbundle",
+        "--release",
+        "--target-platform",
+        "android-arm,android-arm64"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Android: Split APKs",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "build",
+        "apk",
+        "--release",
+        "--split-per-abi",
+        "--target-platform",
+        "android-arm,android-arm64"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

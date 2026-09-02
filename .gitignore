@@ -57,6 +57,8 @@ android/key.properties
 android/app/*.jks
 android/app/*.keystore
 android/upload-keystore.jks
+upload-keystore.jks
+*.jks
 
 # Claude Code local state
 .claude/

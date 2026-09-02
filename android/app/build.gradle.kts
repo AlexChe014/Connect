@@ -57,11 +57,23 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
         }
+    }
+
+    // Play Store режет AAB по ABI / плотности / языку сам.
+    // Split APK: flutter build apk --split-per-abi --target-platform android-arm,android-arm64
+    // Не включайте splits.abi здесь — это ломает flutter run и конфликтует
+    // с -Psplit-per-abi, который выставляет Flutter CLI.
+    bundle {
+        abi { enableSplit = true }
+        density { enableSplit = true }
+        language { enableSplit = true }
     }
 }
 

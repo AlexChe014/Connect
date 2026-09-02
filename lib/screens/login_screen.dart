@@ -248,10 +248,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 28),
                         CupertinoListSection.insetGrouped(
                           margin: EdgeInsets.zero,
-                          footer: const Text(
-                            'Оставьте адрес сервера пустым, чтобы использовать '
-                            'сервер по умолчанию. Указывайте адрес без /mobile.',
-                          ),
                           children: [
                             _AuthField(
                               controller: _backendController,

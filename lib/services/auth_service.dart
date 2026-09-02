@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:connect/config/api_config.dart';
 import 'package:connect/config/routes/auth_routes.dart';
+import 'package:connect/config/routes/user_routes.dart';
 import 'package:connect/services/network_errors.dart';
+import 'package:connect/services/session_auth_guard.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,13 +20,36 @@ class AuthResult {
 }
 
 class AuthService {
-  AuthService._();
+  AuthService._() {
+    _sessionGuard = SessionAuthGuard(
+      isAuthenticated: () => isAuthenticated,
+      sessionGeneration: () => sessionGeneration,
+      verifySession: _probeSession,
+      onExpired: _expireSession,
+    );
+  }
   static final AuthService instance = AuthService._();
 
+  late final SessionAuthGuard _sessionGuard;
+
   String? _token;
+  int _sessionGeneration = 0;
+  bool _handlingExpiry = false;
+
+  /// Вызывается после принудительного разлогина из-за мёртвой сессии.
+  void Function()? onSessionExpired;
 
   String? get token => _token;
   bool get isAuthenticated => _token != null && _token!.isNotEmpty;
+  int get sessionGeneration => _sessionGeneration;
+
+  void noteRequestSucceeded({required int sessionGeneration}) {
+    _sessionGuard.noteSuccess(generation: sessionGeneration);
+  }
+
+  void noteAuthenticationFailed({required int sessionGeneration}) {
+    _sessionGuard.noteAuthFailure(generation: sessionGeneration);
+  }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -136,6 +161,8 @@ class AuthService {
   }
 
   Future<void> _saveSession(String token, Map<String, dynamic>? user) async {
+    _sessionGeneration++;
+    _sessionGuard.reset();
     _token = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
@@ -145,10 +172,59 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    _sessionGeneration++;
+    _sessionGuard.reset();
     _token = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_userKey);
+  }
+
+  /// `true` — бэкенд отверг токен, `false` — сессия жива, `null` — неизвестно.
+  Future<bool?> _probeSession() async {
+    final token = _token;
+    if (token == null || token.isEmpty) return true;
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse(UserRoutes.getProfileUrl),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
+
+      if (response.statusCode == 401) return true;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return false;
+      }
+      return null;
+    } catch (e, st) {
+      AppLogger.e(
+        'Session probe failed',
+        name: 'auth.session',
+        error: e,
+        stackTrace: st,
+      );
+      return null;
+    }
+  }
+
+  Future<void> _expireSession() async {
+    if (_handlingExpiry || !isAuthenticated) return;
+    _handlingExpiry = true;
+    try {
+      AppLogger.e(
+        'Session expired: backend requests returned authentication errors',
+        name: 'auth.session',
+      );
+      await logout();
+      onSessionExpired?.call();
+    } finally {
+      _handlingExpiry = false;
+    }
   }
 
   Future<Map<String, dynamic>?> getStoredUser() async {

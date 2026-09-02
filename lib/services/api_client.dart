@@ -50,11 +50,17 @@ class ApiClient {
         },
       );
     }
+    final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
           .get(uri, headers: _headers)
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
-      return _handleResponse(response, uri: uri, method: 'GET');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'GET',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP GET failed: $uri', e, st);
     }
@@ -75,6 +81,7 @@ class ApiClient {
 
     final headers = Map<String, String>.from(_headers);
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    final sessionGeneration = AuthService.instance.sessionGeneration;
 
     try {
       final response = await http
@@ -84,7 +91,12 @@ class ApiClient {
             body: body,
           )
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
-      return _handleResponse(response, uri: uri, method: 'POST');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'POST',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP POST form failed: $uri', e, st);
     }
@@ -92,6 +104,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> post(String url, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse(url);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
           .post(
@@ -100,7 +113,12 @@ class ApiClient {
             body: body != null ? jsonEncode(body) : null,
           )
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
-      return _handleResponse(response, uri: uri, method: 'POST');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'POST',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP POST failed: $uri', e, st);
     }
@@ -108,6 +126,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> patch(String url, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse(url);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
           .patch(
@@ -116,7 +135,12 @@ class ApiClient {
             body: body != null ? jsonEncode(body) : null,
           )
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
-      return _handleResponse(response, uri: uri, method: 'PATCH');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'PATCH',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP PATCH failed: $uri', e, st);
     }
@@ -124,6 +148,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> put(String url, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse(url);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
           .put(
@@ -132,7 +157,12 @@ class ApiClient {
             body: body != null ? jsonEncode(body) : null,
           )
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
-      return _handleResponse(response, uri: uri, method: 'PUT');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'PUT',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP PUT failed: $uri', e, st);
     }
@@ -140,11 +170,17 @@ class ApiClient {
 
   Future<Map<String, dynamic>> delete(String url) async {
     final uri = Uri.parse(url);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
           .delete(uri, headers: _headers)
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
-      return _handleResponse(response, uri: uri, method: 'DELETE');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'DELETE',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP DELETE failed: $uri', e, st);
     }
@@ -163,13 +199,19 @@ class ApiClient {
     request.headers.addAll(headers);
     request.fields.addAll(fields);
     request.files.addAll(files);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
 
     try {
       final streamed = await request.send().timeout(
         Duration(seconds: ApiConfig.timeoutSeconds),
       );
       final response = await http.Response.fromStream(streamed);
-      return _handleResponse(response, uri: uri, method: 'POST multipart');
+      return _handleResponse(
+        response,
+        uri: uri,
+        method: 'POST multipart',
+        sessionGeneration: sessionGeneration,
+      );
     } catch (e, st) {
       throw _mapAndLog('HTTP POST multipart failed: $uri', e, st);
     }
@@ -177,13 +219,21 @@ class ApiClient {
 
   Future<List<int>> downloadBytes(String url) async {
     final uri = Uri.parse(url);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
           .get(uri, headers: _headers)
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        AuthService.instance.noteRequestSucceeded(
+          sessionGeneration: sessionGeneration,
+        );
         return response.bodyBytes;
       }
+      _noteResponseAuthOutcome(
+        statusCode: response.statusCode,
+        sessionGeneration: sessionGeneration,
+      );
       throw ApiException(response.statusCode, 'Не удалось скачать файл');
     } catch (e, st) {
       throw _mapAndLog('HTTP download failed: $uri', e, st);
@@ -200,6 +250,7 @@ class ApiClient {
     http.Response response, {
     required Uri uri,
     required String method,
+    required int sessionGeneration,
   }) {
     final body = response.body.isEmpty ? '{}' : response.body;
     Object? decoded;
@@ -208,6 +259,9 @@ class ApiClient {
     } catch (_) {}
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      AuthService.instance.noteRequestSucceeded(
+        sessionGeneration: sessionGeneration,
+      );
       if (decoded is Map<String, dynamic>) return decoded;
       AppLogger.e(
         'HTTP $method $uri: unexpected success body (not a JSON object)\n'
@@ -238,6 +292,12 @@ class ApiClient {
           message;
     }
 
+    _noteResponseAuthOutcome(
+      statusCode: response.statusCode,
+      sessionGeneration: sessionGeneration,
+      message: message,
+    );
+
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw ApiException(
         response.statusCode,
@@ -248,5 +308,23 @@ class ApiClient {
     }
 
     throw ApiException(response.statusCode, message);
+  }
+
+  void _noteResponseAuthOutcome({
+    required int statusCode,
+    required int sessionGeneration,
+    String? message,
+  }) {
+    if (_isAuthenticationFailure(statusCode, message)) {
+      AuthService.instance.noteAuthenticationFailed(
+        sessionGeneration: sessionGeneration,
+      );
+    }
+  }
+
+  bool _isAuthenticationFailure(int statusCode, String? message) {
+    if (statusCode == 401) return true;
+    final normalized = message?.toLowerCase() ?? '';
+    return normalized.contains('unauthenticated');
   }
 }

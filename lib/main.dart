@@ -58,6 +58,7 @@ class _ConnectAppState extends State<ConnectApp> {
   @override
   void initState() {
     super.initState();
+    AuthService.instance.onSessionExpired = AppNavigationService.goToLogin;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (AuthService.instance.isAuthenticated) {
         await PushNotificationService.instance.registerAfterLogin();

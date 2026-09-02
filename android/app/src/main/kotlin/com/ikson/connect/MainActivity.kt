@@ -1,4 +1,4 @@
-package com.example.connect
+package com.ikson.connect
 
 import io.flutter.embedding.android.FlutterActivity
 

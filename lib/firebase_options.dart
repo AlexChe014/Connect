@@ -26,7 +26,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyA4-sOUG_uWV3DzAufuBjsiyww4W5dQYmc',
-    appId: '1:826977386147:android:195502a2962d2db70c0916',
+    appId: '1:826977386147:android:cd0f5f2596fa55f40c0916',
     messagingSenderId: '826977386147',
     projectId: 'xonconnect-app',
     storageBucket: 'xonconnect-app.firebasestorage.app',
