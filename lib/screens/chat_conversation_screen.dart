@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
+import 'package:connect/models/chat/chat_file.dart';
+import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
-import 'package:connect/services/chat_service.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
+import 'package:connect/services/chat_service.dart';
+import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
@@ -38,18 +42,6 @@ bool _showMessageTime(ChatMessage m, ChatMessage? next) {
   return next.createdAt.difference(m.createdAt).inMinutes >= 2;
 }
 
-ChatAttachmentKind _kindFromPath(String? path) {
-  if (path == null) return ChatAttachmentKind.file;
-  final lower = path.toLowerCase();
-  if (RegExp(r'\.(jpg|jpeg|png|gif|webp|heic|bmp)$').hasMatch(lower)) {
-    return ChatAttachmentKind.image;
-  }
-  if (RegExp(r'\.(mp4|mov|webm|mkv|avi)$').hasMatch(lower)) {
-    return ChatAttachmentKind.video;
-  }
-  return ChatAttachmentKind.file;
-}
-
 class ChatConversationScreen extends StatefulWidget {
   const ChatConversationScreen({super.key, required this.chat});
 
@@ -81,6 +73,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
+  final Map<String, GlobalKey> _messageKeys = {};
+  bool _sendingAttachment = false;
 
   void _toggleReaction(ChatMessage m, String emoji) {
     setState(() {
@@ -334,6 +328,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           child: Column(
             children: [
               if (_searchActive) _buildSearchBar(context),
+              if (!_searchActive) _buildPinnedBar(context),
               Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
@@ -386,6 +381,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                               showTime: _showMessageTime(m, next),
                               highlighted: m.id == _highlightedMessageId,
                               onReact: (emoji) => _toggleReaction(m, emoji),
+                              onOpenFile: _openChatFile,
                               onLongMenu: (action) {
                                 if (action == _MsgAction.reply) {
                                   setState(() {
@@ -398,16 +394,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                   _beginEditMessage(m);
                                 } else if (action == _MsgAction.delete) {
                                   _deleteMessage(m);
+                                } else if (action == _MsgAction.pin) {
+                                  _togglePinMessage(m);
                                 }
                               },
+                            );
+                            final wrapped = KeyedSubtree(
+                              key: _keyForMessage(m.id),
+                              child: tile,
                             );
                             if (i == _scrollToReversedIndex) {
                               return KeyedSubtree(
                                 key: _scrollTargetKey,
-                                child: tile,
+                                child: wrapped,
                               );
                             }
-                            return tile;
+                            return wrapped;
                           },
                         ),
                 ),
@@ -428,6 +430,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 onSend: _send,
                 onAttach: _openAttachMenu,
                 isEditing: _editingMessage != null,
+                isSendingAttachment: _sendingAttachment,
               ),
             ],
           ),
@@ -605,6 +608,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _openAttachMenu() async {
+    if (_sendingAttachment) return;
     final choice = await showCupertinoModalPopup<String>(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -634,48 +638,69 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     );
     if (choice == null) return;
 
-    String? path;
-    String? name;
+    List<int>? bytes;
+    var name = 'file';
 
-    if (choice == 'gallery') {
-      final x = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1600,
-        imageQuality: 88,
-      );
-      path = x?.path;
-    } else if (choice == 'video') {
-      final x = await _picker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: const Duration(minutes: 5),
-      );
-      path = x?.path;
-    } else if (choice == 'camera') {
-      final x = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1600,
-        imageQuality: 88,
-      );
-      path = x?.path;
-    } else if (choice == 'file') {
-      final r = await FilePicker.platform.pickFiles();
-      if (r != null && r.files.isNotEmpty) {
+    try {
+      if (choice == 'gallery') {
+        final x = await _picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1600,
+          imageQuality: 88,
+        );
+        if (x == null) return;
+        bytes = await x.readAsBytes();
+        name = x.name;
+      } else if (choice == 'video') {
+        final x = await _picker.pickVideo(
+          source: ImageSource.gallery,
+          maxDuration: const Duration(minutes: 5),
+        );
+        if (x == null) return;
+        bytes = await x.readAsBytes();
+        name = x.name;
+      } else if (choice == 'camera') {
+        final x = await _picker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 1600,
+          imageQuality: 88,
+        );
+        if (x == null) return;
+        bytes = await x.readAsBytes();
+        name = x.name;
+      } else if (choice == 'file') {
+        final r = await FilePicker.platform.pickFiles(withData: true);
+        if (r == null || r.files.isEmpty) return;
         final f = r.files.single;
-        path = f.path;
         name = f.name;
+        bytes = f.bytes;
+        if (bytes == null && f.path != null && !kIsWeb) {
+          bytes = await File(f.path!).readAsBytes();
+        }
       }
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('Не удалось выбрать файл');
+      return;
     }
 
-    if (path == null || path.isEmpty) return;
-    final kind = _kindFromPath(path);
-    _service.sendMedia(
-      widget.chat.id,
-      path: path,
-      kind: kind,
-      fileName: name,
-      replyTo: _replyingTo,
-    );
-    if (_replyingTo != null) setState(() => _replyingTo = null);
+    if (bytes == null || bytes.isEmpty) return;
+
+    setState(() => _sendingAttachment = true);
+    try {
+      await _service.sendMedia(
+        widget.chat.id,
+        bytes: bytes,
+        fileName: name,
+        replyTo: _replyingTo,
+      );
+      if (_replyingTo != null && mounted) setState(() => _replyingTo = null);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('Не удалось отправить файл');
+    } finally {
+      if (mounted) setState(() => _sendingAttachment = false);
+    }
   }
 
   /// Как в Telegram/WhatsApp: редактирование происходит прямо в поле ввода —
@@ -751,9 +776,155 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           : (_service.lastActionError ?? 'Не удалось удалить сообщение'),
     );
   }
+
+  GlobalKey _keyForMessage(String id) =>
+      _messageKeys.putIfAbsent(id, GlobalKey.new);
+
+  Future<void> _togglePinMessage(ChatMessage m) async {
+    final success = m.isPinned
+        ? await _service.unpinMessage(widget.chat.id, m.id)
+        : await _service.pinMessage(widget.chat.id, m.id);
+    if (!mounted) return;
+    if (!success) {
+      _showSnack(
+        _service.lastActionError ??
+            (m.isPinned
+                ? 'Не удалось открепить сообщение'
+                : 'Не удалось закрепить сообщение'),
+      );
+    }
+  }
+
+  Future<void> _openChatFile(ChatFile file) async {
+    try {
+      await ChatFileShare.share(file);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack('Не удалось скачать файл');
+    }
+  }
+
+  void _jumpToMessage(String messageId) {
+    final ctx = _messageKeys[messageId]?.currentContext;
+    if (ctx == null) {
+      _showSnack('Сообщение ещё не загружено в историю');
+      return;
+    }
+    setState(() => _highlightedMessageId = messageId);
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+      alignment: 0.35,
+    );
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      setState(() => _highlightedMessageId = null);
+    });
+  }
+
+  Widget _buildPinnedBar(BuildContext context) {
+    final pinned = _service.pinnedMessagesFor(widget.chat.id);
+    if (pinned.isEmpty) return const SizedBox.shrink();
+    final first = pinned.first;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (pinned.length == 1) {
+          _jumpToMessage(first.message.id);
+        } else {
+          _showPinnedList(pinned);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
+          ),
+          border: Border(
+            bottom: BorderSide(
+              color: CupertinoColors.separator.resolveFrom(context),
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              CupertinoIcons.pin_fill,
+              size: 16,
+              color: CupertinoColors.systemOrange,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    pinned.length == 1
+                        ? 'Закреплённое сообщение'
+                        : 'Закреплено: ${pinned.length}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.systemOrange,
+                    ),
+                  ),
+                  Text(
+                    _previewSnippet(first.message),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              CupertinoIcons.chevron_forward,
+              size: 16,
+              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPinnedList(List<PinnedChatMessage> pinned) async {
+    final selected = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Закреплённые сообщения'),
+        actions: [
+          for (final item in pinned)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, item.message.id),
+              child: Text(
+                _previewSnippet(item.message),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    _jumpToMessage(selected);
+  }
 }
 
-enum _MsgAction { reply, forward, edit, delete }
+enum _MsgAction { reply, forward, edit, delete, pin }
 
 /// Фиксированный набор быстрых реакций, как в iMessage/Telegram.
 const List<String> _kQuickReactions = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
@@ -957,6 +1128,7 @@ class _Composer extends StatelessWidget {
     required this.onSend,
     required this.onAttach,
     this.isEditing = false,
+    this.isSendingAttachment = false,
   });
 
   final TextEditingController textCtrl;
@@ -964,6 +1136,7 @@ class _Composer extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onAttach;
   final bool isEditing;
+  final bool isSendingAttachment;
 
   @override
   Widget build(BuildContext context) {
@@ -986,11 +1159,15 @@ class _Composer extends StatelessWidget {
               CupertinoButton(
                 padding: const EdgeInsets.all(6),
                 minimumSize: Size.zero,
-                onPressed: onAttach,
-                child: Icon(
-                  CupertinoIcons.paperclip,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                ),
+                onPressed: isSendingAttachment ? null : onAttach,
+                child: isSendingAttachment
+                    ? const CupertinoActivityIndicator(radius: 10)
+                    : Icon(
+                        CupertinoIcons.paperclip,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
               ),
               Expanded(
                 child: Container(
@@ -1050,6 +1227,7 @@ class _MessageTile extends StatelessWidget {
     required this.m,
     required this.onLongMenu,
     required this.onReact,
+    required this.onOpenFile,
     this.showAuthorHeader = false,
     this.showAvatarInHeader = false,
     this.showTime = true,
@@ -1059,10 +1237,128 @@ class _MessageTile extends StatelessWidget {
   final ChatMessage m;
   final void Function(_MsgAction) onLongMenu;
   final void Function(String emoji) onReact;
+  final void Function(ChatFile file) onOpenFile;
   final bool showAuthorHeader;
   final bool showAvatarInHeader;
   final bool showTime;
   final bool highlighted;
+
+  List<Widget> _buildAttachments(BuildContext context, Color onBubble) {
+    if (m.files.isNotEmpty) {
+      return [
+        for (final file in m.files) ...[
+          _buildChatFile(context, file, onBubble),
+          const SizedBox(height: 6),
+        ],
+      ];
+    }
+
+    if (m.attachmentKind == ChatAttachmentKind.image &&
+        m.localMediaPath != null &&
+        !kIsWeb) {
+      return [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            File(m.localMediaPath!),
+            width: 220,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(CupertinoIcons.exclamationmark_triangle),
+          ),
+        ),
+      ];
+    }
+    if (m.attachmentKind == ChatAttachmentKind.image &&
+        m.remoteMediaUrl != null) {
+      return [
+        AppNetworkImage(
+          url: m.remoteMediaUrl,
+          width: 220,
+          borderRadius: 8,
+          httpHeaders: ChatFileShare.imageHeaders(m.remoteMediaUrl),
+        ),
+      ];
+    }
+    if (m.attachmentKind == ChatAttachmentKind.image && kIsWeb) {
+      return [
+        const Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('(изображение)'),
+        ),
+      ];
+    }
+    if (m.attachmentKind == ChatAttachmentKind.video) {
+      return [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(CupertinoIcons.play_circle, size: 28),
+            const SizedBox(width: 8),
+            Flexible(child: Text(m.fileName ?? 'Видео', maxLines: 2)),
+          ],
+        ),
+      ];
+    }
+    if (m.attachmentKind == ChatAttachmentKind.file) {
+      return [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(CupertinoIcons.doc, size: 24),
+            const SizedBox(width: 8),
+            Flexible(child: Text(m.fileName ?? 'Файл', maxLines: 2)),
+          ],
+        ),
+      ];
+    }
+    return const [];
+  }
+
+  Widget _buildChatFile(BuildContext context, ChatFile file, Color onBubble) {
+    final url = ChatRoutes.fileUrl(file.id);
+    if (file.isImage) {
+      return GestureDetector(
+        onTap: () => onOpenFile(file),
+        child: AppNetworkImage(
+          url: url,
+          width: 220,
+          borderRadius: 8,
+          httpHeaders: ChatFileShare.imageHeaders(url),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => onOpenFile(file),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            file.isVideo ? CupertinoIcons.play_circle : CupertinoIcons.doc,
+            size: file.isVideo ? 28 : 24,
+            color: onBubble,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(file.originalName, maxLines: 2),
+                Text(
+                  file.sizeLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: onBubble.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _wrapHighlight(BuildContext context, Widget child) {
     return AnimatedContainer(
@@ -1126,6 +1422,14 @@ class _MessageTile extends StatelessWidget {
             },
             child: const Text('Переслать'),
           ),
+          if (!m.isSystem)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onLongMenu(_MsgAction.pin);
+              },
+              child: Text(m.isPinned ? 'Открепить' : 'Закрепить'),
+            ),
           if (canEdit)
             CupertinoActionSheetAction(
               onPressed: () {
@@ -1302,70 +1606,31 @@ class _MessageTile extends StatelessWidget {
                                   ref: m.replyTo!,
                                   isOutgoing: m.isOutgoing,
                                 ),
-                              if (m.attachmentKind ==
-                                      ChatAttachmentKind.image &&
-                                  m.localMediaPath != null &&
-                                  !kIsWeb)
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    File(m.localMediaPath!),
-                                    width: 220,
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            const Icon(
-                                              CupertinoIcons
-                                                  .exclamationmark_triangle,
-                                            ),
+                              if (m.isPinned)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        CupertinoIcons.pin_fill,
+                                        size: 12,
+                                        color: onBubble.withValues(alpha: 0.8),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Закреплено',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: onBubble.withValues(
+                                            alpha: 0.8,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                )
-                              else if (m.attachmentKind ==
-                                      ChatAttachmentKind.image &&
-                                  m.remoteMediaUrl != null)
-                                AppNetworkImage(
-                                  url: m.remoteMediaUrl,
-                                  width: 220,
-                                  borderRadius: 8,
-                                )
-                              else if (m.attachmentKind ==
-                                      ChatAttachmentKind.image &&
-                                  kIsWeb)
-                                const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Text('(изображение)'),
                                 ),
-                              if (m.attachmentKind == ChatAttachmentKind.video)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      CupertinoIcons.play_circle,
-                                      size: 28,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        m.fileName ?? 'Видео',
-                                        maxLines: 2,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              if (m.attachmentKind == ChatAttachmentKind.file)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(CupertinoIcons.doc, size: 24),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        m.fileName ?? 'Файл',
-                                        maxLines: 2,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              ..._buildAttachments(context, onBubble),
                               if (m.text != null && m.text!.trim().isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),

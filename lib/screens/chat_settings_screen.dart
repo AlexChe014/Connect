@@ -5,6 +5,7 @@ import 'package:connect/models/chat_message.dart';
 import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/cupertino_empty_state.dart';
@@ -331,16 +332,21 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           all
               .where(
                 (m) =>
-                    m.hasMedia &&
-                    (m.attachmentKind == ChatAttachmentKind.image ||
-                        m.attachmentKind == ChatAttachmentKind.video),
+                    m.files.any((f) => f.isImage || f.isVideo) ||
+                    (m.hasMedia &&
+                        (m.attachmentKind == ChatAttachmentKind.image ||
+                            m.attachmentKind == ChatAttachmentKind.video)),
               )
               .toList()
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
       final files =
           all
               .where(
-                (m) => m.hasMedia && m.attachmentKind == ChatAttachmentKind.file,
+                (m) =>
+                    m.files.any((f) => !f.isImage && !f.isVideo) ||
+                    (m.hasMedia &&
+                        m.attachmentKind == ChatAttachmentKind.file &&
+                        m.files.isEmpty),
               )
               .toList()
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -429,11 +435,28 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   }
 
   Future<void> _openFile(ChatMessage m) async {
-    final url = m.remoteMediaUrl;
-    if (url == null || url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      if (m.files.isNotEmpty) {
+        await ChatFileShare.share(m.files.first);
+        return;
+      }
+      final url = m.remoteMediaUrl;
+      if (url == null || url.isEmpty) return;
+      final uri = Uri.tryParse(url);
+      if (uri == null) return;
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('Не удалось открыть файл');
+    }
+  }
+
+  Future<void> _togglePin() async {
+    final success = await _service.togglePin(_chat.id);
+    if (!mounted) return;
+    if (!success) {
+      _showSnack(_service.lastActionError ?? 'Не удалось изменить закрепление');
+    }
   }
 
   Widget _buildGalleryTabs(BuildContext context) {
@@ -551,6 +574,9 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                           : AppNetworkImage(
                               url: m.remoteMediaUrl,
                               fit: BoxFit.cover,
+                              httpHeaders: ChatFileShare.imageHeaders(
+                                m.remoteMediaUrl,
+                              ),
                             ),
                       if (m.attachmentKind == ChatAttachmentKind.video)
                         Container(
@@ -601,11 +627,14 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           _sectionLabel(group.key.toUpperCase()),
           CupertinoListSection.insetGrouped(
             children: group.value.map((m) {
-              final accent = _fileAccentFor(m.fileName);
+              final name = m.files.isNotEmpty
+                  ? m.files.first.originalName
+                  : m.fileName;
+              final accent = _fileAccentFor(name);
               return CupertinoListTile(
                 leading: _iconBadge(accent.icon, accent.color),
                 title: Text(
-                  m.fileName ?? 'Файл',
+                  name ?? 'Файл',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w500),
@@ -803,6 +832,22 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                           ),
                         ],
                       ),
+                    ),
+                    CupertinoListSection.insetGrouped(
+                      children: [
+                        CupertinoListTile(
+                          leading: _iconBadge(
+                            _chat.isPinned
+                                ? CupertinoIcons.pin_slash
+                                : CupertinoIcons.pin_fill,
+                            CupertinoColors.systemOrange,
+                          ),
+                          title: Text(
+                            _chat.isPinned ? 'Открепить чат' : 'Закрепить чат',
+                          ),
+                          onTap: _togglePin,
+                        ),
+                      ],
                     ),
                     _buildGalleryTabs(context),
                     _buildGalleryContent(context),

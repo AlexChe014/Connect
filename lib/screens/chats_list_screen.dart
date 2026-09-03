@@ -216,6 +216,14 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
             groupController: _swipeGroup,
             actions: [
               SwipeAction(
+                icon: c.isPinned
+                    ? CupertinoIcons.pin_slash
+                    : CupertinoIcons.pin_fill,
+                label: c.isPinned ? 'Открепить' : 'Закрепить',
+                color: CupertinoColors.systemOrange,
+                onTap: () => _togglePin(c),
+              ),
+              SwipeAction(
                 icon: c.isMuted
                     ? CupertinoIcons.bell
                     : CupertinoIcons.bell_slash_fill,
@@ -257,6 +265,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         title: Text(c.title),
         actions: [
           CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'pin'),
+            child: Text(c.isPinned ? 'Открепить' : 'Закрепить'),
+          ),
+          CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context, 'favorite'),
             child: Text(
               c.isFavorite ? 'Убрать из избранного' : 'В избранное',
@@ -280,12 +292,22 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     );
     if (choice == null || !mounted) return;
     switch (choice) {
+      case 'pin':
+        _togglePin(c);
       case 'favorite':
         _chat.toggleFavorite(c.id);
       case 'mute':
         _chat.toggleMute(c.id);
       case 'delete':
         _confirmDeleteChat(c);
+    }
+  }
+
+  Future<void> _togglePin(Chat c) async {
+    final success = await _chat.togglePin(c.id);
+    if (!mounted) return;
+    if (!success) {
+      _showMessage(_chat.lastActionError ?? 'Не удалось изменить закрепление');
     }
   }
 
@@ -876,15 +898,29 @@ class _ChatRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (time.isNotEmpty || chat.unreadCount > 0 || chat.isMuted) ...[
+              if (time.isNotEmpty ||
+                  chat.unreadCount > 0 ||
+                  chat.isMuted ||
+                  chat.isPinned) ...[
                 const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (time.isNotEmpty || chat.isMuted)
+                    if (time.isNotEmpty || chat.isMuted || chat.isPinned)
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (chat.isPinned) ...[
+                            Icon(
+                              CupertinoIcons.pin_fill,
+                              size: 12,
+                              color: CupertinoColors.systemOrange.resolveFrom(
+                                context,
+                              ),
+                            ),
+                            if (time.isNotEmpty || chat.isMuted)
+                              const SizedBox(width: 4),
+                          ],
                           if (chat.isMuted) ...[
                             Icon(
                               CupertinoIcons.bell_slash_fill,

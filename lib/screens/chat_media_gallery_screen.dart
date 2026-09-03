@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:connect/models/chat_message.dart';
+import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -35,6 +36,9 @@ class MediaViewer extends StatelessWidget {
                         url: m.remoteMediaUrl,
                         fit: BoxFit.contain,
                         width: double.infinity,
+                        httpHeaders: ChatFileShare.imageHeaders(
+                          m.remoteMediaUrl,
+                        ),
                       ),
             ),
           );
