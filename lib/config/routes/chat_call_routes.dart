@@ -1,4 +1,4 @@
-import '../config/api_config.dart';
+import '../api_config.dart';
 
 class ChatCallRoutes {
   ChatCallRoutes._();
