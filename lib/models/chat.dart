@@ -36,6 +36,7 @@ class Chat {
     this.unreadCount = 0,
     this.isMuted = false,
     this.isFavorite = false,
+    this.isPinned = false,
   });
 
   final String id;
@@ -63,6 +64,19 @@ class Chat {
   final bool isMuted;
   /// Чат отмечен как избранный — тоже только локальное состояние.
   final bool isFavorite;
+  /// Закреплён для текущего пользователя на сервере (`is_pinned`).
+  final bool isPinned;
+
+  /// Закреплённые чаты выше, затем по времени последнего сообщения.
+  static int compareForList(Chat a, Chat b) {
+    if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+    final at = a.lastMessageAt;
+    final bt = b.lastMessageAt;
+    if (at == null && bt == null) return 0;
+    if (at == null) return 1;
+    if (bt == null) return -1;
+    return bt.compareTo(at);
+  }
 
   bool canManage(int? userId) {
     if (userId == null) return false;
@@ -101,6 +115,7 @@ class Chat {
       unreadCount: unreadCount ?? this.unreadCount,
       isMuted: isMuted,
       isFavorite: isFavorite,
+      isPinned: isPinned,
     );
   }
 
@@ -122,6 +137,7 @@ class Chat {
       unreadCount: unreadCount,
       isMuted: isMuted,
       isFavorite: isFavorite,
+      isPinned: isPinned,
     );
   }
 
@@ -143,6 +159,7 @@ class Chat {
       unreadCount: unreadCount,
       isMuted: isMuted,
       isFavorite: isFavorite,
+      isPinned: isPinned,
     );
   }
 
@@ -159,6 +176,7 @@ class Chat {
     int? unreadCount,
     bool? isMuted,
     bool? isFavorite,
+    bool? isPinned,
   }) {
     return Chat(
       id: id,
@@ -177,6 +195,7 @@ class Chat {
       unreadCount: unreadCount ?? this.unreadCount,
       isMuted: isMuted ?? this.isMuted,
       isFavorite: isFavorite ?? this.isFavorite,
+      isPinned: isPinned ?? this.isPinned,
     );
   }
 

@@ -29,4 +29,24 @@ class ChatRoutes {
 
   static String messageDeleteUrl(int chatId, int messageId) =>
       '${ApiConfig.baseUrl}$_prefix/$chatId/messages/$messageId/delete';
+
+  static String get filesUrl => '${ApiConfig.baseUrl}$_prefix/files';
+
+  static String fileUrl(int fileId) =>
+      '${ApiConfig.baseUrl}$_prefix/files/$fileId';
+
+  static String pinUrl(int chatId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/pin';
+
+  static String pinDeleteUrl(int chatId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/pin/delete';
+
+  static String pinnedMessagesUrl(int chatId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/pinned-messages';
+
+  static String messagePinUrl(int chatId, int messageId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/messages/$messageId/pin';
+
+  static String messagePinDeleteUrl(int chatId, int messageId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/messages/$messageId/pin/delete';
 }

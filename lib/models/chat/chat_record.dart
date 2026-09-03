@@ -14,6 +14,7 @@ class ChatRecord {
     this.createdAt,
     this.updatedAt,
     this.members = const [],
+    this.isPinned = false,
   });
 
   final int id;
@@ -25,6 +26,7 @@ class ChatRecord {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final List<ChatMemberInfo> members;
+  final bool isPinned;
 
   factory ChatRecord.fromJson(Map<String, dynamic> json) {
     final rawMembers = json['members'];
@@ -45,6 +47,7 @@ class ChatRecord {
       createdAt: _parseDate(json['created_at']),
       updatedAt: _parseDate(json['updated_at']),
       members: members,
+      isPinned: json['is_pinned'] == true,
     );
   }
 

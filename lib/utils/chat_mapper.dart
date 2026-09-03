@@ -1,5 +1,8 @@
+import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
+import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/chat_record.dart';
+import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
@@ -44,6 +47,7 @@ class ChatMapper {
       lastMessagePreview: previewMessage?.preview,
       lastMessageAt: previewMessage?.createdAt,
       unreadCount: _parseInt(json['unread_count']) ?? 0,
+      isPinned: json['is_pinned'] == true,
     );
   }
 
@@ -78,6 +82,7 @@ class ChatMapper {
       members: members,
       peerUserId: peer?.userId,
       peerAvatarUrl: peer?.avatarUrl,
+      isPinned: record.isPinned,
     );
   }
 
@@ -119,10 +124,12 @@ class ChatMapper {
     final type = (json['type'] as String?)?.trim().toUpperCase() ?? 'TEXT';
     final rawMessage = _readMessageText(json);
     final createdAt = _parseDate(json['created_at']) ?? DateTime.now();
+    final files = ChatFile.listFromJson(json['files']);
     final resolved = _resolveMessageContent(
       rawMessage: rawMessage,
       type: type,
       json: json,
+      files: files,
     );
 
     final forwardedMessageId = _parseInt(json['forwarded_message_id']);
@@ -149,6 +156,9 @@ class ChatMapper {
       text: resolved.text,
       attachmentKind: resolved.attachmentKind,
       remoteMediaUrl: resolved.remoteMediaUrl,
+      fileName: resolved.fileName,
+      files: files,
+      isPinned: json['is_pinned'] == true,
       forwardOf: forwardOf,
       isSystem: type == 'SYSTEM',
       repliedMessageId: _parseInt(json['replied_message_id'])?.toString(),
@@ -247,31 +257,42 @@ class ChatMapper {
           if (replyId == null) return m;
           final source = byId[replyId];
           if (source == null) return m;
-          return ChatMessage(
-            id: m.id,
-            chatId: m.chatId,
-            authorName: m.authorName,
-            isOutgoing: m.isOutgoing,
-            createdAt: m.createdAt,
-            text: m.text,
-            attachmentKind: m.attachmentKind,
-            localMediaPath: m.localMediaPath,
-            remoteMediaUrl: m.remoteMediaUrl,
-            fileName: m.fileName,
+          return m.copyWith(
             replyTo: MessageReference(
               messageId: source.id,
               authorName: source.authorName,
               textPreview: snippet(source),
             ),
-            forwardOf: m.forwardOf,
-            isSystem: m.isSystem,
-            repliedMessageId: m.repliedMessageId,
-            isRead: m.isRead,
-            authorAvatarUrl: m.authorAvatarUrl,
-            readByRecipients: m.readByRecipients,
           );
         })
         .toList(growable: false);
+  }
+
+  static PinnedChatMessage mapPinnedMessage(
+    Map<String, dynamic> json, {
+    required int currentUserId,
+  }) {
+    final chatId = _parseInt(json['chat_id']) ?? 0;
+    final rawMessage = _asJsonMap(json['message']) ?? json;
+    final user = _asJsonMap(json['user']);
+    return PinnedChatMessage(
+      id: _parseInt(json['id']) ?? 0,
+      chatId: chatId,
+      messageId: _parseInt(json['message_id']) ?? 0,
+      userId: _parseInt(json['user_id']) ?? 0,
+      message: mapMessage(
+        rawMessage,
+        chatId: chatId.toString(),
+        currentUserId: currentUserId,
+      ).copyWith(isPinned: true),
+      pinnedByName: user != null ? userDisplayNameFromJson(user) : null,
+    );
+  }
+
+  static ChatAttachmentKind kindOfFile(ChatFile file) {
+    if (file.isImage) return ChatAttachmentKind.image;
+    if (file.isVideo) return ChatAttachmentKind.video;
+    return ChatAttachmentKind.file;
   }
 
   static String snippet(ChatMessage m) {
@@ -345,9 +366,24 @@ class ChatMapper {
     required String? rawMessage,
     required String type,
     required Map<String, dynamic> json,
+    required List<ChatFile> files,
   }) {
     if (type == 'SYSTEM') {
       return _ResolvedMessageContent(text: rawMessage);
+    }
+
+    if (files.isNotEmpty) {
+      final primary = files.first;
+      final kind = kindOfFile(primary);
+      return _ResolvedMessageContent(
+        text: rawMessage,
+        attachmentKind: kind,
+        remoteMediaUrl: kind == ChatAttachmentKind.image ||
+                kind == ChatAttachmentKind.video
+            ? ChatRoutes.fileUrl(primary.id)
+            : null,
+        fileName: primary.originalName,
+      );
     }
 
     if (type == 'MEDIA') {
@@ -453,9 +489,11 @@ class _ResolvedMessageContent {
     this.text,
     this.attachmentKind = ChatAttachmentKind.none,
     this.remoteMediaUrl,
+    this.fileName,
   });
 
   final String? text;
   final ChatAttachmentKind attachmentKind;
   final String? remoteMediaUrl;
+  final String? fileName;
 }

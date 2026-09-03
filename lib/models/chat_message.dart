@@ -1,3 +1,4 @@
+import 'package:connect/models/chat/chat_file.dart';
 import 'package:flutter/foundation.dart';
 
 /// Вложенная ссылка на цитируемое или пересылаемое сообщение.
@@ -42,6 +43,8 @@ class ChatMessage {
     this.reactions = const <String>[],
     this.isEdited = false,
     this.isDeleted = false,
+    this.isPinned = false,
+    this.files = const [],
   });
 
   /// Сообщение можно редактировать в течение 15 минут после отправки.
@@ -73,11 +76,66 @@ class ChatMessage {
   final bool isEdited;
   /// Сообщение удалено — вместо содержимого показывается плашка "Сообщение удалено".
   final bool isDeleted;
+  /// Закреплено в чате (`is_pinned`).
+  final bool isPinned;
+  /// Файлы из `chat__files`, прикреплённые к сообщению.
+  final List<ChatFile> files;
 
   bool get hasMedia =>
-      attachmentKind != ChatAttachmentKind.none &&
-      ((localMediaPath != null && localMediaPath!.isNotEmpty) ||
-          (remoteMediaUrl != null && remoteMediaUrl!.isNotEmpty));
+      files.isNotEmpty ||
+      (attachmentKind != ChatAttachmentKind.none &&
+          ((localMediaPath != null && localMediaPath!.isNotEmpty) ||
+              (remoteMediaUrl != null && remoteMediaUrl!.isNotEmpty)));
+
+  ChatMessage copyWith({
+    String? id,
+    String? chatId,
+    String? authorName,
+    bool? isOutgoing,
+    DateTime? createdAt,
+    String? text,
+    ChatAttachmentKind? attachmentKind,
+    String? localMediaPath,
+    String? remoteMediaUrl,
+    String? fileName,
+    MessageReference? replyTo,
+    MessageReference? forwardOf,
+    bool? isSystem,
+    String? repliedMessageId,
+    bool? isRead,
+    String? authorAvatarUrl,
+    bool? readByRecipients,
+    List<String>? reactions,
+    bool? isEdited,
+    bool? isDeleted,
+    bool? isPinned,
+    List<ChatFile>? files,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      chatId: chatId ?? this.chatId,
+      authorName: authorName ?? this.authorName,
+      isOutgoing: isOutgoing ?? this.isOutgoing,
+      createdAt: createdAt ?? this.createdAt,
+      text: text ?? this.text,
+      attachmentKind: attachmentKind ?? this.attachmentKind,
+      localMediaPath: localMediaPath ?? this.localMediaPath,
+      remoteMediaUrl: remoteMediaUrl ?? this.remoteMediaUrl,
+      fileName: fileName ?? this.fileName,
+      replyTo: replyTo ?? this.replyTo,
+      forwardOf: forwardOf ?? this.forwardOf,
+      isSystem: isSystem ?? this.isSystem,
+      repliedMessageId: repliedMessageId ?? this.repliedMessageId,
+      isRead: isRead ?? this.isRead,
+      authorAvatarUrl: authorAvatarUrl ?? this.authorAvatarUrl,
+      readByRecipients: readByRecipients ?? this.readByRecipients,
+      reactions: reactions ?? this.reactions,
+      isEdited: isEdited ?? this.isEdited,
+      isDeleted: isDeleted ?? this.isDeleted,
+      isPinned: isPinned ?? this.isPinned,
+      files: files ?? this.files,
+    );
+  }
 
   bool get canStillEdit =>
       !isDeleted && DateTime.now().difference(createdAt) <= editWindow;
@@ -86,78 +144,15 @@ class ChatMessage {
       !isDeleted && DateTime.now().difference(createdAt) <= deleteWindow;
 
   ChatMessage copyWithReadState({bool? isRead, bool? readByRecipients}) {
-    return ChatMessage(
-      id: id,
-      chatId: chatId,
-      authorName: authorName,
-      isOutgoing: isOutgoing,
-      createdAt: createdAt,
-      text: text,
-      attachmentKind: attachmentKind,
-      localMediaPath: localMediaPath,
-      remoteMediaUrl: remoteMediaUrl,
-      fileName: fileName,
-      replyTo: replyTo,
-      forwardOf: forwardOf,
-      isSystem: isSystem,
-      repliedMessageId: repliedMessageId,
-      isRead: isRead ?? this.isRead,
-      authorAvatarUrl: authorAvatarUrl,
-      readByRecipients: readByRecipients ?? this.readByRecipients,
-      reactions: reactions,
-      isEdited: isEdited,
-      isDeleted: isDeleted,
-    );
+    return copyWith(isRead: isRead, readByRecipients: readByRecipients);
   }
 
   ChatMessage copyWithReactions(List<String> reactions) {
-    return ChatMessage(
-      id: id,
-      chatId: chatId,
-      authorName: authorName,
-      isOutgoing: isOutgoing,
-      createdAt: createdAt,
-      text: text,
-      attachmentKind: attachmentKind,
-      localMediaPath: localMediaPath,
-      remoteMediaUrl: remoteMediaUrl,
-      fileName: fileName,
-      replyTo: replyTo,
-      forwardOf: forwardOf,
-      isSystem: isSystem,
-      repliedMessageId: repliedMessageId,
-      isRead: isRead,
-      authorAvatarUrl: authorAvatarUrl,
-      readByRecipients: readByRecipients,
-      reactions: reactions,
-      isEdited: isEdited,
-      isDeleted: isDeleted,
-    );
+    return copyWith(reactions: reactions);
   }
 
   ChatMessage copyWithEdited(String text) {
-    return ChatMessage(
-      id: id,
-      chatId: chatId,
-      authorName: authorName,
-      isOutgoing: isOutgoing,
-      createdAt: createdAt,
-      text: text,
-      attachmentKind: attachmentKind,
-      localMediaPath: localMediaPath,
-      remoteMediaUrl: remoteMediaUrl,
-      fileName: fileName,
-      replyTo: replyTo,
-      forwardOf: forwardOf,
-      isSystem: isSystem,
-      repliedMessageId: repliedMessageId,
-      isRead: isRead,
-      authorAvatarUrl: authorAvatarUrl,
-      readByRecipients: readByRecipients,
-      reactions: reactions,
-      isEdited: true,
-      isDeleted: isDeleted,
-    );
+    return copyWith(text: text, isEdited: true);
   }
 
   ChatMessage copyWithDeleted() {
@@ -174,6 +169,7 @@ class ChatMessage {
       readByRecipients: readByRecipients,
       isEdited: isEdited,
       isDeleted: true,
+      isPinned: isPinned,
     );
   }
 }

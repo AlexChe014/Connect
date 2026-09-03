@@ -164,6 +164,45 @@ class ChatManagementRepository {
     );
   }
 
+  /// `POST /api/chat/{chat}/pin`
+  Future<void> pinChat(int chatId) async {
+    final decoded = await ApiClient.instance.post(ChatRoutes.pinUrl(chatId));
+    ApiEnvelope.unwrapData(
+      decoded,
+      defaultErrorMessage: 'Не удалось закрепить чат',
+    );
+  }
+
+  /// `DELETE /api/chat/{chat}/pin` (fallback: `POST .../pin/delete`)
+  Future<void> unpinChat(int chatId) async {
+    await _deleteWithPostFallback(
+      deleteUrl: ChatRoutes.pinUrl(chatId),
+      postDeleteUrl: ChatRoutes.pinDeleteUrl(chatId),
+      defaultErrorMessage: 'Не удалось открепить чат',
+    );
+  }
+
+  /// `POST /api/chat/{chat}/messages/{message}/pin`
+  Future<void> pinMessage(int chatId, int messageId) async {
+    final decoded = await ApiClient.instance.post(
+      ChatRoutes.messagePinUrl(chatId, messageId),
+    );
+    ApiEnvelope.unwrapData(
+      decoded,
+      defaultErrorMessage: 'Не удалось закрепить сообщение',
+    );
+  }
+
+  /// `DELETE /api/chat/{chat}/messages/{message}/pin`
+  /// (fallback: `POST .../pin/delete`)
+  Future<void> unpinMessage(int chatId, int messageId) async {
+    await _deleteWithPostFallback(
+      deleteUrl: ChatRoutes.messagePinUrl(chatId, messageId),
+      postDeleteUrl: ChatRoutes.messagePinDeleteUrl(chatId, messageId),
+      defaultErrorMessage: 'Не удалось открепить сообщение',
+    );
+  }
+
   /// На проде DELETE часто отвечает 403 (как раньше PATCH), хотя
   /// `POST .../delete` по спецификации поддерживается.
   Future<void> _deleteWithPostFallback({

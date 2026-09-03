@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/add_chat_members_request.dart';
+import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/create_chat_request.dart';
+import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat/update_chat_message_request.dart';
 import 'package:connect/models/chat/update_chat_request.dart';
 import 'package:connect/models/chat_message.dart';
@@ -81,6 +83,7 @@ class ChatService extends ChangeNotifier {
 
   final List<Chat> _chats = [];
   final Map<String, List<ChatMessage>> _messages = {};
+  final Map<String, List<PinnedChatMessage>> _pinnedMessages = {};
   final Map<String, bool> _messagesLoading = {};
   final Map<String, String?> _messagesError = {};
 
@@ -107,6 +110,12 @@ class ChatService extends ChangeNotifier {
 
   List<ChatMessage> messagesFor(String chatId) {
     final list = _messages[chatId];
+    if (list == null) return const [];
+    return List.unmodifiable(list);
+  }
+
+  List<PinnedChatMessage> pinnedMessagesFor(String chatId) {
+    final list = _pinnedMessages[chatId];
     if (list == null) return const [];
     return List.unmodifiable(list);
   }
@@ -199,6 +208,7 @@ class ChatService extends ChangeNotifier {
         }
       }
       _upsertLastMessage(chatId);
+      unawaited(loadPinnedMessages(chatId));
       _messagesError[chatId] = null;
     } catch (e) {
       _messagesError[chatId] = e.toString();
@@ -349,6 +359,34 @@ class ChatService extends ChangeNotifier {
     return result;
   }
 
+  Future<void> loadPinnedMessages(String chatId) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return;
+
+    try {
+      final pinned = await ChatRepository.instance.getPinnedMessages(
+        chatIntId,
+        currentUserId: userId,
+      );
+      _pinnedMessages[chatId] = List<PinnedChatMessage>.from(pinned);
+      final pinnedIds = {for (final p in pinned) p.message.id};
+      final list = _messages[chatId];
+      if (list != null) {
+        for (var i = 0; i < list.length; i++) {
+          final m = list[i];
+          final shouldPin = pinnedIds.contains(m.id);
+          if (m.isPinned != shouldPin) {
+            list[i] = m.copyWith(isPinned: shouldPin);
+          }
+        }
+      }
+      notifyListeners();
+    } catch (_) {
+      // Закрепления не критичны для переписки.
+    }
+  }
+
   Future<void> _refreshSelfProfile() async {
     final u = await AuthService.instance.getStoredUser();
     if (u == null) return;
@@ -378,10 +416,15 @@ class ChatService extends ChangeNotifier {
 
   void _moveChatToTop(String chatId) {
     final idx = _chats.indexWhere((c) => c.id == chatId);
-    if (idx <= 0) return;
+    if (idx < 0) return;
     final chat = _chats.removeAt(idx);
     _chats.insert(0, chat);
+    _sortChats();
     notifyListeners();
+  }
+
+  void _sortChats() {
+    _chats.sort(Chat.compareForList);
   }
 
   /// Создание группового чата через API.
@@ -405,6 +448,7 @@ class ChatService extends ChangeNotifier {
       );
       final chat = ChatMapper.fromRecord(record, currentUserId: userId);
       _chats.insert(0, chat);
+      _sortChats();
       notifyListeners();
       return chat;
     } catch (_) {
@@ -452,12 +496,15 @@ class ChatService extends ChangeNotifier {
           members: chat.members,
           lastMessagePreview: chat.lastMessagePreview,
           lastMessageAt: chat.lastMessageAt,
+          isPinned: chat.isPinned,
         );
         _chats.insert(0, withAvatar);
+        _sortChats();
         notifyListeners();
         return withAvatar;
       }
       _chats.insert(0, chat);
+      _sortChats();
       notifyListeners();
       return chat;
     } catch (_) {
@@ -537,6 +584,7 @@ class ChatService extends ChangeNotifier {
       await ChatManagementRepository.instance.deleteChat(chatIntId);
       _chats.removeWhere((c) => c.id == chatId);
       _messages.remove(chatId);
+      _pinnedMessages.remove(chatId);
       notifyListeners();
       return true;
     } on ApiException catch (e) {
@@ -596,6 +644,7 @@ class ChatService extends ChangeNotifier {
       if (memberUserId == userId) {
         _chats.removeWhere((c) => c.id == chatId);
         _messages.remove(chatId);
+        _pinnedMessages.remove(chatId);
       } else {
         await refreshChatDetails(chatId);
       }
@@ -645,24 +694,14 @@ class ChatService extends ChangeNotifier {
       if (list != null) {
         final idx = list.indexWhere((m) => m.id == messageId);
         if (idx >= 0) {
-          list[idx] = ChatMessage(
-            id: updated.id,
-            chatId: updated.chatId,
-            authorName: updated.authorName,
-            isOutgoing: updated.isOutgoing,
-            createdAt: updated.createdAt,
-            text: updated.text,
-            attachmentKind: updated.attachmentKind,
-            remoteMediaUrl: updated.remoteMediaUrl,
+          list[idx] = updated.copyWith(
             replyTo: list[idx].replyTo,
             forwardOf: list[idx].forwardOf,
-            isSystem: updated.isSystem,
-            repliedMessageId: updated.repliedMessageId,
-            isRead: updated.isRead,
-            authorAvatarUrl: updated.authorAvatarUrl,
             readByRecipients: list[idx].readByRecipients,
             reactions: list[idx].reactions,
             isEdited: true,
+            files: updated.files.isNotEmpty ? updated.files : list[idx].files,
+            isPinned: list[idx].isPinned,
           );
         }
       }
@@ -731,6 +770,7 @@ class ChatService extends ChangeNotifier {
       unreadCount: c.unreadCount,
       isMuted: c.isMuted,
       isFavorite: c.isFavorite,
+      isPinned: c.isPinned,
     );
     notifyListeners();
   }
@@ -754,6 +794,103 @@ class ChatService extends ChangeNotifier {
     _chats[idx] = _chats[idx].copyWithFlags(isFavorite: next);
     notifyListeners();
     await ChatPreferencesService.instance.setFavorite(chatId, next);
+  }
+
+  Future<bool> togglePin(String chatId) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    if (idx < 0) return false;
+    final chatIntId = int.tryParse(chatId);
+    if (chatIntId == null) return false;
+
+    final next = !_chats[idx].isPinned;
+    _chats[idx] = _chats[idx].copyWithDetails(isPinned: next);
+    _sortChats();
+    notifyListeners();
+
+    try {
+      _lastActionError = null;
+      if (next) {
+        await ChatManagementRepository.instance.pinChat(chatIntId);
+      } else {
+        await ChatManagementRepository.instance.unpinChat(chatIntId);
+      }
+      return true;
+    } on ApiException catch (e) {
+      final rollbackIdx = _chats.indexWhere((c) => c.id == chatId);
+      if (rollbackIdx >= 0) {
+        _chats[rollbackIdx] = _chats[rollbackIdx].copyWithDetails(
+          isPinned: !next,
+        );
+        _sortChats();
+      }
+      _lastActionError = e.message;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      final rollbackIdx = _chats.indexWhere((c) => c.id == chatId);
+      if (rollbackIdx >= 0) {
+        _chats[rollbackIdx] = _chats[rollbackIdx].copyWithDetails(
+          isPinned: !next,
+        );
+        _sortChats();
+      }
+      _lastActionError = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> pinMessage(String chatId, String messageId) async {
+    return _setMessagePinned(chatId, messageId, pinned: true);
+  }
+
+  Future<bool> unpinMessage(String chatId, String messageId) async {
+    return _setMessagePinned(chatId, messageId, pinned: false);
+  }
+
+  Future<bool> _setMessagePinned(
+    String chatId,
+    String messageId, {
+    required bool pinned,
+  }) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    final messageIntId = int.tryParse(messageId);
+    if (userId == null || chatIntId == null || messageIntId == null) {
+      return false;
+    }
+
+    try {
+      _lastActionError = null;
+      if (pinned) {
+        await ChatManagementRepository.instance.pinMessage(
+          chatIntId,
+          messageIntId,
+        );
+      } else {
+        await ChatManagementRepository.instance.unpinMessage(
+          chatIntId,
+          messageIntId,
+        );
+      }
+
+      final list = _messages[chatId];
+      final idx = list?.indexWhere((m) => m.id == messageId) ?? -1;
+      if (idx >= 0) {
+        list![idx] = list[idx].copyWith(isPinned: pinned);
+      }
+      await loadPinnedMessages(chatId);
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _lastActionError = e.message;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _lastActionError = e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> sendText(
@@ -782,18 +919,10 @@ class ChatService extends ChangeNotifier {
 
       _appendMessage(
         chatId,
-        ChatMessage(
-          id: sent.id,
-          chatId: sent.chatId,
-          authorName: sent.authorName,
-          isOutgoing: sent.isOutgoing,
-          createdAt: sent.createdAt,
+        sent.copyWith(
           text: sent.text ?? t,
           replyTo: replyTo,
-          repliedMessageId: sent.repliedMessageId,
           isRead: true,
-          authorAvatarUrl: sent.authorAvatarUrl,
-          readByRecipients: sent.readByRecipients,
         ),
       );
     } catch (e) {
@@ -801,15 +930,39 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  void sendMedia(
+  Future<void> sendMedia(
     String chatId, {
-    required String path,
-    required ChatAttachmentKind kind,
+    required List<int> bytes,
+    required String fileName,
     String? caption,
-    String? fileName,
     MessageReference? replyTo,
-  }) {
-    // Отправка медиа через API пока не подключена.
+  }) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return;
+    if (bytes.isEmpty) {
+      throw ApiException(400, 'Файл пустой');
+    }
+    if (bytes.length > ChatFile.maxSizeBytes) {
+      throw ApiException(400, 'Файл больше 10 МБ');
+    }
+
+    final uploaded = await ChatRepository.instance.uploadFile(
+      bytes: bytes,
+      filename: fileName,
+    );
+    final repliedId = replyTo != null ? int.tryParse(replyTo.messageId) : null;
+    final sent = await ChatRepository.instance.sendMessage(
+      chatIntId,
+      text: caption ?? '',
+      currentUserId: userId,
+      repliedMessageId: repliedId,
+      fileIds: [uploaded.id],
+    );
+    _appendMessage(
+      chatId,
+      sent.copyWith(replyTo: replyTo ?? sent.replyTo, isRead: true),
+    );
   }
 
   Future<bool> forwardMessage(
@@ -842,23 +995,15 @@ class ChatService extends ChangeNotifier {
 
       _appendMessage(
         targetChatId,
-        ChatMessage(
-          id: sent.id,
-          chatId: sent.chatId,
-          authorName: sent.authorName,
-          isOutgoing: sent.isOutgoing,
-          createdAt: sent.createdAt,
+        sent.copyWith(
           text: sent.text ?? text,
-          forwardOf:
-              sent.forwardOf ??
+          forwardOf: sent.forwardOf ??
               MessageReference(
                 messageId: source.id,
                 authorName: source.authorName,
                 textPreview: text,
               ),
           isRead: true,
-          authorAvatarUrl: sent.authorAvatarUrl,
-          readByRecipients: sent.readByRecipients,
         ),
       );
       return true;
@@ -883,14 +1028,7 @@ class ChatService extends ChangeNotifier {
       _messagePreview(last),
       last.createdAt,
     );
-    _chats.sort((a, b) {
-      final at = a.lastMessageAt;
-      final bt = b.lastMessageAt;
-      if (at == null && bt == null) return 0;
-      if (at == null) return 1;
-      if (bt == null) return -1;
-      return bt.compareTo(at);
-    });
+    _sortChats();
   }
 
   void _appendMessage(String chatId, ChatMessage m) {

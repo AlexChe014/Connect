@@ -1,3 +1,4 @@
+import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -97,6 +98,75 @@ void main() {
 
       expect(message.remoteMediaUrl, 'http://cdn.example.com/img2.png');
       expect(message.text, isNull);
+    });
+
+    test('maps files onto a MEDIA message and marks it as an image', () {
+      final message = ChatMapper.mapMessage(
+        {
+          'id': 11,
+          'sender_id': 20,
+          'type': 'MEDIA',
+          'files': [
+            {
+              'id': 4,
+              'filename': 'abc.png',
+              'originalName': 'photo.png',
+              'mimeType': 'image/png',
+              'size': 1024,
+              'is_duplicate': false,
+            },
+          ],
+        },
+        chatId: '1',
+        currentUserId: 10,
+      );
+
+      expect(message.files, hasLength(1));
+      expect(message.files.single.originalName, 'photo.png');
+      expect(message.attachmentKind, ChatAttachmentKind.image);
+      expect(message.fileName, 'photo.png');
+      expect(message.remoteMediaUrl, contains('/chat/files/4'));
+    });
+
+    test('maps a non-image file attachment', () {
+      final message = ChatMapper.mapMessage(
+        {
+          'id': 12,
+          'sender_id': 20,
+          'type': 'MEDIA',
+          'message': '',
+          'files': [
+            {
+              'id': 5,
+              'filename': 'hash.pdf',
+              'originalName': 'document.pdf',
+              'mimeType': 'application/pdf',
+              'size': 2048,
+            },
+          ],
+        },
+        chatId: '1',
+        currentUserId: 10,
+      );
+
+      expect(message.attachmentKind, ChatAttachmentKind.file);
+      expect(message.fileName, 'document.pdf');
+      expect(message.remoteMediaUrl, isNull);
+    });
+
+    test('maps is_pinned on a message', () {
+      final message = ChatMapper.mapMessage(
+        {
+          'id': 13,
+          'sender_id': 10,
+          'type': 'TEXT',
+          'message': 'Важно',
+          'is_pinned': true,
+        },
+        chatId: '1',
+        currentUserId: 10,
+      );
+      expect(message.isPinned, isTrue);
     });
 
     test('marks SYSTEM messages and keeps their text', () {
@@ -389,6 +459,37 @@ void main() {
         currentUserId: 10,
       );
       expect(chat.unreadCount, 3);
+    });
+
+    test('is_pinned is mapped onto the chat', () {
+      final pinned = ChatMapper.mapChat(
+        {'id': 1, 'is_group': true, 'title': 'X', 'is_pinned': true},
+        currentUserId: 10,
+      );
+      final unpinned = ChatMapper.mapChat(
+        {'id': 2, 'is_group': true, 'title': 'Y'},
+        currentUserId: 10,
+      );
+      expect(pinned.isPinned, isTrue);
+      expect(unpinned.isPinned, isFalse);
+    });
+  });
+
+  group('Chat.compareForList', () {
+    test('pinned chats come before unpinned regardless of last message time', () {
+      final olderPinned = Chat(
+        id: '1',
+        title: 'Pinned',
+        isPinned: true,
+        lastMessageAt: DateTime(2026, 1, 1),
+      );
+      final newer = Chat(
+        id: '2',
+        title: 'Recent',
+        lastMessageAt: DateTime(2026, 9, 1),
+      );
+      final chats = [newer, olderPinned]..sort(Chat.compareForList);
+      expect(chats.first.id, '1');
     });
   });
 }

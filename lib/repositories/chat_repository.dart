@@ -1,10 +1,16 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:connect/config/routes/chat_routes.dart';
+import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/chat_messages_page.dart';
+import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
 import 'package:connect/utils/chat_mapper.dart';
+import 'package:http/http.dart' as http;
 
 class ChatRepository {
   ChatRepository._();
@@ -61,14 +67,7 @@ class ChatRepository {
       page = currentPage + 1;
     } while (page <= lastPage);
 
-    chats.sort((a, b) {
-      final at = a.lastMessageAt;
-      final bt = b.lastMessageAt;
-      if (at == null && bt == null) return 0;
-      if (at == null) return 1;
-      if (bt == null) return -1;
-      return bt.compareTo(at);
-    });
+    chats.sort(Chat.compareForList);
 
     return chats;
   }
@@ -149,21 +148,43 @@ class ChatRepository {
     required int currentUserId,
     int? repliedMessageId,
     int? forwardedMessageId,
+  }) {
+    return sendMessage(
+      chatId,
+      text: text,
+      currentUserId: currentUserId,
+      repliedMessageId: repliedMessageId,
+      forwardedMessageId: forwardedMessageId,
+    );
+  }
+
+  Future<ChatMessage> sendMessage(
+    int chatId, {
+    String text = '',
+    required int currentUserId,
+    int? repliedMessageId,
+    int? forwardedMessageId,
+    List<int>? fileIds,
   }) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) {
+    final ids = fileIds ?? const <int>[];
+    if (trimmed.isEmpty && ids.isEmpty) {
       throw ApiException(400, 'Текст сообщения пустой');
     }
 
     final body = <String, dynamic>{
+      'message': trimmed,
       'text': trimmed,
     };
     if (repliedMessageId != null) {
-      // Спецификация описывает только `text`, но бэкенд поддерживает треды.
       body['replied_message_id'] = repliedMessageId;
     }
     if (forwardedMessageId != null) {
       body['forwarded_message_id'] = forwardedMessageId;
+    }
+    if (ids.isNotEmpty) {
+      body['file_ids'] = ids;
+      body['type'] = 'MEDIA';
     }
 
     final decoded = await ApiClient.instance.post(
@@ -179,6 +200,78 @@ class ChatRepository {
       chatId: chatId.toString(),
       currentUserId: currentUserId,
     );
+  }
+
+  Future<ChatFile> uploadFile({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    if (bytes.length > ChatFile.maxSizeBytes) {
+      throw ApiException(400, 'Файл больше 10 МБ');
+    }
+
+    final decoded = await ApiClient.instance.postMultipart(
+      ChatRoutes.filesUrl,
+      files: [
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
+      ],
+    );
+    final data = ApiEnvelope.unwrapDataMap(
+      decoded,
+      defaultErrorMessage: 'Не удалось загрузить файл',
+    );
+    return ChatFile.fromJson(data);
+  }
+
+  Future<Uint8List> downloadFile(int fileId) async {
+    final bytes = await ApiClient.instance.downloadBytes(
+      ChatRoutes.fileUrl(fileId),
+    );
+
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is Map<String, dynamic> && decoded['success'] == false) {
+        ApiEnvelope.unwrapData(
+          decoded,
+          defaultErrorMessage: 'Не удалось скачать файл',
+        );
+      }
+    } catch (_) {
+      // Бинарные данные не декодируются как UTF-8 JSON — это и есть файл.
+    }
+
+    return Uint8List.fromList(bytes);
+  }
+
+  Future<List<PinnedChatMessage>> getPinnedMessages(
+    int chatId, {
+    required int currentUserId,
+  }) async {
+    final decoded = await ApiClient.instance.get(
+      ChatRoutes.pinnedMessagesUrl(chatId),
+    );
+    final raw = ApiEnvelope.unwrapDataList(
+      decoded,
+      defaultErrorMessage: 'Не удалось получить закреплённые сообщения',
+    );
+    return raw
+        .map((item) {
+          if (item is Map<String, dynamic>) {
+            return ChatMapper.mapPinnedMessage(
+              item,
+              currentUserId: currentUserId,
+            );
+          }
+          if (item is Map) {
+            return ChatMapper.mapPinnedMessage(
+              Map<String, dynamic>.from(item),
+              currentUserId: currentUserId,
+            );
+          }
+          return null;
+        })
+        .whereType<PinnedChatMessage>()
+        .toList(growable: false);
   }
 
   Future<void> markRead(int chatId) async {
