@@ -16,6 +16,7 @@ class AppNetworkImage extends StatelessWidget {
     this.fit = BoxFit.cover,
     this.borderRadius = 0,
     this.errorIcon = Icons.image_not_supported_outlined,
+    this.httpHeaders,
   });
 
   final String? url;
@@ -24,6 +25,7 @@ class AppNetworkImage extends StatelessWidget {
   final BoxFit fit;
   final double borderRadius;
   final IconData errorIcon;
+  final Map<String, String>? httpHeaders;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +36,7 @@ class AppNetworkImage extends StatelessWidget {
           ? _errorPlaceholder()
           : CachedNetworkImage(
               imageUrl: trimmed,
+              httpHeaders: httpHeaders,
               width: width,
               height: height,
               fit: fit,

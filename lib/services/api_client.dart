@@ -27,14 +27,17 @@ class ApiClient {
     final headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      ...authHeaders,
     };
-    final token = AuthService.instance.token;
-
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
     return headers;
+  }
+
+  /// Заголовок авторизации без `Content-Type` — для скачивания файлов
+  /// и картинок через [CachedNetworkImage].
+  Map<String, String> get authHeaders {
+    final token = AuthService.instance.token;
+    if (token == null || token.isEmpty) return const {};
+    return {'Authorization': 'Bearer $token'};
   }
 
   Future<Map<String, dynamic>> get(

@@ -9,10 +9,14 @@ class ApiConfig {
   static const String _defaultBackendHost = 'https://connect.xondev.ru';
   static const String _mobileSegment = '/mobile';
   static const String _apiSegment = '/api';
+
+  /// Публичный префикс файлового storage (реверс-прокси к MinIO/S3).
+  /// Не путать с [_mobileSegment] (`/mobile/api` — REST).
+  static const String _mobiApiSegment = '/mobi-api';
+
   static String? _customBackendHost;
 
-  /// Временно: файлы/картинки всё ещё раздаёт старый хост
-  /// (`https://data.xondev.ru`), пока storage не настроен на новом сервере.
+  /// Временно: относительные пути `/storage/...` всё ещё раздаёт старый хост.
   static const String _filesHost = 'https://data.xondev.ru';
 
   static Future<void> init() async {
@@ -104,9 +108,13 @@ class ApiConfig {
 
   /// Нормализация URL файлов от бэкенда.
   ///
-  /// Временно все «локальные» и API-хосты приводим к [_filesHost]:
+  /// S3/MinIO отдаёт внутренние адреса `http://10.5.10.63:9000/...` —
+  /// с устройства они недоступны. Приводим к публичному
+  /// `{backendHost}/mobi-api/...` (не `/mobile`).
+  ///
+  /// Временно остальные «локальные» пути приводим к [_filesHost]:
   /// - `localhost` / `127.0.0.1`
-  /// - текущий [backendHost] (файлы на новом сервере ещё не настроены)
+  /// - текущий [backendHost] без префикса `/mobi-api`
   /// - относительные пути (`/storage/...`)
   ///
   /// Важно: `Uri.replace(port: null)` в Dart **не сбрасывает** порт.
@@ -115,8 +123,15 @@ class ApiConfig {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return null;
 
+    final fromInternal = _rewriteInternalFilesOrigin(trimmed);
+    if (fromInternal != null) return fromInternal;
+
     final uri = Uri.tryParse(trimmed);
     if (uri == null) return trimmed;
+
+    if (_pathStartsWithMobiApi(uri.path)) {
+      return _rebaseOntoMobiApi(uri);
+    }
 
     final publicUri = Uri.parse(publicHost);
 
@@ -147,6 +162,50 @@ class ApiConfig {
           fragment: uri.hasFragment ? uri.fragment : null,
         )
         .toString();
+  }
+
+  /// `http://10.5.10.63:9000/test/x.jpeg` → `{backendHost}/mobi-api/test/x.jpeg`
+  static String? _rewriteInternalFilesOrigin(String url) {
+    final origin = RegExp(
+      r'^https?://10\.5\.10\.63(?::9000)?',
+      caseSensitive: false,
+    );
+    final match = origin.firstMatch(url);
+    if (match == null) return null;
+
+    final rest = url.substring(match.end);
+    final path = rest.isEmpty
+        ? '/'
+        : (rest.startsWith('/') ? rest : '/$rest');
+    if (_pathStartsWithMobiApi(path.split('?').first.split('#').first)) {
+      return '${_normalizeHost(backendHost)}$path';
+    }
+    return '$_mobiApiBase$path';
+  }
+
+  static String get _mobiApiBase =>
+      '${_normalizeHost(backendHost)}$_mobiApiSegment';
+
+  static bool _pathStartsWithMobiApi(String path) {
+    return path == _mobiApiSegment || path.startsWith('$_mobiApiSegment/');
+  }
+
+  /// `{backendHost}/mobi-api` + исходный путь (без дублирования префикса).
+  static String _rebaseOntoMobiApi(Uri uri) {
+    final origin = Uri.parse(_normalizeHost(backendHost));
+    final sourcePath = uri.path.isEmpty ? '/' : uri.path;
+    final path = _pathStartsWithMobiApi(sourcePath)
+        ? sourcePath
+        : '$_mobiApiSegment${sourcePath.startsWith('/') ? sourcePath : '/$sourcePath'}';
+    return Uri(
+      scheme: origin.scheme,
+      userInfo: origin.userInfo,
+      host: origin.host,
+      port: origin.hasPort ? origin.port : null,
+      path: path,
+      query: uri.hasQuery ? uri.query : null,
+      fragment: uri.hasFragment ? uri.fragment : null,
+    ).toString();
   }
 
   /// Приводит Laravel `next_page_url` к текущему [baseUrl].

@@ -78,6 +78,44 @@ void main() {
         'https://data.xondev.ru/x.png',
       );
     });
+
+    test('MinIO origin is rewritten to backendHost/mobi-api', () {
+      expect(
+        ApiConfig.normalizeFileUrl(
+          'http://10.5.10.63:9000/test/3857/1788242939.jpeg',
+        ),
+        'https://connect.xondev.ru/mobi-api/test/3857/1788242939.jpeg',
+      );
+    });
+
+    test('MinIO origin keeps query and does not leak port 9000', () {
+      final result = ApiConfig.normalizeFileUrl(
+        'http://10.5.10.63:9000/test/x.png?X-Amz-Expires=3600',
+      )!;
+      expect(
+        result,
+        'https://connect.xondev.ru/mobi-api/test/x.png?X-Amz-Expires=3600',
+      );
+      expect(Uri.parse(result).hasPort, isFalse);
+    });
+
+    test('MinIO path that already has /mobi-api is not duplicated', () {
+      expect(
+        ApiConfig.normalizeFileUrl(
+          'http://10.5.10.63:9000/mobi-api/test/x.png',
+        ),
+        'https://connect.xondev.ru/mobi-api/test/x.png',
+      );
+    });
+
+    test('existing /mobi-api URLs are rebased onto the current backend host', () {
+      expect(
+        ApiConfig.normalizeFileUrl(
+          'http://localhost:8000/mobi-api/test/x.png',
+        ),
+        'https://connect.xondev.ru/mobi-api/test/x.png',
+      );
+    });
   });
 
   group('ApiConfig.normalizeNextPageUrl', () {
