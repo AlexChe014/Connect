@@ -26,4 +26,20 @@ class DeviceTokenRepository {
       body: {'token': token},
     );
   }
+
+  /// `POST /devices/voip` — регистрация PushKit VoIP-токена (iOS).
+  Future<void> registerVoipToken({required String token}) async {
+    await ApiClient.instance.post(
+      DeviceRoutes.registerVoipUrl,
+      body: {
+        'token': token,
+        'platform': 'ios',
+      },
+    );
+  }
+
+  /// `POST /chat/call/{callId}/decline` — собеседник отклонил звонок.
+  Future<void> declineCall({required String callId}) async {
+    await ApiClient.instance.post(DeviceRoutes.declineCallUrl(callId));
+  }
 }

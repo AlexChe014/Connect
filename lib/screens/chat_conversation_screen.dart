@@ -7,12 +7,15 @@ import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
+import 'package:connect/services/api_client.dart';
+import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
+import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
 import 'package:file_picker/file_picker.dart';
@@ -56,9 +59,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final _focus = FocusNode();
   final _picker = ImagePicker();
   final _service = ChatService.instance;
+  final _callService = ChatCallService.instance;
 
   MessageReference? _replyingTo;
   ChatMessage? _editingMessage;
+  bool _joiningCall = false;
 
   final _scrollTargetKey = GlobalKey();
   int? _scrollToReversedIndex;
@@ -92,6 +97,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   void initState() {
     super.initState();
     _service.addListener(_onMsg);
+    _callService.addListener(_onCallState);
+    _callService.watchChat(widget.chat.id);
     _service
         .loadMessages(widget.chat.id, force: true)
         .whenComplete(() => _service.markChatRead(widget.chat.id));
@@ -100,6 +107,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   @override
   void dispose() {
     _service.removeListener(_onMsg);
+    _callService.removeListener(_onCallState);
+    _callService.unwatchChat(widget.chat.id);
     _textCtrl.dispose();
     _searchCtrl.dispose();
     _focus.dispose();
@@ -114,6 +123,67 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       setState(() {});
       _scheduleInitialScroll();
     });
+  }
+
+  void _onCallState() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _startVideoCall() async {
+    if (_callService.isStartingCall || _joiningCall) return;
+
+    try {
+      await _callService.startCallFromChat(_c);
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось начать видеозвонок';
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Ошибка'),
+          content: Text(message),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<void> _joinActiveCall() async {
+    final call = _callService.activeCallFor(widget.chat.id);
+    if (call == null || _joiningCall) return;
+
+    setState(() => _joiningCall = true);
+    try {
+      await _callService.joinActiveCall(call);
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось подключиться к звонку';
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Ошибка'),
+          content: Text(message),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _joiningCall = false);
+    }
   }
 
   void _scheduleInitialScroll() {
@@ -267,6 +337,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final loading = _service.isMessagesLoading(widget.chat.id);
     final loadError = _service.messagesError(widget.chat.id);
     final c = _c;
+    final activeCall = _callService.activeCallFor(widget.chat.id);
+    final startingCall = _callService.isStartingCall;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
@@ -316,6 +388,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ],
           ),
         ),
+        trailing: startingCall
+            ? const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: CupertinoActivityIndicator(),
+              )
+            : CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: _startVideoCall,
+                child: const Icon(
+                  CupertinoIcons.video_camera,
+                  color: CupertinoColors.activeBlue,
+                ),
+              ),
       ),
       child: DefaultTextStyle(
         style: TextStyle(
@@ -328,6 +413,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           child: Column(
             children: [
               if (_searchActive) _buildSearchBar(context),
+              if (activeCall != null && !_searchActive)
+                ChatActiveCallBanner(
+                  call: activeCall,
+                  isGroup: c.isGroup,
+                  peerName: c.title,
+                  joining: _joiningCall,
+                  onJoin: _joinActiveCall,
+                ),
               if (!_searchActive) _buildPinnedBar(context),
               Expanded(
                 child: GestureDetector(

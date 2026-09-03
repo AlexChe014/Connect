@@ -4,6 +4,8 @@ import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/screens/chat_media_gallery_screen.dart';
+import 'package:connect/services/api_client.dart';
+import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
@@ -301,9 +303,18 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  void _call() {
-    // TODO: подключить звонки
-    _showSnack('Звонки скоро будут доступны');
+  Future<void> _call() async {
+    if (ChatCallService.instance.isStartingCall) return;
+
+    try {
+      await ChatCallService.instance.startCallFromChat(_chat);
+    } catch (e) {
+      if (!mounted) return;
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось начать видеозвонок';
+      _showSnack(message);
+    }
   }
 
   void _openSearch() {
