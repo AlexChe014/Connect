@@ -381,7 +381,7 @@ class _AuthField extends StatelessWidget {
       decoration: const BoxDecoration(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       prefix: Padding(
-        padding: const EdgeInsets.only(left: 4, right: 8),
+        padding: const EdgeInsets.only(left: 16, right: 8),
         child: Icon(
           icon,
           size: 20,
@@ -391,7 +391,7 @@ class _AuthField extends StatelessWidget {
       suffix: suffix == null
           ? null
           : Padding(
-              padding: const EdgeInsets.only(right: 4),
+              padding: const EdgeInsets.only(right: 16),
               child: suffix,
             ),
     );
