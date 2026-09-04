@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 import PushKit
 import CallKit
+import AVFoundation
 import flutter_callkit_incoming
 
 @main
@@ -122,4 +123,6 @@ import flutter_callkit_incoming
   func didActivateAudioSession(_ audioSession: AVAudioSession) {}
 
   func didDeactivateAudioSession(_ audioSession: AVAudioSession) {}
+
+  func providerDidReset() {}
 }

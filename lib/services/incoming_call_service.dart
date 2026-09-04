@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connect/models/incoming_call_payload.dart';
+import 'package:connect/repositories/chat_call_repository.dart';
 import 'package:connect/repositories/connector_repository.dart';
 import 'package:connect/repositories/device_token_repository.dart';
 import 'package:connect/services/auth_service.dart';
@@ -179,6 +180,10 @@ class IncomingCallService {
     final extra = params.extra ?? const {};
     final callId = params.id;
     final room = extra['room']?.toString();
+
+    if (callId.isNotEmpty) {
+      unawaited(ChatCallRepository.instance.acceptCall(callId));
+    }
 
     await FlutterCallkitIncoming.setCallConnected(callId);
 

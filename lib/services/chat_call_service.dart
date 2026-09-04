@@ -5,13 +5,15 @@ import 'package:connect/models/chat/chat_active_call.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/repositories/chat_call_repository.dart';
 import 'package:connect/repositories/connector_repository.dart';
+import 'package:connect/screens/outgoing_call_screen.dart';
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/connector_invite_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:connect/utils/connector_url_utils.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
 
 /// Звонки из чатов: создание встречи, приглашение в чат, отслеживание активной комнаты.
 class ChatCallService extends ChangeNotifier {
@@ -24,11 +26,33 @@ class ChatCallService extends ChangeNotifier {
   final Map<String, ChatActiveCall> _activeByChat = {};
   final Map<String, Timer> _pollTimers = {};
   final Set<String> _watchingChats = {};
+  final Map<String, String> _endedCalls = {};
+  final Set<String> _acceptedCalls = {};
   bool _startingCall = false;
 
   bool get isStartingCall => _startingCall;
 
   ChatActiveCall? activeCallFor(String chatId) => _activeByChat[chatId];
+
+  /// Статус звонка (`declined`/`ended`/`missed`), пришедший push'ом
+  /// `chat_call_ended`. Слушает [OutgoingCallScreen], пока показан.
+  String? endedStatusFor(String callId) => _endedCalls[callId];
+
+  /// Собеседник принял звонок (push `chat_call_accepted`) — не нужно
+  /// дожидаться таймаута, можно сразу заходить в комнату.
+  bool isAccepted(String callId) => _acceptedCalls.contains(callId);
+
+  /// Вызывается из [PushNotificationService] при получении `chat_call_ended`.
+  void notifyCallEnded(String callId, String status) {
+    _endedCalls[callId] = status;
+    notifyListeners();
+  }
+
+  /// Вызывается из [PushNotificationService] при получении `chat_call_accepted`.
+  void notifyCallAccepted(String callId) {
+    _acceptedCalls.add(callId);
+    notifyListeners();
+  }
 
   /// Подписка на обновление активного звонка, пока открыт экран чата.
   void watchChat(String chatId) {
@@ -79,14 +103,6 @@ class ChatCallService extends ChangeNotifier {
         topic: topic,
       );
 
-      if (!chat.isGroup) {
-        await ChatCallRepository.instance.ringDirectCall(
-          chatId: chat.id,
-          room: session.room,
-          topic: topic,
-        );
-      }
-
       _setActiveCall(
         ChatActiveCall(
           chatId: chat.id,
@@ -97,11 +113,52 @@ class ChatCallService extends ChangeNotifier {
         ),
       );
 
+      if (!chat.isGroup) {
+        final callId = await ChatCallRepository.instance.ringDirectCall(
+          chatId: chat.id,
+          room: session.room,
+          topic: topic,
+        );
+
+        final outcome = await _showOutgoingCallScreen(
+          chat: chat,
+          callId: callId,
+        );
+
+        if (outcome != OutgoingCallOutcome.proceed) {
+          if (callId != null) {
+            unawaited(ChatCallRepository.instance.endCall(callId));
+          }
+          _activeByChat.remove(chat.id);
+          notifyListeners();
+          return;
+        }
+      }
+
       await openConnectorSession(session);
     } finally {
       _startingCall = false;
       notifyListeners();
     }
+  }
+
+  /// Показывает экран «Звоним…» и ждёт, чем он закроется — отвечает
+  /// [OutgoingCallOutcome.proceed], если пора входить в комнату.
+  Future<OutgoingCallOutcome> _showOutgoingCallScreen({
+    required Chat chat,
+    required String? callId,
+  }) async {
+    final navigator = AppNavigationService.navigatorKey.currentState;
+    // Нет доступного навигатора (маловероятно) — не блокируем звонок.
+    if (navigator == null) return OutgoingCallOutcome.proceed;
+
+    final result = await navigator.push<OutgoingCallOutcome>(
+      CupertinoPageRoute<OutgoingCallOutcome>(
+        fullscreenDialog: true,
+        builder: (_) => OutgoingCallScreen(chat: chat, callId: callId),
+      ),
+    );
+    return result ?? OutgoingCallOutcome.cancelled;
   }
 
   Future<void> joinActiveCall(ChatActiveCall call) async {
