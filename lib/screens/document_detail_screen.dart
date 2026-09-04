@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
+import '../utils/document_file_share.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
@@ -31,6 +32,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
   final _commentController = TextEditingController();
+  int? _downloadingFileIndex;
 
   @override
   void initState() {
@@ -164,6 +166,31 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       _showError('Не удалось отклонить документ', e);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _openFile(int index, Map<String, dynamic> file) async {
+    if (_downloadingFileIndex != null) return;
+
+    setState(() => _downloadingFileIndex = index);
+    try {
+      final fileGuid =
+          (file['guid'] ?? file['fileguid'] ?? file['file_guid'] ?? file['id'])
+              ?.toString()
+              .trim();
+      final response = await DocumentsRepository.instance.getDocumentFile(
+        serviceId: widget.service.id,
+        guid: (fileGuid == null || fileGuid.isEmpty) ? widget.guid : fileGuid,
+      );
+      await DocumentFileShare.share(
+        response,
+        fallbackName: file['namefile']?.toString() ?? 'Файл',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Не удалось скачать файл', e);
+    } finally {
+      if (mounted) setState(() => _downloadingFileIndex = null);
     }
   }
 
@@ -445,13 +472,19 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           CupertinoListSection.insetGrouped(
             margin: EdgeInsets.zero,
             children: [
-              for (final file in files)
+              for (final entry in files.asMap().entries)
                 CupertinoListTile(
                   leading: _iconBadge(
                     CupertinoIcons.paperclip,
                     CupertinoColors.systemGrey,
                   ),
-                  title: Text(file['namefile']?.toString() ?? 'Файл'),
+                  title: Text(entry.value['namefile']?.toString() ?? 'Файл'),
+                  trailing: _downloadingFileIndex == entry.key
+                      ? const CupertinoActivityIndicator()
+                      : const CupertinoListTileChevron(),
+                  onTap: _downloadingFileIndex == null
+                      ? () => _openFile(entry.key, entry.value)
+                      : null,
                 ),
             ],
           ),
