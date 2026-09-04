@@ -61,6 +61,7 @@ dependencies:
   flutter_slidable: ^4.0.0
   flutter_callkit_incoming: ^3.1.5
   share_plus: ^12.0.2
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -87,6 +88,7 @@ flutter:
 
   assets:
     - assets/branding/
+    - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

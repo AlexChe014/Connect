@@ -13,12 +13,23 @@ class HomeShortcutButton extends StatelessWidget {
   /// На первом уровне ("назад" и так один тап до дома) кнопка не нужна.
   static const int _visibleFromDepth = 3;
 
+  /// Принудительно скрывает кнопку поверх экранов, где переход на главный
+  /// экран молча отменил бы текущее действие без возможности вернуться
+  /// (например, экран «Звоним…» — `popUntil` до корня сбрасывает звонок).
+  static final ValueNotifier<bool> suppressed = ValueNotifier<bool>(false);
+
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: RootStackObserver.instance.depth,
-      builder: (context, depth, child) {
-        if (depth < _visibleFromDepth) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        RootStackObserver.instance.depth,
+        suppressed,
+      ]),
+      builder: (context, child) {
+        final depth = RootStackObserver.instance.depth.value;
+        if (depth < _visibleFromDepth || suppressed.value) {
+          return const SizedBox.shrink();
+        }
         return child!;
       },
       child: SafeArea(
