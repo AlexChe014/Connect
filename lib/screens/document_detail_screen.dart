@@ -194,11 +194,24 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     }
   }
 
+  // Экран целиком построен на Cupertino-виджетах без Material Scaffold —
+  // ScaffoldMessenger.showSnackBar в этом случае привязывается к Scaffold
+  // предыдущего экрана в стеке навигации и рисуется под текущей страницей,
+  // поэтому остаётся невидимым. Показываем ошибку диалогом.
   void _showError(String fallback, Object error) {
     final message = error is ApiException ? error.message : fallback;
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ОК'),
+          ),
+        ],
+      ),
+    );
   }
 
   List<MapEntry<String, String>> _summaryEntries(
