@@ -22,6 +22,17 @@ class RouletteConfig {
   bool get canSpin =>
       enabled && (spinsRemainingThisMonth == null || spinsRemainingThisMonth! > 0);
 
+  RouletteConfig copyWith({int? monthlySpinLimit}) {
+    return RouletteConfig(
+      enabled: enabled,
+      name: name,
+      spinCost: spinCost,
+      monthlySpinLimit: monthlySpinLimit ?? this.monthlySpinLimit,
+      spinsUsedThisMonth: spinsUsedThisMonth,
+      spinsRemainingThisMonth: spinsRemainingThisMonth,
+    );
+  }
+
   factory RouletteConfig.fromJson(Map<String, dynamic> json) {
     return RouletteConfig(
       enabled: json['enabled'] == true,

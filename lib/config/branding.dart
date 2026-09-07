@@ -12,11 +12,11 @@ abstract final class BrandingAssets {
   /// Исходник для `flutter_launcher_icons` — иконка на рабочем столе / в лончере.
   static const String appIconPng = 'assets/branding/app_icon.png';
 
-  /// Запасной логотип, пока сеть не отдала `connect.light_logo`.
+  /// Запасной логотип, пока сеть не отдала `connect.light_logo` из настроек.
   static const String loginLogoPng = 'assets/branding/login_logo.jpg';
 }
 
-/// Логотип компании: `GET /settings/get?module=connect&key=light_logo`,
+/// Главный логотип компании: `GET /settings/get?module=connect` → `light_logo`,
 /// с локальным ассетом, если URL ещё нет или картинка не загрузилась.
 class BrandingLoginLogo extends StatelessWidget {
   const BrandingLoginLogo({

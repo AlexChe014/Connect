@@ -59,6 +59,8 @@ class Chat {
   final DateTime? lastMessageAt;
   /// Количество непрочитанных входящих сообщений в чате.
   final int unreadCount;
+  /// Порог, после которого бейдж показывает `10+`, как в Telegram.
+  static const int unreadBadgeCap = 10;
   /// Отключены push-уведомления по чату — хранится только локально на
   /// устройстве, сервер о статусе не знает.
   final bool isMuted;
@@ -85,6 +87,12 @@ class Chat {
   }
 
   List<String> get memberNames => members.map((m) => m.displayName).toList();
+
+  static String unreadBadgeLabel(int count) {
+    if (count <= 0) return '';
+    if (count > unreadBadgeCap) return '$unreadBadgeCap+';
+    return '$count';
+  }
 
   String get subtitle {
     if (isGroup && members.isNotEmpty) {

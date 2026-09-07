@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 
 import '../config/routes/bonus_program_routes.dart';
+import '../repositories/settings_repository.dart';
 import '../models/bonus_program/achievement_type.dart';
 import '../models/bonus_program/form_config.dart';
 import '../models/bonus_program/form_submission.dart';
@@ -67,12 +68,10 @@ class BonusProgramRepository {
   }
 
   Future<PointTransferConfig> getTransferConfig() async {
-    final decoded = await ApiClient.instance.get(BonusProgramRoutes.transferConfigUrl);
-    final data = ApiEnvelope.unwrapDataMap(
-      decoded,
-      defaultErrorMessage: 'Не удалось получить настройки перевода баллов',
+    final settings = await SettingsRepository.instance.getModuleSettings(
+      SettingsRepository.bonusProgramModule,
     );
-    return PointTransferConfig.fromJson(data);
+    return PointTransferConfig.fromSettings(settings);
   }
 
   Future<PointTransfer> transferPoints({
@@ -125,7 +124,19 @@ class BonusProgramRepository {
       decoded,
       defaultErrorMessage: 'Не удалось получить настройки рулетки',
     );
-    return RouletteConfig.fromJson(data);
+    var config = RouletteConfig.fromJson(data);
+    try {
+      final settings = await SettingsRepository.instance.getModuleSettings(
+        SettingsRepository.bonusProgramModule,
+      );
+      final limit = ApiPaginatedEnvelope.parseInt(
+        settings['roulette_monthly_spin_limit'],
+      );
+      if (limit != null) {
+        config = config.copyWith(monthlySpinLimit: limit);
+      }
+    } catch (_) {}
+    return config;
   }
 
   Future<List<RoulettePrize>> getRoulettePrizes() async {

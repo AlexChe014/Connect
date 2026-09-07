@@ -453,12 +453,72 @@ void main() {
       expect(chat.peerUserId, 20);
     });
 
-    test('unread_count is parsed whether it arrives as a number or a string', () {
+    test('unread_count is taken from last message statuses for this user', () {
       final chat = ChatMapper.mapChat(
-        {'id': 1, 'is_group': true, 'title': 'X', 'unread_count': '3'},
+        {
+          'id': 1,
+          'is_group': true,
+          'title': 'X',
+          'unread_count': 99,
+          'messages': [
+            {
+              'id': 1,
+              'sender_id': 20,
+              'type': 'TEXT',
+              'message': 'a',
+              'created_at': '2026-01-01T10:00:00Z',
+              'statuses': [
+                {'user_id': 10, 'read': false},
+              ],
+            },
+            {
+              'id': 2,
+              'sender_id': 20,
+              'type': 'TEXT',
+              'message': 'b',
+              'created_at': '2026-01-01T10:01:00Z',
+              'statuses': [
+                {'user_id': 10, 'read': false},
+              ],
+            },
+            {
+              'id': 3,
+              'sender_id': 10,
+              'type': 'TEXT',
+              'message': 'mine',
+              'created_at': '2026-01-01T10:02:00Z',
+              'statuses': [
+                {'user_id': 20, 'read': false},
+              ],
+            },
+          ],
+        },
         currentUserId: 10,
       );
-      expect(chat.unreadCount, 3);
+      expect(chat.unreadCount, 2);
+    });
+
+    test('explicit read=true is not counted as unread', () {
+      final chat = ChatMapper.mapChat(
+        {
+          'id': 1,
+          'is_group': true,
+          'title': 'X',
+          'messages': [
+            {
+              'id': 1,
+              'sender_id': 20,
+              'type': 'TEXT',
+              'message': 'hi',
+              'statuses': [
+                {'user_id': 10, 'read': true},
+              ],
+            },
+          ],
+        },
+        currentUserId: 10,
+      );
+      expect(chat.unreadCount, 0);
     });
 
     test('is_pinned is mapped onto the chat', () {
@@ -490,6 +550,15 @@ void main() {
       );
       final chats = [newer, olderPinned]..sort(Chat.compareForList);
       expect(chats.first.id, '1');
+    });
+  });
+
+  group('Chat.unreadBadgeLabel', () {
+    test('caps at 10+', () {
+      expect(Chat.unreadBadgeLabel(0), '');
+      expect(Chat.unreadBadgeLabel(1), '1');
+      expect(Chat.unreadBadgeLabel(10), '10');
+      expect(Chat.unreadBadgeLabel(11), '10+');
     });
   });
 }

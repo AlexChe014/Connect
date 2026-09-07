@@ -7,6 +7,17 @@ class UsersRepository {
   UsersRepository._();
   static final UsersRepository instance = UsersRepository._();
 
+  /// `POST /user/update/{user}` — статус «в сети» при открытии/сворачивании приложения.
+  Future<void> updateOnlineStatus({
+    required int userId,
+    required bool isOnline,
+  }) async {
+    await ApiClient.instance.postMultipart(
+      UserRoutes.updateUrl(userId),
+      fields: {'is_online': isOnline ? '1' : '0'},
+    );
+  }
+
   /// Первая страница с фильтрами `q` и `dep`, либо полный URL следующей страницы.
   Future<Paginated<StaffUser>> getPage({
     String? url,

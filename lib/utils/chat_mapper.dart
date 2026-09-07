@@ -46,7 +46,10 @@ class ChatMapper {
       peerAvatarUrl: peer?.avatarUrl,
       lastMessagePreview: previewMessage?.preview,
       lastMessageAt: previewMessage?.createdAt,
-      unreadCount: _parseInt(json['unread_count']) ?? 0,
+      unreadCount: unreadCountFromLatestMessages(
+        json['messages'],
+        currentUserId: currentUserId,
+      ),
       isPinned: json['is_pinned'] == true,
     );
   }
@@ -344,6 +347,28 @@ class ChatMapper {
     return _PreviewMessage(snippet(latest), latest.createdAt);
   }
 
+  /// Сколько входящих среди последних сообщений непрочитаны текущим пользователем
+  /// (`statuses[].read == false`).
+  static int unreadCountFromLatestMessages(
+    Object? rawMessages, {
+    required int currentUserId,
+  }) {
+    if (rawMessages is! List || rawMessages.isEmpty) return 0;
+
+    var unread = 0;
+    for (final item in rawMessages) {
+      final map = _asJsonMap(item);
+      if (map == null) continue;
+      final senderId = _parseInt(map['sender_id'] ?? map['user_id']);
+      final type = (map['type'] as String?)?.trim().toUpperCase();
+      if (type == 'SYSTEM') continue;
+      if (_isExplicitlyUnreadForUser(map, currentUserId, senderId)) {
+        unread++;
+      }
+    }
+    return unread;
+  }
+
   static ChatMemberSummary? _peerMember(
     List<ChatMemberSummary> members,
     int currentUserId,
@@ -427,6 +452,32 @@ class ChatMapper {
       }
     }
     return true;
+  }
+
+  /// Входящее сообщение явно непрочитано этим пользователем (`statuses.read`).
+  static bool _isExplicitlyUnreadForUser(
+    Map<String, dynamic> json,
+    int currentUserId,
+    int? senderId,
+  ) {
+    if (senderId == currentUserId) return false;
+
+    final statuses = json['statuses'];
+    if (statuses is List) {
+      for (final item in statuses) {
+        final map = _asJsonMap(item);
+        if (map == null) continue;
+        final userId = _parseInt(map['user_id']);
+        if (userId == currentUserId) {
+          return !_parseBool(map['read'], defaultValue: false);
+        }
+      }
+    }
+
+    if (json.containsKey('read')) {
+      return !_parseBool(json['read'], defaultValue: false);
+    }
+    return false;
   }
 
   /// Для исходящих сообщений: прочитано ли всеми получателями.

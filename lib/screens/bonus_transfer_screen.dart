@@ -31,6 +31,7 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
 
   int _minTransferPoints = _kMinTransferPoints;
   int _maxTransferPoints = 0;
+  bool _transferEnabled = true;
 
   @override
   void initState() {
@@ -77,6 +78,7 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
       setState(() {
         _minTransferPoints = config.minPoints;
         _maxTransferPoints = config.maxPoints;
+        _transferEnabled = config.enabled;
       });
     } catch (_) {
       // Оставляем значения по умолчанию, если настройки недоступны.
@@ -101,7 +103,19 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
     return null;
   }
 
+  String get _limitsHint {
+    if (!_transferEnabled) {
+      return 'Перевод баллов сейчас отключён в настройках компании.';
+    }
+    final min = 'Минимальная сумма перевода — $_minTransferPoints баллов.';
+    if (_maxTransferPoints > 0) {
+      return '$min Максимум — $_maxTransferPoints баллов.';
+    }
+    return min;
+  }
+
   bool get _canSubmit {
+    if (!_transferEnabled) return false;
     if (_isSubmitting || _recipient == null) return false;
     final points = _points;
     if (points == null || points < _minTransferPoints) return false;
@@ -253,8 +267,7 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
                 margin: EdgeInsets.zero,
                 header: Text('СУММА', style: _sectionHeaderStyle(context)),
                 footer: Text(
-                  _amountError ??
-                      'Минимальная сумма перевода — $_minTransferPoints баллов.',
+                  _amountError ?? _limitsHint,
                   style: _sectionHeaderStyle(context).copyWith(
                     color: _amountError != null
                         ? CupertinoColors.systemRed

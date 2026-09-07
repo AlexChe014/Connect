@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
@@ -26,17 +27,18 @@ import 'screens/bonus_program_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'config/branding.dart';
+import 'models/chat.dart';
 import 'repositories/profile_repository.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/branding_service.dart';
 import 'services/chat_service.dart';
 import 'services/incoming_call_service.dart';
-import 'services/location_gate_service.dart';
 import 'services/mail_unread_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/root_stack_observer.dart';
+import 'services/user_presence_service.dart';
 import 'utils/media_url_utils.dart';
 import 'utils/user_display_name.dart';
 import 'widgets/chat_avatar.dart';
@@ -62,18 +64,40 @@ class ConnectApp extends StatefulWidget {
   State<ConnectApp> createState() => _ConnectAppState();
 }
 
-class _ConnectAppState extends State<ConnectApp> {
+class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    AuthService.instance.onSessionExpired = AppNavigationService.goToLogin;
+    WidgetsBinding.instance.addObserver(this);
+    AuthService.instance.onSessionExpired = () {
+      UserPresenceService.instance.reset();
+      AppNavigationService.goToLogin();
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (AuthService.instance.isAuthenticated) {
         await PushNotificationService.instance.registerAfterLogin();
         await NotificationPreferencesService.instance.syncAll();
-        await LocationGateService.instance.verifyForCurrentUser();
+        unawaited(UserPresenceService.instance.setOnline(true));
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!AuthService.instance.isAuthenticated) return;
+    if (state == AppLifecycleState.resumed) {
+      unawaited(UserPresenceService.instance.setOnline(true));
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(UserPresenceService.instance.setOnline(false));
+    }
   }
 
   @override
@@ -198,6 +222,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   int get _unreadChatsCount =>
       ChatService.instance.chats.fold<int>(0, (sum, c) => sum + c.unreadCount);
 
+  String get _unreadChatsBadge => Chat.unreadBadgeLabel(_unreadChatsCount);
+
   Future<void> _loadDrawerProfile() async {
     final stored = await AuthService.instance.getStoredUser();
     if (mounted && stored != null) setState(() => _profile = stored);
@@ -309,7 +335,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     icon: CupertinoIcons.chat_bubble_2,
                     label: 'Чаты',
                     selected: !_isProfileOpen && _currentIndex == 2,
-                    badgeCount: _unreadChatsCount,
+                    badgeLabel: _unreadChatsBadge,
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => _currentIndex = 2);
@@ -499,14 +525,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             label: 'Календарь',
           ),
           NavigationDestination(
-            icon: Badge.count(
-              count: _unreadChatsCount,
+            icon: Badge(
               isLabelVisible: _unreadChatsCount > 0,
+              label: Text(_unreadChatsBadge),
               child: const Icon(CupertinoIcons.chat_bubble_2),
             ),
-            selectedIcon: Badge.count(
-              count: _unreadChatsCount,
+            selectedIcon: Badge(
               isLabelVisible: _unreadChatsCount > 0,
+              label: Text(_unreadChatsBadge),
               child: const Icon(CupertinoIcons.chat_bubble_2_fill),
             ),
             label: 'Чаты',
@@ -663,6 +689,7 @@ class _DrawerItem extends StatelessWidget {
     required this.onTap,
     this.isExternal = false,
     this.badgeCount = 0,
+    this.badgeLabel,
   });
 
   final IconData icon;
@@ -677,9 +704,15 @@ class _DrawerItem extends StatelessWidget {
   /// Число непрочитанного для этого раздела — 0 скрывает бейдж.
   final int badgeCount;
 
+  /// Готовая подпись бейджа (`10+`). Если не задана — из [badgeCount].
+  final String? badgeLabel;
+
   @override
   Widget build(BuildContext context) {
     final tint = selected ? AppColors.primary : AppColors.onSurface;
+    final text = badgeLabel ?? (badgeCount > 99 ? '99+' : '$badgeCount');
+    final showBadge = (badgeLabel != null && badgeLabel!.isNotEmpty) ||
+        badgeCount > 0;
     return Material(
       color: selected
           ? AppColors.primary.withValues(alpha: 0.1)
@@ -702,7 +735,7 @@ class _DrawerItem extends StatelessWidget {
                   ),
                 ),
               ),
-              if (badgeCount > 0) ...[
+              if (showBadge) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 7,
@@ -713,7 +746,7 @@ class _DrawerItem extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    badgeCount > 99 ? '99+' : '$badgeCount',
+                    text,
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

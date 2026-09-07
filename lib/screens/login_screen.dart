@@ -4,9 +4,9 @@ import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../services/auth_service.dart';
 import '../services/branding_service.dart';
-import '../services/location_gate_service.dart';
 import '../services/notification_preferences_service.dart';
 import '../services/push_notification_service.dart';
+import '../services/user_presence_service.dart';
 import '../utils/app_feedback.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -68,23 +68,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return normalized;
   }
 
-  Future<void> _showAlert(String message, {String title = 'Ошибка'}) {
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Ок'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _submit() async {
     final backend = _normalizeBackendField() ?? _backendController.text.trim();
     final email = _emailController.text.trim();
@@ -115,22 +98,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await ApiConfig.setBackendHost(backend.isEmpty ? null : backend);
       await AuthService.instance.login(email, password);
       await BrandingService.instance.refresh();
-
-      final location = await LocationGateService.instance.verifyForEmail(email);
-      if (!location.allowed) {
-        await AuthService.instance.logout();
-        if (!mounted) return;
-        setState(() {
-          _errorMessage =
-              location.message ?? 'Не удалось подтвердить геопозицию.';
-          _isLoading = false;
-        });
-        await _showAlert(
-          location.message ?? 'Не удалось подтвердить геопозицию.',
-          title: 'Геолокация',
-        );
-        return;
-      }
+      UserPresenceService.instance.reset();
+      await UserPresenceService.instance.setOnline(true);
 
       await PushNotificationService.instance.registerAfterLogin();
       await NotificationPreferencesService.instance.syncAll();

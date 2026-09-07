@@ -36,8 +36,6 @@
 	<string>Разрешение на сохранение нужно, чтобы сохранять полученные в чатах и документах изображения в галерею устройства.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон используется для видеосообщений в чате и для видеоконференций Connect.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Геолокация нужна, чтобы подтвердить, что вы находитесь на территории компании при использовании функций, связанных с присутствием на рабочем месте.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

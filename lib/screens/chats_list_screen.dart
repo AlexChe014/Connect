@@ -716,23 +716,25 @@ class _UnreadBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = Chat.unreadBadgeLabel(count);
     return Container(
-      constraints: const BoxConstraints(minWidth: 20),
+      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
       height: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: EdgeInsets.symmetric(horizontal: label.length > 1 ? 6 : 0),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: muted
-            ? CupertinoColors.systemGrey3.resolveFrom(context)
-            : CupertinoColors.activeBlue,
+            ? CupertinoColors.systemGrey.resolveFrom(context)
+            : const Color(0xFF3390EC),
         borderRadius: const BorderRadius.all(Radius.circular(10)),
       ),
       child: Text(
-        count > 99 ? '99+' : '$count',
+        label,
         style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: CupertinoColors.white,
+          height: 1,
         ),
       ),
     );

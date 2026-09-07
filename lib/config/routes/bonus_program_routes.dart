@@ -12,8 +12,6 @@ class BonusProgramRoutes {
 
   static String get transferUrl => '${ApiConfig.baseUrl}$_prefix/points/transfers';
 
-  static String get transferConfigUrl => '${ApiConfig.baseUrl}$_prefix/points/transfer-config';
-
   static String get shopUrl => '${ApiConfig.baseUrl}$_prefix/shop';
 
   static String get shopRequestUrl => '${ApiConfig.baseUrl}$_prefix/shop/request';

@@ -9,6 +9,7 @@ import '../repositories/notifications_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/push_notification_service.dart';
+import '../services/user_presence_service.dart';
 import '../utils/media_url_utils.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
@@ -296,6 +297,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (confirm == true && mounted) {
+      await UserPresenceService.instance.setOnline(false);
+      UserPresenceService.instance.reset();
       await PushNotificationService.instance.unregisterCurrentDevice();
       await AuthService.instance.logout();
       if (mounted) {

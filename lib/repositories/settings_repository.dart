@@ -8,53 +8,64 @@ class SettingsRepository {
   static final SettingsRepository instance = SettingsRepository._();
 
   static const String connectModule = 'connect';
+  static const String bonusProgramModule = 'bonus_program';
   static const String lightLogoKey = 'light_logo';
 
-  /// Логотип светлой темы: `GET /settings/get?module=connect&key=light_logo`.
-  Future<String?> getConnectLightLogo({String? host}) async {
+  /// `GET /settings/get?module=...` — карта ключей модуля.
+  ///
+  /// Бэкенд отдаёт настройки сразу в `data` (`light_logo`, `transfer_min_points`
+  /// и т.д.), без вложенного `settings`.
+  Future<Map<String, dynamic>> getModuleSettings(
+    String module, {
+    String? host,
+    String? key,
+  }) async {
     final url = host == null
         ? SettingsRoutes.getUrl
         : SettingsRoutes.getUrlForHost(host);
-    try {
-      final withKey = await _fetchLogo(url, includeKey: true);
-      if (withKey != null) return withKey;
-    } catch (_) {}
-    return _fetchLogo(url, includeKey: false);
-  }
-
-  Future<String?> _fetchLogo(String url, {required bool includeKey}) async {
     final decoded = await ApiClient.instance.get(
       url,
       queryParameters: {
-        'module': connectModule,
-        if (includeKey) 'key': lightLogoKey,
+        'module': module,
+        'key': ?key,
       },
     );
     final data = ApiEnvelope.unwrapData(
       decoded,
       defaultErrorMessage: 'Не удалось получить настройки',
     );
-    return _extractLightLogo(data);
+    return _asSettingsMap(data);
   }
 
-  static String? _extractLightLogo(Object? data) {
-    if (data == null) return null;
+  /// Главный логотип: `GET /settings/get?module=connect` → `light_logo`.
+  Future<String?> getConnectLightLogo({String? host}) async {
+    try {
+      final settings = await getModuleSettings(connectModule, host: host);
+      return _extractLightLogo(settings);
+    } catch (_) {
+      return null;
+    }
+  }
 
-    final fromMedia = MediaUrlUtils.normalizeFirstUrl(data);
-    if (fromMedia != null && fromMedia.isNotEmpty) return fromMedia;
-
-    if (data is! Map) return null;
+  static Map<String, dynamic> _asSettingsMap(Object? data) {
+    if (data is! Map) return const {};
     final map = Map<String, dynamic>.from(data);
+    final nested = map['settings'];
+    if (nested is Map) {
+      return Map<String, dynamic>.from(nested);
+    }
+    return map;
+  }
 
-    final settingsRaw = map['settings'];
-    final settings = settingsRaw is Map
-        ? Map<String, dynamic>.from(settingsRaw)
-        : map;
-
-    for (final key in [lightLogoKey, 'lightLogo', 'logo']) {
-      final url = MediaUrlUtils.normalizeFirstUrl(settings[key] ?? map[key]);
+  static String? _extractLightLogo(Map<String, dynamic> settings) {
+    for (final key in [lightLogoKey, 'lightLogo', 'logo', 'dark_logo']) {
+      final raw = settings[key];
+      final url =
+          MediaUrlUtils.normalizeFirstOriginalUrl(raw) ??
+          MediaUrlUtils.normalizeFirstUrl(raw);
       if (url != null && url.isNotEmpty) return url;
     }
-    return null;
+    return MediaUrlUtils.normalizeFirstOriginalUrl(settings) ??
+        MediaUrlUtils.normalizeFirstUrl(settings);
   }
 }

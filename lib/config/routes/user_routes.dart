@@ -8,5 +8,9 @@ class UserRoutes {
 
   static String get getProfileUrl => '${ApiConfig.baseUrl}$getProfile';
   static String get getByFilterUrl => '${ApiConfig.baseUrl}$getByFilter';
+
+  /// `POST /user/update/{user}` — обновление профиля (multipart).
+  static String updateUrl(int userId) =>
+      '${ApiConfig.baseUrl}/user/update/$userId';
 }
 

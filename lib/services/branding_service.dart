@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../repositories/settings_repository.dart';
 import '../utils/app_logger.dart';
 
-/// Кэш и загрузка логотипа компании (`connect.light_logo`).
+/// Кэш и загрузка главного логотипа (`GET /settings/get?module=connect` → `light_logo`).
 class BrandingService extends ChangeNotifier {
   BrandingService._();
   static final BrandingService instance = BrandingService._();

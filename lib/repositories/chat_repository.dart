@@ -18,8 +18,6 @@ class ChatRepository {
 
   Future<List<Chat>> getChats({required int currentUserId}) async {
     const perPage = 50;
-    // Для превью в списке достаточно последнего сообщения.
-    const messagesPerChat = 1;
     const maxPages = 100;
     final chats = <Chat>[];
     var page = 1;
@@ -31,7 +29,8 @@ class ChatRepository {
         queryParameters: {
           'page': '$page',
           'per_page': '$perPage',
-          'messages_per_chat': '$messagesPerChat',
+          // Последние сообщения со статусами `read` — для счётчика непрочитанных.
+          'messages_per_chat': '${Chat.unreadBadgeCap + 1}',
         },
       );
       final payload = ApiEnvelope.unwrapData(
