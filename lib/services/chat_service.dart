@@ -16,6 +16,7 @@ import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
+import 'package:connect/utils/chat_realtime_payload.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:flutter/foundation.dart';
 
@@ -108,6 +109,9 @@ class ChatService extends ChangeNotifier {
   /// [refreshChats], чтобы статус не застревал непрочитанным на сервере.
   final Set<String> _pendingReadSync = {};
 
+  /// Открытый экран переписки — входящие не увеличивают бейдж, сразу read.
+  String? _activeChatId;
+
   List<ChatMessage> messagesFor(String chatId) {
     final list = _messages[chatId];
     if (list == null) return const [];
@@ -148,7 +152,15 @@ class ChatService extends ChangeNotifier {
     );
   }
 
-  Future<void> refreshChats() async {
+  void setActiveChat(String chatId) {
+    _activeChatId = chatId;
+  }
+
+  void clearActiveChat(String chatId) {
+    if (_activeChatId == chatId) _activeChatId = null;
+  }
+
+  Future<void> refreshChats({bool showLoading = true}) async {
     final userId = _selfUserId;
     if (userId == null) {
       _error = 'Не удалось определить текущего пользователя';
@@ -157,9 +169,11 @@ class ChatService extends ChangeNotifier {
       return;
     }
 
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    if (showLoading) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
       await ChatPreferencesService.instance.ensureLoaded();
@@ -174,7 +188,9 @@ class ChatService extends ChangeNotifier {
     } catch (e) {
       _error = e is ApiException ? e.message : e.toString();
     } finally {
-      _isLoading = false;
+      if (showLoading) {
+        _isLoading = false;
+      }
       notifyListeners();
     }
   }
@@ -200,7 +216,10 @@ class ChatService extends ChangeNotifier {
         int.parse(chatId),
         currentUserId: userId,
       );
-      _messages[chatId] = List<ChatMessage>.from(page.messages.data);
+      _messages[chatId] = _mergeMessages(
+        page.messages.data,
+        _messages[chatId],
+      );
       if (page.members.isNotEmpty) {
         final idx = _chats.indexWhere((c) => c.id == chatId);
         if (idx >= 0) {
@@ -1032,10 +1051,220 @@ class ChatService extends ChangeNotifier {
   }
 
   void _appendMessage(String chatId, ChatMessage m) {
-    _messages.putIfAbsent(chatId, () => []);
-    _messages[chatId]!.add(m);
-    _upsertLastMessage(chatId);
+    _upsertMessage(chatId, m, increaseUnread: false);
+  }
+
+  /// Событие Reverb / Echo: новое, правка, удаление, прочтение, состав чата.
+  void applyRealtimeEvent({
+    required String eventName,
+    required Map<String, dynamic> data,
+    String? channelName,
+  }) {
+    final userId = _selfUserId;
+    if (userId == null) return;
+
+    var kind = ChatRealtimePayload.classifyEvent(eventName);
+    final messageJson = ChatRealtimePayload.extractMessage(data);
+    if (kind == ChatRealtimeKind.unknown && messageJson != null) {
+      kind = ChatRealtimeKind.created;
+    }
+
+    final chatId = ChatRealtimePayload.extractChatId(
+      data,
+      channelName: channelName,
+    );
+    if (chatId == null) {
+      if (kind == ChatRealtimeKind.members || kind == ChatRealtimeKind.unknown) {
+        unawaited(refreshChats(showLoading: false));
+      }
+      return;
+    }
+
+    switch (kind) {
+      case ChatRealtimeKind.deleted:
+        final messageId = ChatRealtimePayload.extractMessageId(data);
+        if (messageId != null) {
+          _applyRemoteDeleted(chatId, messageId);
+        } else {
+          unawaited(refreshChats(showLoading: false));
+        }
+        return;
+      case ChatRealtimeKind.read:
+        _applyRemoteRead(chatId, ChatRealtimePayload.extractUserId(data));
+        return;
+      case ChatRealtimeKind.members:
+        unawaited(refreshChatDetails(chatId));
+        return;
+      case ChatRealtimeKind.updated:
+      case ChatRealtimeKind.created:
+      case ChatRealtimeKind.unknown:
+        break;
+    }
+
+    if (messageJson == null) {
+      unawaited(refreshChats(showLoading: false));
+      if (_messages.containsKey(chatId)) {
+        unawaited(loadMessages(chatId, force: true));
+      }
+      return;
+    }
+
+    final mapped = ChatMapper.mapMessage(
+      messageJson,
+      chatId: chatId,
+      currentUserId: userId,
+    );
+    if (mapped.id.isEmpty) return;
+
+    if (kind == ChatRealtimeKind.updated) {
+      _upsertMessage(chatId, mapped.copyWith(isEdited: true), increaseUnread: false);
+      return;
+    }
+
+    _upsertMessage(
+      chatId,
+      mapped,
+      increaseUnread: !mapped.isOutgoing && _activeChatId != chatId,
+    );
+    if (!mapped.isOutgoing && _activeChatId == chatId) {
+      unawaited(markChatRead(chatId));
+    }
+  }
+
+  Future<void> reloadCachedMessages() async {
+    final ids = {
+      ..._messages.keys.where((id) => _messages[id]?.isNotEmpty == true),
+      if (_activeChatId != null) _activeChatId!,
+    };
+    for (final id in ids) {
+      unawaited(loadMessages(id, force: true));
+    }
+  }
+
+  void _applyRemoteDeleted(String chatId, String messageId) {
+    final list = _messages[chatId];
+    final idx = list?.indexWhere((m) => m.id == messageId) ?? -1;
+    if (idx >= 0) {
+      list![idx] = list[idx].copyWithDeleted();
+      _upsertLastMessage(chatId);
+      notifyListeners();
+    }
+  }
+
+  void _applyRemoteRead(String chatId, int? readerId) {
+    if (readerId == null || readerId == _selfUserId) {
+      final idx = _chats.indexWhere((c) => c.id == chatId);
+      if (idx >= 0 && _chats[idx].unreadCount > 0) {
+        _chats[idx] = _chats[idx].copyWithUnreadCount(0);
+      }
+      final list = _messages[chatId];
+      if (list != null) {
+        for (var i = 0; i < list.length; i++) {
+          final m = list[i];
+          if (!m.isOutgoing && !m.isRead) {
+            list[i] = m.copyWithReadState(isRead: true);
+          }
+        }
+      }
+      notifyListeners();
+      return;
+    }
+
+    final list = _messages[chatId];
+    if (list == null) return;
+    var changed = false;
+    for (var i = 0; i < list.length; i++) {
+      final m = list[i];
+      if (m.isOutgoing && !m.readByRecipients) {
+        list[i] = m.copyWithReadState(readByRecipients: true);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
+  void _upsertMessage(
+    String chatId,
+    ChatMessage incoming, {
+    required bool increaseUnread,
+  }) {
+    var chatIdx = _chats.indexWhere((c) => c.id == chatId);
+    if (chatIdx < 0) {
+      unawaited(refreshChats(showLoading: false));
+      return;
+    }
+
+    var replaced = false;
+    if (_messages.containsKey(chatId)) {
+      final list = _messages[chatId]!;
+      final idx = list.indexWhere((m) => m.id == incoming.id);
+      if (idx >= 0) {
+        replaced = true;
+        final prev = list[idx];
+        list[idx] = incoming.copyWith(
+          replyTo: incoming.replyTo ?? prev.replyTo,
+          forwardOf: incoming.forwardOf ?? prev.forwardOf,
+          reactions: prev.reactions,
+          isPinned: incoming.isPinned || prev.isPinned,
+          readByRecipients: incoming.readByRecipients || prev.readByRecipients,
+        );
+      } else {
+        var message = incoming;
+        final replyId = incoming.repliedMessageId;
+        if (replyId != null && incoming.replyTo == null) {
+          for (final existing in list) {
+            if (existing.id == replyId) {
+              message = incoming.copyWith(
+                replyTo: MessageReference(
+                  messageId: existing.id,
+                  authorName: existing.authorName,
+                  textPreview: ChatMapper.snippet(existing),
+                ),
+              );
+              break;
+            }
+          }
+        }
+        list.add(message);
+      }
+    }
+
+    chatIdx = _chats.indexWhere((c) => c.id == chatId);
+    if (chatIdx < 0) return;
+
+    if (increaseUnread && !replaced) {
+      _chats[chatIdx] = _chats[chatIdx].copyWithUnreadCount(
+        _chats[chatIdx].unreadCount + 1,
+      );
+    }
+
+    if (replaced) {
+      _upsertLastMessage(chatId);
+    } else {
+      _chats[chatIdx] = _chats[chatIdx].withPreview(
+        _messagePreview(incoming),
+        incoming.createdAt,
+      );
+      _sortChats();
+    }
     notifyListeners();
+  }
+
+  List<ChatMessage> _mergeMessages(
+    List<ChatMessage> fromServer,
+    List<ChatMessage>? previous,
+  ) {
+    if (previous == null || previous.isEmpty) {
+      return List<ChatMessage>.from(fromServer);
+    }
+    final merged = List<ChatMessage>.from(fromServer);
+    final ids = {for (final m in merged) m.id};
+    for (final m in previous) {
+      if (m.id.isEmpty || !ids.add(m.id)) continue;
+      merged.add(m);
+    }
+    merged.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return ChatMapper.attachReplyReferences(merged).toList();
   }
 
   int? _parseInt(Object? value) {

@@ -9,6 +9,8 @@ class SettingsRepository {
 
   static const String connectModule = 'connect';
   static const String bonusProgramModule = 'bonus_program';
+  static const String reverbModule = 'reverb';
+  static const String broadcastingModule = 'broadcasting';
   static const String lightLogoKey = 'light_logo';
 
   /// `GET /settings/get?module=...` — карта ключей модуля.

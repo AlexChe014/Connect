@@ -33,6 +33,7 @@ import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/branding_service.dart';
 import 'services/chat_service.dart';
+import 'services/chat_realtime_service.dart';
 import 'services/incoming_call_service.dart';
 import 'services/mail_unread_service.dart';
 import 'services/notification_preferences_service.dart';
@@ -71,6 +72,7 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     AuthService.instance.onSessionExpired = () {
       UserPresenceService.instance.reset();
+      unawaited(ChatRealtimeService.instance.stop());
       AppNavigationService.goToLogin();
     };
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -192,6 +194,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     _loadDrawerProfile();
     ChatService.instance.addListener(_onChatsChanged);
     ChatService.instance.init();
+    unawaited(ChatRealtimeService.instance.start());
     MailUnreadService.instance.addListener(_onMailUnreadChanged);
     MailUnreadService.instance.refresh();
   }
@@ -201,6 +204,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     WidgetsBinding.instance.removeObserver(this);
     ChatService.instance.removeListener(_onChatsChanged);
     MailUnreadService.instance.removeListener(_onMailUnreadChanged);
+    unawaited(ChatRealtimeService.instance.stop());
     super.dispose();
   }
 

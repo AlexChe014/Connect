@@ -8,6 +8,7 @@ import '../repositories/bookings_repository.dart';
 import '../repositories/notifications_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../services/chat_realtime_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/user_presence_service.dart';
 import '../utils/media_url_utils.dart';
@@ -299,6 +300,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirm == true && mounted) {
       await UserPresenceService.instance.setOnline(false);
       UserPresenceService.instance.reset();
+      await ChatRealtimeService.instance.stop();
       await PushNotificationService.instance.unregisterCurrentDevice();
       await AuthService.instance.logout();
       if (mounted) {

@@ -99,6 +99,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _service.addListener(_onMsg);
     _callService.addListener(_onCallState);
     _callService.watchChat(widget.chat.id);
+    _service.setActiveChat(widget.chat.id);
     _service
         .loadMessages(widget.chat.id, force: true)
         .whenComplete(() => _service.markChatRead(widget.chat.id));
@@ -109,6 +110,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _service.removeListener(_onMsg);
     _callService.removeListener(_onCallState);
     _callService.unwatchChat(widget.chat.id);
+    _service.clearActiveChat(widget.chat.id);
     _textCtrl.dispose();
     _searchCtrl.dispose();
     _focus.dispose();
