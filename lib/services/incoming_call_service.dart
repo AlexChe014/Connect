@@ -20,6 +20,10 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 @pragma('vm:entry-point')
 Future<void> incomingCallBackgroundHandler(CallEvent event) async {
   if (event case CallEventActionCallAccept(:final callKitParams)) {
+    // Отдельный фоновый изолят (приложение убито) — без этого
+    // AuthService.instance.token пуст, и acceptCall/join ниже уйдут
+    // без Bearer-токена.
+    await AuthService.instance.init();
     await IncomingCallService.instance.handleBackgroundAccept(callKitParams);
   }
 }
