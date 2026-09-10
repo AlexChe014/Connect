@@ -31,6 +31,16 @@ class CommentsRepository {
     );
   }
 
+  Future<void> delete({required String commentId}) async {
+    final decoded = await ApiClient.instance.get(
+      CommentsRoutes.deleteUrl(commentId),
+    );
+    ApiEnvelope.unwrapData(
+      decoded,
+      defaultErrorMessage: 'Не удалось удалить комментарий',
+    );
+  }
+
   Paginated<NewsComment> _unwrapCommentsPage(
     Map<String, dynamic> decoded, {
     required String defaultErrorMessage,
