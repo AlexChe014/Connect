@@ -128,7 +128,16 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
               color: CupertinoColors.label.resolveFrom(context),
               fontSize: 16,
             ),
-            child: Stack(children: [child!, const HomeShortcutButton()]),
+            // Тап в любом месте вне текстового поля (в т.ч. в открытых поверх
+            // экранов шторках вроде выбора сотрудника на «Диске») должен
+            // закрывать клавиатуру — иначе после ввода текста её нечем убрать.
+            // GestureDetector — обёртка над Navigator/Overlay, поэтому не
+            // мешает обычным тапам по кнопкам и не перехватывает скролл.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              child: Stack(children: [child!, const HomeShortcutButton()]),
+            ),
           );
         },
         localizationsDelegates: const [
