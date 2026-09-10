@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:connect/models/documents/document_service.dart';
 import 'package:connect/models/mail/mail_connection.dart';
 import 'package:connect/repositories/chat_repository.dart';
@@ -303,6 +305,9 @@ class AppNavigationService {
   /// Общая точка входа для навигации по `type`/`data` — используется и для
   /// тапа по push (см. `PushNotificationService`), и для тапа по элементу
   /// ленты уведомлений (`NotificationsScreen`), чтобы не дублировать логику.
+  ///
+  /// `type` здесь — значение как оно есть в БД бэкенда (`news_created`,
+  /// `new_documents`, ...), без переименования на стороне бэкенда.
   static Future<void> openFromData(Map<String, dynamic> data) async {
     switch (data['type']) {
       case 'chat_message':
@@ -310,14 +315,14 @@ class AppNavigationService {
         if (chatId != null && chatId.isNotEmpty) {
           await openChatById(chatId);
         }
-      case 'news':
-        final newsId = data['news_id']?.toString();
-        if (newsId != null && newsId.isNotEmpty) {
+      case 'news_created':
+        final newsId = resolveDataField(data, ['news_id', 'id']);
+        if (newsId != null) {
           await openNewsById(newsId);
         }
-      case 'document':
-        final serviceId = data['service_id']?.toString();
-        if (serviceId != null && serviceId.isNotEmpty) {
+      case 'new_documents':
+        final serviceId = resolveDataField(data, ['service_id']);
+        if (serviceId != null) {
           await openDocumentService(serviceId);
         }
       case 'mail':
@@ -330,11 +335,49 @@ class AppNavigationService {
         }
       case 'meeting_invite':
       case 'meeting_reminder':
-        final bookingId = data['booking_id']?.toString();
-        if (bookingId != null && bookingId.isNotEmpty) {
+        final bookingId = resolveDataField(data, ['booking_id']);
+        if (bookingId != null) {
           await openBookingById(bookingId);
         }
     }
+  }
+
+  /// Достаёт первое непустое значение из [keys] в data-payload: сначала на
+  /// верхнем уровне, а если там нет — из вложенного объекта под ключом
+  /// `data` (бэкенд для части типов уведомлений кладёт оригинальные поля
+  /// только туда, JSON-строкой в push и вложенной картой в ленте
+  /// уведомлений, не дублируя их наверх).
+  static String? resolveDataField(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value != null && value.toString().isNotEmpty) {
+        return value.toString();
+      }
+    }
+
+    final nested = data['data'];
+    Map<dynamic, dynamic>? nestedMap;
+    if (nested is String && nested.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(nested);
+        if (decoded is Map) nestedMap = decoded;
+      } catch (_) {
+        // повреждённый/неожиданный payload — просто не находим значение
+      }
+    } else if (nested is Map) {
+      nestedMap = nested;
+    }
+
+    if (nestedMap != null) {
+      for (final key in keys) {
+        final value = nestedMap[key];
+        if (value != null && value.toString().isNotEmpty) {
+          return value.toString();
+        }
+      }
+    }
+
+    return null;
   }
 
   static Future<void> processPendingNavigation() async {
