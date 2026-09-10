@@ -44,6 +44,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   bool _viewRecordedForOpen = false;
   String? _currentUserId;
   final Set<String> _deletingCommentIds = {};
+  bool _isDeletingPost = false;
 
   @override
   void initState() {
@@ -209,6 +210,72 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     return comment.author?.id == userId || _news.author?.id == userId;
   }
 
+  bool _canDeletePost() {
+    final userId = _currentUserId;
+    if (userId == null) return false;
+    return _news.author?.id == userId;
+  }
+
+  void _showPostActions() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(context);
+              _deletePost();
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deletePost() async {
+    if (_isDeletingPost) return;
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Удалить публикацию?'),
+        content: const Text(
+          'Публикация и все комментарии к ней будут удалены безвозвратно.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingPost = true);
+    try {
+      await NewsRepository.instance.delete(newsId: _news.id);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isDeletingPost = false);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось удалить публикацию')),
+      );
+    }
+  }
+
   Future<void> _deleteComment(NewsComment comment) async {
     if (_deletingCommentIds.contains(comment.id)) return;
     final confirmed = await showCupertinoDialog<bool>(
@@ -285,6 +352,16 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           onPressed: () => Navigator.pop(context),
           child: const Icon(CupertinoIcons.back, size: 26),
         ),
+        trailing: _canDeletePost()
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: _isDeletingPost ? null : _showPostActions,
+                child: _isDeletingPost
+                    ? const CupertinoActivityIndicator()
+                    : const Icon(CupertinoIcons.ellipsis_circle, size: 26),
+              )
+            : null,
       ),
       child: DefaultTextStyle(
         style: TextStyle(

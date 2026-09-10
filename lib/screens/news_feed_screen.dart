@@ -168,10 +168,16 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     final index = _news.indexWhere((n) => n.id == item.id);
     final current = index >= 0 ? _news[index] : item;
 
-    await Navigator.of(context).push<void>(
+    final deleted = await Navigator.of(context).push<bool>(
       CupertinoPageRoute(builder: (_) => NewsDetailScreen(news: current)),
     );
     if (!mounted) return;
+    if (deleted == true) {
+      setState(() {
+        _news = _news.where((n) => n.id != current.id).toList();
+      });
+      return;
+    }
     // Обновляем карточку после возврата (лайки / просмотры могли измениться).
     try {
       final fresh = await NewsRepository.instance.getById(current.id);
