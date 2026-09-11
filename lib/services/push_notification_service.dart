@@ -356,14 +356,19 @@ class PushNotificationService {
         if (chatId != null && chatId.isNotEmpty) {
           AppNavigationService.storePendingChat(chatId);
         }
-      case 'news':
-        final newsId = data['news_id'];
-        if (newsId != null && newsId.isNotEmpty) {
+      case 'news_created':
+        final newsId = AppNavigationService.resolveDataField(data, [
+          'news_id',
+          'id',
+        ]);
+        if (newsId != null) {
           AppNavigationService.storePendingNews(newsId);
         }
-      case 'document':
-        final serviceId = data['service_id'];
-        if (serviceId != null && serviceId.isNotEmpty) {
+      case 'new_documents':
+        final serviceId = AppNavigationService.resolveDataField(data, [
+          'service_id',
+        ]);
+        if (serviceId != null) {
           AppNavigationService.storePendingDocument(serviceId);
         }
       case 'mail':
@@ -376,8 +381,10 @@ class PushNotificationService {
         }
       case 'meeting_invite':
       case 'meeting_reminder':
-        final bookingId = data['booking_id'];
-        if (bookingId != null && bookingId.isNotEmpty) {
+        final bookingId = AppNavigationService.resolveDataField(data, [
+          'booking_id',
+        ]);
+        if (bookingId != null) {
           AppNavigationService.storePendingBooking(bookingId);
         }
       case 'chat_call':

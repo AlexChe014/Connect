@@ -11,8 +11,12 @@ import 'package:flutter/cupertino.dart';
 ///
 /// `data.type` — значение поля `type` в `data`-payload push-уведомления,
 /// по которому клиент решает, куда перейти при тапе (см.
-/// `PushNotificationService._navigateFromData`). Ожидаемые дополнительные
-/// поля `data` перечислены в [NotificationTopic.dataFields].
+/// `PushNotificationService._navigateFromData`). Совпадает с тем, как тип
+/// уведомления хранится в БД бэкенда (`news_created`, `new_documents`, ...) —
+/// бэкенд его не переименовывает. Ожидаемые дополнительные поля `data`
+/// перечислены в [NotificationTopic.dataFields]; часть из них бэкенд не
+/// дублирует на верхний уровень, поэтому клиент умеет доставать их и из
+/// вложенного объекта `data.data` (см. `AppNavigationService.resolveDataField`).
 class NotificationTopic {
   const NotificationTopic({
     required this.id,
@@ -46,20 +50,20 @@ abstract final class NotificationTopics {
 
   static const feedPost = NotificationTopic(
     id: 'feed_post',
-    type: 'news',
+    type: 'news_created',
     title: 'Новая запись в ленте',
     description: 'Публикации и объявления компании',
-    dataFields: ['news_id'],
+    dataFields: ['news_id (push, верхний уровень) / id (лента, во вложенном data)'],
     icon: CupertinoIcons.square_grid_2x2_fill,
     color: CupertinoColors.systemBlue,
   );
 
   static const documentApproval = NotificationTopic(
     id: 'document_approval',
-    type: 'document',
+    type: 'new_documents',
     title: 'Новый документ на согласование',
     description: 'Документы 1С, ожидающие вашего решения',
-    dataFields: ['service_id'],
+    dataFields: ['service_id (во вложенном data для push)'],
     icon: CupertinoIcons.doc_text_fill,
     color: CupertinoColors.systemIndigo,
   );

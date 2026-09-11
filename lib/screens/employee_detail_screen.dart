@@ -7,6 +7,8 @@ import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
 import '../screens/chat_conversation_screen.dart';
+import '../services/api_client.dart';
+import '../services/chat_call_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/status_bubble.dart';
@@ -23,6 +25,8 @@ class EmployeeDetailScreen extends StatefulWidget {
 class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
   StaffUser get user => widget.user;
 
+  final _callService = ChatCallService.instance;
+
   bool _isFavorite = false;
   bool _isTogglingFavorite = false;
 
@@ -30,6 +34,18 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
   void initState() {
     super.initState();
     _loadFavoriteState();
+    _callService.addListener(_onCallState);
+  }
+
+  @override
+  void dispose() {
+    _callService.removeListener(_onCallState);
+    super.dispose();
+  }
+
+  void _onCallState() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _loadFavoriteState() async {
@@ -91,10 +107,42 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
   }
 
   Future<void> _call(BuildContext context) async {
-    final phone = user.phone?.trim();
-    if (phone == null || phone.isEmpty) return;
-    final uri = Uri(scheme: 'tel', path: phone);
-    await launchUrl(uri);
+    final peerId = user.idAsInt;
+    if (peerId == null || _callService.isStartingCall) return;
+
+    try {
+      final chat = await ChatService.instance.createDirect(
+        fullName: user.fullName,
+        peerUserId: peerId,
+        peerAvatarUrl: user.avatarUrl,
+      );
+      if (!context.mounted) return;
+      if (chat == null) {
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('Не удалось начать звонок')));
+        return;
+      }
+      await _callService.startCallFromChat(chat);
+    } catch (e) {
+      if (!context.mounted) return;
+      final message = e is ApiException
+          ? e.message
+          : 'Не удалось начать звонок';
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: const Text('Ошибка'),
+          content: Text(message),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _email(BuildContext context) async {
@@ -174,6 +222,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     final workStatus = (user.workStatus ?? '').trim();
     final hasPhone = (user.phone ?? '').trim().isNotEmpty;
     final hasEmail = (user.email ?? '').trim().isNotEmpty;
+    final canCall = user.idAsInt != null;
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
@@ -296,33 +345,27 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (user.isBirthdayToday) ...[
-                    _ContactActionButton(
-                      emoji: '🎂',
-                      color: CupertinoColors.systemPink,
-                      label: 'Поздравить',
-                      onTap: () => _openChat(context),
-                    ),
-                    const SizedBox(width: 28),
-                  ],
                   _ContactActionButton(
                     icon: CupertinoIcons.bubble_left_fill,
                     color: CupertinoColors.systemBlue,
                     label: 'Написать',
                     onTap: () => _openChat(context),
                   ),
-                  if (hasPhone) ...[
-                    const SizedBox(width: 28),
+                  if (canCall) ...[
+                    const SizedBox(width: 24),
                     _ContactActionButton(
                       icon: CupertinoIcons.phone_fill,
                       color: CupertinoColors.systemGreen,
                       label: 'Позвонить',
-                      onTap: () => _call(context),
+                      onTap: _callService.isStartingCall
+                          ? null
+                          : () => _call(context),
                     ),
                   ],
                   if (hasEmail) ...[
-                    const SizedBox(width: 28),
+                    const SizedBox(width: 24),
                     _ContactActionButton(
                       icon: CupertinoIcons.mail_solid,
                       color: CupertinoColors.systemIndigo,
@@ -333,25 +376,33 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                 ],
               ),
               const SizedBox(height: 28),
+              if (hasEmail || hasPhone) ...[
+                CupertinoListSection.insetGrouped(
+                  header: const Text('Контакты'),
+                  children: [
+                    if (hasEmail)
+                      _infoRow(
+                        context,
+                        icon: CupertinoIcons.mail_solid,
+                        color: CupertinoColors.systemBlue,
+                        label: 'Email',
+                        value: user.email!.trim(),
+                      ),
+                    if (hasPhone)
+                      _infoRow(
+                        context,
+                        icon: CupertinoIcons.phone_fill,
+                        color: CupertinoColors.systemGreen,
+                        label: 'Телефон',
+                        value: user.phone!.trim(),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
               CupertinoListSection.insetGrouped(
-                header: const Text('Информация'),
+                header: const Text('О сотруднике'),
                 children: [
-                  if (hasEmail)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.mail_solid,
-                      color: CupertinoColors.systemBlue,
-                      label: 'Email',
-                      value: user.email!.trim(),
-                    ),
-                  if (hasPhone)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.phone_fill,
-                      color: CupertinoColors.systemGreen,
-                      label: 'Телефон',
-                      value: user.phone!.trim(),
-                    ),
                   _infoRow(
                     context,
                     icon: CupertinoIcons.gift_fill,
@@ -399,45 +450,45 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
 
 class _ContactActionButton extends StatelessWidget {
   const _ContactActionButton({
-    this.icon,
-    this.emoji,
+    required this.icon,
     required this.color,
     required this.label,
     required this.onTap,
-  }) : assert(icon != null || emoji != null);
+  });
 
-  final IconData? icon;
-  final String? emoji;
+  final IconData icon;
   final Color color;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final disabled = onTap == null;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            child: emoji != null
-                ? Text(emoji!, style: const TextStyle(fontSize: 24))
-                : Icon(icon, size: 24, color: CupertinoColors.white),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+      child: Opacity(
+        opacity: disabled ? 0.5 : 1,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: Icon(icon, size: 24, color: CupertinoColors.white),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

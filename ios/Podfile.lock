@@ -40,7 +40,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/jitsi_meet_flutter_sdk/ios"
 
 SPEC CHECKSUMS:
-  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
   Giphy: 83628960ed04e1c3428ff1b4fb2b027f65e82f50
   jitsi_meet_flutter_sdk: 21cef88abb0e17d62bc4ee275767b5fe10b1dfbd
   JitsiMeetSDK: 64df991a9611cadcc14226d2cc8c1a746799b1fd

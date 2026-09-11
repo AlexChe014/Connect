@@ -108,6 +108,14 @@ class NewsRepository {
     );
   }
 
+  Future<void> delete({required String newsId}) async {
+    final decoded = await ApiClient.instance.get(NewsRoutes.deleteUrl(newsId));
+    ApiEnvelope.unwrapData(
+      decoded,
+      defaultErrorMessage: 'Не удалось удалить публикацию',
+    );
+  }
+
   Future<List<NewsAuthor>> _getUsers(String url) async {
     final decoded = await ApiClient.instance.get(url);
     final data = ApiEnvelope.unwrapData(

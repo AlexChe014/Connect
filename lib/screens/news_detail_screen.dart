@@ -12,6 +12,7 @@ import '../models/news_comment.dart';
 import '../models/news_item.dart';
 import '../repositories/comments_repository.dart';
 import '../repositories/news_repository.dart';
+import '../services/auth_service.dart';
 import '../services/paginated.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
@@ -41,12 +42,16 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   bool _sendingComment = false;
   bool _likeInFlight = false;
   bool _viewRecordedForOpen = false;
+  String? _currentUserId;
+  final Set<String> _deletingCommentIds = {};
+  bool _isDeletingPost = false;
 
   @override
   void initState() {
     super.initState();
     _news = widget.news;
     _scrollController.addListener(_onScroll);
+    _loadCurrentUserId();
     _loadComments();
     _refreshNews();
   }
@@ -190,6 +195,126 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     }
   }
 
+  Future<void> _loadCurrentUserId() async {
+    try {
+      final user = await AuthService.instance.getStoredUser();
+      final id = user?['id'];
+      if (!mounted || id == null) return;
+      setState(() => _currentUserId = id.toString());
+    } catch (_) {}
+  }
+
+  bool _canDeleteComment(NewsComment comment) {
+    final userId = _currentUserId;
+    if (userId == null) return false;
+    return comment.author?.id == userId || _news.author?.id == userId;
+  }
+
+  bool _canDeletePost() {
+    final userId = _currentUserId;
+    if (userId == null) return false;
+    return _news.author?.id == userId;
+  }
+
+  void _showPostActions() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(context);
+              _deletePost();
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deletePost() async {
+    if (_isDeletingPost) return;
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Удалить публикацию?'),
+        content: const Text(
+          'Публикация и все комментарии к ней будут удалены безвозвратно.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingPost = true);
+    try {
+      await NewsRepository.instance.delete(newsId: _news.id);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isDeletingPost = false);
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось удалить публикацию')),
+      );
+    }
+  }
+
+  Future<void> _deleteComment(NewsComment comment) async {
+    if (_deletingCommentIds.contains(comment.id)) return;
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Удалить комментарий?'),
+        content: const Text('Комментарий будет удалён безвозвратно.'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingCommentIds.add(comment.id));
+    try {
+      await CommentsRepository.instance.delete(commentId: comment.id);
+      if (!mounted) return;
+      setState(() {
+        _comments.removeWhere((c) => c.id == comment.id);
+        _deletingCommentIds.remove(comment.id);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _deletingCommentIds.remove(comment.id));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось удалить комментарий')),
+      );
+    }
+  }
+
   Future<void> _sendComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty || _sendingComment) return;
@@ -227,6 +352,16 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           onPressed: () => Navigator.pop(context),
           child: const Icon(CupertinoIcons.back, size: 26),
         ),
+        trailing: _canDeletePost()
+            ? CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: _isDeletingPost ? null : _showPostActions,
+                child: _isDeletingPost
+                    ? const CupertinoActivityIndicator()
+                    : const Icon(CupertinoIcons.ellipsis_circle, size: 26),
+              )
+            : null,
       ),
       child: DefaultTextStyle(
         style: TextStyle(
@@ -390,6 +525,8 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                           (c) => _CommentTile(
                             comment: c,
                             dateLabel: _formatDate(c.date),
+                            canDelete: _canDeleteComment(c),
+                            onDelete: () => _deleteComment(c),
                           ),
                         ),
                       if (_commentsLoadingMore)
@@ -488,10 +625,40 @@ class _CommentInputBar extends StatelessWidget {
 }
 
 class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.comment, required this.dateLabel});
+  const _CommentTile({
+    required this.comment,
+    required this.dateLabel,
+    this.canDelete = false,
+    this.onDelete,
+  });
 
   final NewsComment comment;
   final String dateLabel;
+  final bool canDelete;
+  final VoidCallback? onDelete;
+
+  void _showActions(BuildContext context) {
+    if (!canDelete) return;
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(context);
+              onDelete?.call();
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -499,54 +666,73 @@ class _CommentTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          MemberAvatar(
-            displayName: author?.fullName ?? 'Пользователь',
-            avatarUrl: author?.avatarUrl,
-            radius: 16,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: CupertinoColors.secondarySystemGroupedBackground
-                    .resolveFrom(context),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          author?.fullName ?? 'Пользователь',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+      child: GestureDetector(
+        onLongPress: canDelete ? () => _showActions(context) : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            MemberAvatar(
+              displayName: author?.fullName ?? 'Пользователь',
+              avatarUrl: author?.avatarUrl,
+              radius: 16,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.secondarySystemGroupedBackground
+                      .resolveFrom(context),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            author?.fullName ?? 'Пользователь',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      Text(
-                        dateLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: CupertinoColors.secondaryLabel
-                              .resolveFrom(context),
+                        Text(
+                          dateLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: CupertinoColors.secondaryLabel
+                                .resolveFrom(context),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(comment.text, style: const TextStyle(fontSize: 14)),
-                ],
+                        if (canDelete) ...[
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _showActions(context),
+                            child: Icon(
+                              CupertinoIcons.ellipsis,
+                              size: 16,
+                              color: CupertinoColors.secondaryLabel
+                                  .resolveFrom(context),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(comment.text, style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
