@@ -12,6 +12,8 @@ class ConnectorRepository {
   Future<ConnectorSession> createInstant({
     String? topic,
     List<int> userIds = const [],
+    bool isPrivate = false,
+    String? chatId,
   }) async {
     final body = <String, dynamic>{};
     final topicValue = topic?.trim();
@@ -20,6 +22,13 @@ class ConnectorRepository {
     }
     if (userIds.isNotEmpty) {
       body['users'] = userIds;
+    }
+    if (isPrivate) {
+      body['is_private'] = true;
+    }
+    final chatIdValue = chatId?.trim();
+    if (chatIdValue != null && chatIdValue.isNotEmpty) {
+      body['chat_id'] = int.tryParse(chatIdValue) ?? chatIdValue;
     }
 
     final decoded = await ApiClient.instance.post(

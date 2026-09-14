@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/call_permissions.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+typedef JitsiLeaveCallback = void Function(String? callId);
 
 /// Запуск видеоконференции через Jitsi Meet Flutter SDK.
 ///
@@ -17,13 +19,22 @@ class JitsiMeetingService {
 
   final JitsiMeet _jitsi = JitsiMeet();
   bool _joining = false;
+  String? _activeCallId;
+  bool _endWhenLeave = false;
+  bool _leaveNotified = false;
+  JitsiLeaveCallback? _onLeave;
 
   bool get isSupported {
     if (kIsWeb) return false;
     return Platform.isAndroid || Platform.isIOS;
   }
 
-  Future<void> joinSession(ConnectorSession session) async {
+  Future<void> joinSession(
+    ConnectorSession session, {
+    String? callId,
+    bool endWhenLeave = false,
+    JitsiLeaveCallback? onLeave,
+  }) async {
     final room = session.room.trim();
     if (room.isEmpty) {
       throw ApiException(500, 'Сервер не вернул комнату конференции');
@@ -41,9 +52,13 @@ class JitsiMeetingService {
 
     if (_joining) return;
     _joining = true;
+    _activeCallId = callId;
+    _endWhenLeave = endWhenLeave;
+    _onLeave = onLeave;
+    _leaveNotified = false;
 
     try {
-      final granted = await _ensureMediaPermissions();
+      final granted = await CallPermissions.ensureMediaOnly();
       if (!granted) {
         throw ApiException(
           403,
@@ -59,13 +74,14 @@ class JitsiMeetingService {
             ? JitsiMeetUserInfo(displayName: session.displayName)
             : null,
         configOverrides: {
-          'startWithAudioMuted': true,
-          'startWithVideoMuted': true,
+          'startWithAudioMuted': false,
+          'startWithVideoMuted': false,
           'disableInviteFunctions': true,
           'hideConferenceSubject': true,
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
+          if (endWhenLeave) 'disableProfile': true,
         },
         featureFlags: {
           'unsaferoomwarning.enabled': false,
@@ -73,7 +89,8 @@ class JitsiMeetingService {
           'invite.enabled': false,
           'welcomepage.enabled': false,
           'live-streaming.enabled': false,
-          'recording.enabled': true,
+          'recording.enabled': !endWhenLeave,
+          'toolbox.enabled': true,
         },
       );
 
@@ -88,9 +105,21 @@ class JitsiMeetingService {
               'Jitsi terminated: $url error=$error',
               name: 'meeting',
             );
+            _notifyLeft();
           },
           readyToClose: () {
             AppLogger.d('Jitsi readyToClose', name: 'meeting');
+            _notifyLeft();
+          },
+          participantLeft: (participantId) {
+            if (!_endWhenLeave) return;
+            AppLogger.d(
+              'Jitsi participantLeft: $participantId — ending 1:1 call',
+              name: 'meeting',
+            );
+            _notifyLeft();
+            // ignore: discarded_futures
+            hangUp();
           },
         ),
       );
@@ -108,13 +137,29 @@ class JitsiMeetingService {
     }
   }
 
-  Future<bool> _ensureMediaPermissions() async {
-    final statuses = await [
-      Permission.camera,
-      Permission.microphone,
-    ].request();
-    return (statuses[Permission.camera]?.isGranted ?? false) &&
-        (statuses[Permission.microphone]?.isGranted ?? false);
+  Future<void> hangUp() async {
+    try {
+      await _jitsi.hangUp();
+    } catch (e, st) {
+      AppLogger.d(
+        'Jitsi hangUp failed',
+        name: 'meeting',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  void _notifyLeft() {
+    if (_leaveNotified) return;
+    _leaveNotified = true;
+    final callId = _activeCallId;
+    final cb = _onLeave;
+    _activeCallId = null;
+    _onLeave = null;
+    if (_endWhenLeave) {
+      cb?.call(callId);
+    }
   }
 
   Future<void> _openInBrowser(ConnectorSession session) async {

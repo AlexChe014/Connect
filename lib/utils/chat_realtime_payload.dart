@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Разбор Laravel Echo / Reverb payload для чатов — без зависимости от сокета.
 enum ChatRealtimeKind { created, updated, deleted, read, members, unknown }
 
@@ -34,6 +36,17 @@ class ChatRealtimePayload {
   static Map<String, dynamic>? asJsonMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return null;
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          return asJsonMap(jsonDecode(trimmed));
+        } catch (_) {
+          return null;
+        }
+      }
+    }
     return null;
   }
 
@@ -48,7 +61,7 @@ class ChatRealtimePayload {
     final map = asJsonMap(data);
     if (map == null) return null;
 
-    for (final key in const ['message', 'chat_message', 'data']) {
+    for (final key in const ['message', 'chat_message', 'payload', 'data']) {
       final nested = asJsonMap(map[key]);
       if (nested != null && looksLikeMessage(nested)) return nested;
     }

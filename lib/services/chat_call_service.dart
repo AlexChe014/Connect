@@ -8,14 +8,17 @@ import 'package:connect/repositories/connector_repository.dart';
 import 'package:connect/screens/outgoing_call_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/app_navigation_service.dart';
+import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/connector_invite_service.dart';
+import 'package:connect/services/jitsi_meeting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:connect/utils/connector_url_utils.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
-/// Звонки из чатов: создание встречи, приглашение в чат, отслеживание активной комнаты.
+/// Звонки из чатов: групповые (ссылка + плашка) и личные 1:1 (CallKit, без сообщения).
 class ChatCallService extends ChangeNotifier {
   ChatCallService._();
   static final ChatCallService instance = ChatCallService._();
@@ -30,31 +33,36 @@ class ChatCallService extends ChangeNotifier {
   final Set<String> _acceptedCalls = {};
   bool _startingCall = false;
 
+  /// callId активного 1:1 звонка в Jitsi (чтобы hangUp по push).
+  String? _liveDirectCallId;
+
   bool get isStartingCall => _startingCall;
 
   ChatActiveCall? activeCallFor(String chatId) => _activeByChat[chatId];
 
-  /// Статус звонка (`declined`/`ended`/`missed`), пришедший push'ом
-  /// `chat_call_ended`. Слушает [OutgoingCallScreen], пока показан.
+  /// Плашку показываем только для групповых звонков.
+  ChatActiveCall? bannerCallFor(String chatId) {
+    final call = _activeByChat[chatId];
+    if (call == null || call.isDirect) return null;
+    return call;
+  }
+
   String? endedStatusFor(String callId) => _endedCalls[callId];
 
-  /// Собеседник принял звонок (push `chat_call_accepted`) — не нужно
-  /// дожидаться таймаута, можно сразу заходить в комнату.
   bool isAccepted(String callId) => _acceptedCalls.contains(callId);
 
-  /// Вызывается из [PushNotificationService] при получении `chat_call_ended`.
   void notifyCallEnded(String callId, String status) {
     _endedCalls[callId] = status;
+    _clearActiveByCallId(callId);
+    unawaited(_hangUpRemote(callId));
     notifyListeners();
   }
 
-  /// Вызывается из [PushNotificationService] при получении `chat_call_accepted`.
   void notifyCallAccepted(String callId) {
     _acceptedCalls.add(callId);
     notifyListeners();
   }
 
-  /// Подписка на обновление активного звонка, пока открыт экран чата.
   void watchChat(String chatId) {
     if (_watchingChats.add(chatId)) {
       _pollTimers[chatId]?.cancel();
@@ -70,13 +78,26 @@ class ChatCallService extends ChangeNotifier {
     _pollTimers.remove(chatId)?.cancel();
   }
 
-  /// Создаёт встречу, отправляет ссылку в чат, регистрирует активный звонок.
+  /// Создаёт встречу и стартует звонок.
+  ///
+  /// Личный чат: без сообщения в ленту, ring → CallKit/исходящий экран.
+  /// Группа: ссылка в чат + плашка.
   Future<void> startCallFromChat(Chat chat) async {
     if (_startingCall) return;
     _startingCall = true;
     notifyListeners();
 
     try {
+      if (!chat.isGroup) {
+        final perms = await CallPermissions.ensureForOutgoingCall();
+        if (!perms.canStartCall) {
+          throw ApiException(
+            403,
+            perms.denialMessage ?? 'Нет разрешений для звонка',
+          );
+        }
+      }
+
       final chatService = ChatService.instance;
       await chatService.init();
 
@@ -91,33 +112,42 @@ class ChatCallService extends ChangeNotifier {
           : <int>[];
 
       final topic = chat.isGroup ? chat.title : 'Звонок с ${chat.title}';
+      final isDirect = !chat.isGroup;
 
       final session = await ConnectorRepository.instance.createInstant(
         topic: topic,
         userIds: memberIds,
+        isPrivate: isDirect,
+        chatId: isDirect ? chat.id : null,
       );
 
-      await ConnectorInviteService.instance.inviteChat(
-        chatId: chat.id,
-        session: session,
-        topic: topic,
-      );
+      // Группам — ссылка в чат. Личным — только системный звонок, без сообщения.
+      if (!isDirect) {
+        await ConnectorInviteService.instance.inviteChat(
+          chatId: chat.id,
+          session: session,
+          topic: topic,
+        );
+      }
 
-      _setActiveCall(
-        ChatActiveCall(
+      String? callId;
+      if (isDirect) {
+        callId = await ChatCallRepository.instance.ringDirectCall(
           chatId: chat.id,
           room: session.room,
           topic: topic,
-          startedAt: DateTime.now(),
-          isIncoming: false,
-        ),
-      );
+        );
 
-      if (!chat.isGroup) {
-        final callId = await ChatCallRepository.instance.ringDirectCall(
-          chatId: chat.id,
-          room: session.room,
-          topic: topic,
+        _setActiveCall(
+          ChatActiveCall(
+            chatId: chat.id,
+            room: session.room,
+            topic: topic,
+            startedAt: DateTime.now(),
+            isIncoming: false,
+            callId: callId,
+            isDirect: true,
+          ),
         );
 
         final outcome = await _showOutgoingCallScreen(
@@ -133,7 +163,26 @@ class ChatCallService extends ChangeNotifier {
           notifyListeners();
           return;
         }
+
+        _liveDirectCallId = callId;
+        await openConnectorSession(
+          session,
+          callId: callId,
+          endWhenLeave: true,
+        );
+        return;
       }
+
+      _setActiveCall(
+        ChatActiveCall(
+          chatId: chat.id,
+          room: session.room,
+          topic: topic,
+          startedAt: DateTime.now(),
+          isIncoming: false,
+          isDirect: false,
+        ),
+      );
 
       await openConnectorSession(session);
     } finally {
@@ -142,14 +191,11 @@ class ChatCallService extends ChangeNotifier {
     }
   }
 
-  /// Показывает экран «Звоним…» и ждёт, чем он закроется — отвечает
-  /// [OutgoingCallOutcome.proceed], если пора входить в комнату.
   Future<OutgoingCallOutcome> _showOutgoingCallScreen({
     required Chat chat,
     required String? callId,
   }) async {
     final navigator = AppNavigationService.navigatorKey.currentState;
-    // Нет доступного навигатора (маловероятно) — не блокируем звонок.
     if (navigator == null) return OutgoingCallOutcome.proceed;
 
     final result = await navigator.push<OutgoingCallOutcome>(
@@ -163,15 +209,72 @@ class ChatCallService extends ChangeNotifier {
 
   Future<void> joinActiveCall(ChatActiveCall call) async {
     final session = await ConnectorRepository.instance.join(call.room);
-    await openConnectorSession(session);
+    if (call.isDirect) {
+      _liveDirectCallId = call.callId;
+      await openConnectorSession(
+        session,
+        callId: call.callId,
+        endWhenLeave: true,
+      );
+    } else {
+      await openConnectorSession(session);
+    }
+  }
+
+  /// Локальный выход из Jitsi: завершить звонок на бэкенде для обеих сторон.
+  Future<void> onLocalCallLeft(String? callId) async {
+    final id = callId ?? _liveDirectCallId;
+    _liveDirectCallId = null;
+    if (id == null || id.isEmpty) return;
+
+    _clearActiveByCallId(id);
+    notifyListeners();
+    await ChatCallRepository.instance.endCall(id);
+  }
+
+  Future<void> _hangUpRemote(String callId) async {
+    try {
+      if (_liveDirectCallId == callId) {
+        _liveDirectCallId = null;
+        await JitsiMeetingService.instance.hangUp();
+      }
+      await FlutterCallkitIncoming.endCall(callId);
+    } catch (e, st) {
+      AppLogger.d(
+        'hangUp after call ended failed',
+        name: 'chat.call',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  void _clearActiveByCallId(String callId) {
+    final keys = _activeByChat.entries
+        .where((e) => e.value.callId == callId)
+        .map((e) => e.key)
+        .toList();
+    for (final k in keys) {
+      _activeByChat.remove(k);
+    }
   }
 
   Future<void> _refreshChat(String chatId) async {
-    final chatService = ChatService.instance;
-    final messages = chatService.messagesFor(chatId);
-    final selfId = chatService.selfUserId;
+    final chat = ChatService.instance.chatById(chatId);
+    // Личные чаты: не поднимаем плашку из старых/новых сообщений.
+    if (chat != null && !chat.isGroup) {
+      final cached = _activeByChat[chatId];
+      if (cached == null || !cached.isDirect) {
+        if (cached != null && !cached.isDirect) {
+          _activeByChat.remove(chatId);
+          notifyListeners();
+        }
+      }
+      return;
+    }
 
-    final fromMessages = _callFromMessages(chatId, messages, selfId);
+    final messages = ChatService.instance.messagesFor(chatId);
+    final fromMessages = _callFromMessages(chatId, messages);
     final cached = _activeByChat[chatId];
 
     final candidate = _pickNewerCall(fromMessages, cached);
@@ -209,7 +312,6 @@ class ChatCallService extends ChangeNotifier {
   ChatActiveCall? _callFromMessages(
     String chatId,
     List<ChatMessage> messages,
-    int? selfUserId,
   ) {
     ChatActiveCall? latest;
     for (final m in messages) {
@@ -224,13 +326,13 @@ class ChatCallService extends ChangeNotifier {
           text.contains('видеовстреч') || text.contains('/connector/');
       if (!looksLikeInvite) continue;
 
-      final incoming = !m.isOutgoing;
       final call = ChatActiveCall(
         chatId: chatId,
         room: room,
         topic: _topicFromInviteText(text),
         startedAt: m.createdAt,
-        isIncoming: incoming,
+        isIncoming: !m.isOutgoing,
+        isDirect: false,
       );
 
       if (latest == null || call.startedAt.isAfter(latest.startedAt)) {
@@ -245,7 +347,7 @@ class ChatCallService extends ChangeNotifier {
     ChatActiveCall? cached,
   ) {
     if (fromMessages == null) return cached;
-    if (cached == null) return fromMessages;
+    if (cached == null || cached.isDirect) return fromMessages;
     return fromMessages.startedAt.isAfter(cached.startedAt)
         ? fromMessages
         : cached;
@@ -282,5 +384,26 @@ class ChatCallService extends ChangeNotifier {
   void _setActiveCall(ChatActiveCall call) {
     _activeByChat[call.chatId] = call;
     notifyListeners();
+  }
+
+  /// Регистрирует входящий 1:1 звонок (после Accept), без плашки.
+  void registerIncomingDirectCall({
+    required String chatId,
+    required String room,
+    required String callId,
+    String? topic,
+  }) {
+    _setActiveCall(
+      ChatActiveCall(
+        chatId: chatId,
+        room: room,
+        topic: topic,
+        startedAt: DateTime.now(),
+        isIncoming: true,
+        callId: callId,
+        isDirect: true,
+      ),
+    );
+    _liveDirectCallId = callId;
   }
 }

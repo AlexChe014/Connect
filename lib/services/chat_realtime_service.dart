@@ -28,12 +28,14 @@ class ChatRealtimeService {
   final Map<String, Subscription> _chatSubs = {};
 
   bool get isStarted => _started;
+  bool get isConnected => _client != null;
 
   Future<void> start() async {
-    if (_started) return;
     if (!AuthService.instance.isAuthenticated) return;
-    _started = true;
-    ChatService.instance.addListener(_onChatsChanged);
+    if (!_started) {
+      _started = true;
+      ChatService.instance.addListener(_onChatsChanged);
+    }
     await _ensureConnected();
     _syncSubscriptions();
   }
@@ -55,7 +57,11 @@ class ChatRealtimeService {
   }
 
   void _onChatsChanged() {
-    if (!_started || _client == null) return;
+    if (!_started) return;
+    if (_client == null) {
+      unawaited(_ensureConnected().then((_) => _syncSubscriptions()));
+      return;
+    }
     _syncSubscriptions();
   }
 
@@ -132,7 +138,7 @@ class ChatRealtimeService {
         if (config.appKey.isNotEmpty) break;
       } catch (_) {}
     }
-    return config;
+    return config.forDevice();
   }
 
   Future<ReverbAuth> _authorize(String channelName, String socketId) async {

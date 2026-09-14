@@ -301,12 +301,11 @@ class PushNotificationService {
 
     var isMutedChat = false;
     if (message.data['type'] == 'chat_message') {
-      final chatId = message.data['chat_id'] as String?;
+      final chatId = message.data['chat_id']?.toString();
       if (chatId != null && chatId.isNotEmpty) {
-        // Обновляем список чатов (счётчик непрочитанных, превью последнего
-        // сообщения), чтобы бейдж на экране чатов появился сразу, а не
-        // только после ручного pull-to-refresh или перезапуска приложения.
-        unawaited(ChatService.instance.refreshChats());
+        // Список чатов (бейдж, превью) и открытую переписку — иначе при
+        // открытом чате новое сообщение не появится, пока сокет молчит.
+        unawaited(ChatService.instance.applyPushForChat(chatId));
 
         await ChatPreferencesService.instance.ensureLoaded();
         // Мьют — чисто локальная настройка (см. ChatPreferencesService):

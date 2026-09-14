@@ -1,10 +1,12 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/connector_config.dart';
 import '../models/bookings/bookable_object.dart';
 import '../models/bookings/booking_addition.dart';
 import '../models/bookings/create_booking_request.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
+import '../repositories/connector_repository.dart';
 import '../utils/booking_time_utils.dart';
 import '../widgets/bookable_object_preview.dart';
 import '../widgets/booking_pickers.dart';
@@ -174,6 +176,18 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
 
     setState(() => _isSubmitting = true);
     try {
+      String? link;
+      var generateLink = false;
+      if (_isOnlineConference) {
+        final manualLink = _linkController.text.trim();
+        if (manualLink.isNotEmpty) {
+          link = manualLink;
+        } else {
+          link = await _createJitsiConferenceLink(theme);
+          generateLink = link == null || link.isEmpty;
+        }
+      }
+
       await BookingsRepository.instance.createBooking(
         CreateBookingRequest(
           theme: theme,
@@ -182,11 +196,8 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
           datetimeStartSeconds: _startDateTime.millisecondsSinceEpoch ~/ 1000,
           datetimeEndSeconds: _endDateTime.millisecondsSinceEpoch ~/ 1000,
           description: _descriptionController.text.trim(),
-          link: _isOnlineConference && _linkController.text.trim().isNotEmpty
-              ? _linkController.text.trim()
-              : null,
-          generateLink:
-              _isOnlineConference && _linkController.text.trim().isEmpty,
+          link: link,
+          generateLink: generateLink,
           isPrivate: _isPrivate,
           additions: _selectedAdditions,
           userIds: _participants
@@ -203,6 +214,22 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  /// Комната Jitsi через Коннектор. Без ручной ссылки создаём новую встречу
+  /// и подставляем публичный URL (`/connector/{room}`).
+  Future<String?> _createJitsiConferenceLink(String theme) async {
+    try {
+      final session = await ConnectorRepository.instance.createInstant(
+        topic: theme,
+      );
+      final publicUrl = session.publicUrl.trim();
+      if (publicUrl.isNotEmpty) return publicUrl;
+      if (session.room.isNotEmpty) {
+        return ConnectorConfig.publicMeetingUrl(session.room);
+      }
+    } catch (_) {}
+    return null;
   }
 
   void _showMessage(String message) {
@@ -378,8 +405,8 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
                   child: Text(
                     'Укажите ссылку, если встреча планируется во внешнем '
-                    'сервисе. При отсутствии ссылки ВКС будет создана в '
-                    'портале, ссылка автоматически отобразится в календаре.',
+                    'сервисе. Если поле пустое, будет создана новая '
+                    'конференция Jitsi, ссылка появится в карточке брони.',
                     style: TextStyle(
                       fontSize: 13,
                       color: CupertinoColors.secondaryLabel.resolveFrom(

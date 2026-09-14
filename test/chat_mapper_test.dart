@@ -228,6 +228,23 @@ void main() {
         expect(message.isRead, isFalse);
       });
 
+      test('read_at null is unread for the current user', () {
+        final message = ChatMapper.mapMessage(
+          {
+            'id': 1,
+            'sender_id': 20,
+            'type': 'TEXT',
+            'message': 'hi',
+            'statuses': [
+              {'user_id': 10, 'read_at': null},
+            ],
+          },
+          chatId: '1',
+          currentUserId: 10,
+        );
+        expect(message.isRead, isFalse);
+      });
+
       test('readByRecipients is true only when every recipient has read it', () {
         final allRead = ChatMapper.mapMessage(
           {
@@ -453,7 +470,7 @@ void main() {
       expect(chat.peerUserId, 20);
     });
 
-    test('unread_count is taken from last message statuses for this user', () {
+    test('unread_count from statuses; server unread_count used if higher', () {
       final chat = ChatMapper.mapChat(
         {
           'id': 1,
@@ -495,7 +512,54 @@ void main() {
         },
         currentUserId: 10,
       );
+      expect(chat.unreadCount, 99);
+    });
+
+    test('statuses[].read=false are counted when unread_count is absent', () {
+      final chat = ChatMapper.mapChat(
+        {
+          'id': 1,
+          'is_group': true,
+          'title': 'X',
+          'messages': [
+            {
+              'id': 1,
+              'sender_id': 20,
+              'type': 'TEXT',
+              'message': 'a',
+              'created_at': '2026-01-01T10:00:00Z',
+              'statuses': [
+                {'user_id': 10, 'read': false},
+              ],
+            },
+            {
+              'id': 2,
+              'sender_id': 20,
+              'type': 'TEXT',
+              'message': 'b',
+              'created_at': '2026-01-01T10:01:00Z',
+              'statuses': [
+                {'user_id': 10, 'is_read': false},
+              ],
+            },
+          ],
+        },
+        currentUserId: 10,
+      );
       expect(chat.unreadCount, 2);
+    });
+
+    test('unread_count is used when latest messages are missing', () {
+      final chat = ChatMapper.mapChat(
+        {
+          'id': 1,
+          'is_group': true,
+          'title': 'X',
+          'unread_count': 4,
+        },
+        currentUserId: 10,
+      );
+      expect(chat.unreadCount, 4);
     });
 
     test('explicit read=true is not counted as unread', () {

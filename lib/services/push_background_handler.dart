@@ -1,6 +1,7 @@
 import 'package:connect/firebase_options.dart';
 import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/incoming_call_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -18,5 +19,14 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   if (IncomingCallPayload.isChatCall(message.data)) {
     await IncomingCallService.instance.handlePushData(message.data);
+    return;
+  }
+
+  if (message.data['type'] == 'chat_call_ended') {
+    final callId = message.data['call_id']?.toString();
+    final status = message.data['status']?.toString() ?? 'ended';
+    if (callId != null && callId.isNotEmpty) {
+      ChatCallService.instance.notifyCallEnded(callId, status);
+    }
   }
 }

@@ -71,6 +71,15 @@ void main() {
       });
       expect(extracted?['message'], 'просто текст');
     });
+
+    test('decodes a JSON-string payload (Echo double-encoded data)', () {
+      final extracted = ChatRealtimePayload.extractMessage({
+        'data':
+            '{"id":12,"chat_id":3,"sender_id":2,"message":"hi","type":"TEXT"}',
+      });
+      expect(extracted?['id'], 12);
+      expect(extracted?['chat_id'], 3);
+    });
   });
 
   group('ChatRealtimePayload ids', () {

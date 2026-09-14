@@ -195,12 +195,20 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  Future<void> loadMessages(String chatId, {bool force = false}) async {
+  Future<void> loadMessages(
+    String chatId, {
+    bool force = false,
+    bool showLoading = true,
+  }) async {
+    if (_messagesLoading[chatId] == true) return;
     if (!force && (_messages[chatId]?.isNotEmpty ?? false)) return;
 
+    final hasLocal = _messages[chatId]?.isNotEmpty ?? false;
     _messagesLoading[chatId] = true;
     _messagesError[chatId] = null;
-    notifyListeners();
+    if (showLoading && !hasLocal) {
+      notifyListeners();
+    }
 
     try {
       if (_selfUserId == null) {
@@ -1103,8 +1111,8 @@ class ChatService extends ChangeNotifier {
 
     if (messageJson == null) {
       unawaited(refreshChats(showLoading: false));
-      if (_messages.containsKey(chatId)) {
-        unawaited(loadMessages(chatId, force: true));
+      if (_messages.containsKey(chatId) || _activeChatId == chatId) {
+        unawaited(loadMessages(chatId, force: true, showLoading: false));
       }
       return;
     }
@@ -1131,13 +1139,24 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  Future<void> applyPushForChat(String chatId) async {
+    if (chatId.isEmpty) return;
+    unawaited(refreshChats(showLoading: false));
+    if (_activeChatId == chatId || _messages.containsKey(chatId)) {
+      await loadMessages(chatId, force: true, showLoading: false);
+      if (_activeChatId == chatId) {
+        unawaited(markChatRead(chatId));
+      }
+    }
+  }
+
   Future<void> reloadCachedMessages() async {
     final ids = {
       ..._messages.keys.where((id) => _messages[id]?.isNotEmpty == true),
       if (_activeChatId != null) _activeChatId!,
     };
     for (final id in ids) {
-      unawaited(loadMessages(id, force: true));
+      unawaited(loadMessages(id, force: true, showLoading: false));
     }
   }
 
@@ -1191,46 +1210,47 @@ class ChatService extends ChangeNotifier {
     var chatIdx = _chats.indexWhere((c) => c.id == chatId);
     if (chatIdx < 0) {
       unawaited(refreshChats(showLoading: false));
-      return;
     }
 
     var replaced = false;
-    if (_messages.containsKey(chatId)) {
-      final list = _messages[chatId]!;
-      final idx = list.indexWhere((m) => m.id == incoming.id);
-      if (idx >= 0) {
-        replaced = true;
-        final prev = list[idx];
-        list[idx] = incoming.copyWith(
-          replyTo: incoming.replyTo ?? prev.replyTo,
-          forwardOf: incoming.forwardOf ?? prev.forwardOf,
-          reactions: prev.reactions,
-          isPinned: incoming.isPinned || prev.isPinned,
-          readByRecipients: incoming.readByRecipients || prev.readByRecipients,
-        );
-      } else {
-        var message = incoming;
-        final replyId = incoming.repliedMessageId;
-        if (replyId != null && incoming.replyTo == null) {
-          for (final existing in list) {
-            if (existing.id == replyId) {
-              message = incoming.copyWith(
-                replyTo: MessageReference(
-                  messageId: existing.id,
-                  authorName: existing.authorName,
-                  textPreview: ChatMapper.snippet(existing),
-                ),
-              );
-              break;
-            }
+    final list = _messages.putIfAbsent(chatId, () => <ChatMessage>[]);
+    final idx = list.indexWhere((m) => m.id == incoming.id);
+    if (idx >= 0) {
+      replaced = true;
+      final prev = list[idx];
+      list[idx] = incoming.copyWith(
+        replyTo: incoming.replyTo ?? prev.replyTo,
+        forwardOf: incoming.forwardOf ?? prev.forwardOf,
+        reactions: prev.reactions,
+        isPinned: incoming.isPinned || prev.isPinned,
+        readByRecipients: incoming.readByRecipients || prev.readByRecipients,
+      );
+    } else {
+      var message = incoming;
+      final replyId = incoming.repliedMessageId;
+      if (replyId != null && incoming.replyTo == null) {
+        for (final existing in list) {
+          if (existing.id == replyId) {
+            message = incoming.copyWith(
+              replyTo: MessageReference(
+                messageId: existing.id,
+                authorName: existing.authorName,
+                textPreview: ChatMapper.snippet(existing),
+              ),
+            );
+            break;
           }
         }
-        list.add(message);
       }
+      list.add(message);
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
 
     chatIdx = _chats.indexWhere((c) => c.id == chatId);
-    if (chatIdx < 0) return;
+    if (chatIdx < 0) {
+      notifyListeners();
+      return;
+    }
 
     if (increaseUnread && !replaced) {
       _chats[chatIdx] = _chats[chatIdx].copyWithUnreadCount(
@@ -1255,7 +1275,9 @@ class ChatService extends ChangeNotifier {
     List<ChatMessage>? previous,
   ) {
     if (previous == null || previous.isEmpty) {
-      return List<ChatMessage>.from(fromServer);
+      final sorted = List<ChatMessage>.from(fromServer)
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return ChatMapper.attachReplyReferences(sorted).toList();
     }
     final merged = List<ChatMessage>.from(fromServer);
     final ids = {for (final m in merged) m.id};

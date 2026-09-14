@@ -6,6 +6,8 @@ import 'package:connect/repositories/chat_call_repository.dart';
 import 'package:connect/repositories/connector_repository.dart';
 import 'package:connect/repositories/device_token_repository.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/call_permissions.dart';
+import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
@@ -36,6 +38,7 @@ class IncomingCallService {
   StreamSubscription<CallEvent?>? _eventSub;
   bool _initialized = false;
   String? _lastVoipToken;
+  final Set<String> _acceptedLocally = {};
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -98,7 +101,7 @@ class IncomingCallService {
       extra: payload.toExtra(),
       missedCallNotification: const NotificationParams(
         showNotification: true,
-        isShowCallback: true,
+        isShowCallback: false,
         subtitle: 'Пропущенный звонок',
         callbackText: 'Перезвонить',
       ),
@@ -166,6 +169,8 @@ class IncomingCallService {
       case CallEventActionCallDecline(:final callKitParams):
         await _onDecline(callKitParams);
       case CallEventActionCallEnded(:final callKitParams):
+        // После Accept мы сами закрываем CallKit UI — это не отклонение.
+        if (_acceptedLocally.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallTimeout(:final id):
         await _declineByCallId(id);
@@ -184,8 +189,11 @@ class IncomingCallService {
     final extra = params.extra ?? const {};
     final callId = params.id;
     final room = extra['room']?.toString();
+    final chatId = extra['chat_id']?.toString();
+    final topic = extra['topic']?.toString();
 
     if (callId.isNotEmpty) {
+      _acceptedLocally.add(callId);
       unawaited(ChatCallRepository.instance.acceptCall(callId));
     }
 
@@ -197,13 +205,39 @@ class IncomingCallService {
       return;
     }
 
+    final mediaOk = await CallPermissions.ensureMediaOnly();
+    if (!mediaOk) {
+      AppLogger.e('Accept call: media permissions denied', name: 'callkit');
+      await FlutterCallkitIncoming.endCall(callId);
+      if (callId.isNotEmpty) {
+        unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
+      }
+      return;
+    }
+
     try {
+      if (chatId != null && chatId.isNotEmpty) {
+        ChatCallService.instance.registerIncomingDirectCall(
+          chatId: chatId,
+          room: room,
+          callId: callId,
+          topic: topic,
+        );
+      }
+
       final session = await ConnectorRepository.instance.join(room);
       await FlutterCallkitIncoming.endCall(callId);
-      await openConnectorSession(session);
+      await openConnectorSession(
+        session,
+        callId: callId,
+        endWhenLeave: true,
+      );
     } catch (e) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);
       await FlutterCallkitIncoming.endCall(callId);
+      if (callId.isNotEmpty) {
+        unawaited(ChatCallRepository.instance.endCall(callId));
+      }
     }
   }
 
@@ -213,6 +247,8 @@ class IncomingCallService {
 
   Future<void> _declineByCallId(String callId) async {
     if (callId.isEmpty) return;
+
+    ChatCallService.instance.notifyCallEnded(callId, 'declined');
 
     try {
       await DeviceTokenRepository.instance.declineCall(callId: callId);

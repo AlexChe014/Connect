@@ -24,6 +24,46 @@ class ReverbConfig {
 
   bool get isConfigured => appKey.isNotEmpty && host.isNotEmpty;
 
+  /// Настройки module=reverb часто содержат docker-хост (`reverb:8081`).
+  /// С телефона/ПК он недоступен — подменяем на публичный хост бэкенда.
+  ReverbConfig forDevice() {
+    if (!_isUnreachableFromDevice(host)) return this;
+    final backend = Uri.parse(ApiConfig.backendHost);
+    final publicHost = backend.host.trim();
+    if (publicHost.isEmpty) return this;
+    final publicTls = backend.scheme != 'http';
+    final publicPort = backend.hasPort
+        ? backend.port
+        : (publicTls ? 443 : 80);
+    return ReverbConfig(
+      appKey: appKey,
+      host: publicHost,
+      port: publicPort,
+      useTls: publicTls,
+      path: path,
+    );
+  }
+
+  static bool _isUnreachableFromDevice(String host) {
+    final h = host.trim().toLowerCase();
+    if (h.isEmpty) return true;
+    if (h == 'reverb' ||
+        h == 'localhost' ||
+        h == '127.0.0.1' ||
+        h == '0.0.0.0' ||
+        h == '::1') {
+      return true;
+    }
+    if (h.endsWith('.internal') ||
+        h.endsWith('.local') ||
+        h.endsWith('.localhost')) {
+      return true;
+    }
+    return RegExp(r'^10\.\d+\.\d+\.\d+$').hasMatch(h) ||
+        RegExp(r'^192\.168\.\d+\.\d+$').hasMatch(h) ||
+        RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$').hasMatch(h);
+  }
+
   static ReverbConfig fromEnvironment() {
     final backend = Uri.parse(ApiConfig.backendHost);
     final tlsDefine = const String.fromEnvironment('REVERB_SCHEME');
@@ -67,6 +107,8 @@ class ReverbConfig {
         fallback.appKey;
 
     var host = pick(const [
+          'public_host',
+          'hostname',
           'host',
           'reverb_host',
           'ws_host',

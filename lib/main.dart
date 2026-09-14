@@ -221,6 +221,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       MailUnreadService.instance.refresh();
+      unawaited(ChatService.instance.refreshChats(showLoading: false));
+      unawaited(ChatService.instance.reloadCachedMessages());
+      unawaited(ChatRealtimeService.instance.start());
     }
   }
 

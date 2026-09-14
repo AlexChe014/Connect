@@ -35,6 +35,12 @@ class ChatMapper {
       currentUserId: currentUserId,
     );
 
+    final fromMessages = unreadCountFromLatestMessages(
+      json['messages'],
+      currentUserId: currentUserId,
+    );
+    final fromServer = _parseInt(json['unread_count'] ?? json['unread']);
+
     return Chat(
       id: id,
       title: title,
@@ -46,10 +52,9 @@ class ChatMapper {
       peerAvatarUrl: peer?.avatarUrl,
       lastMessagePreview: previewMessage?.preview,
       lastMessageAt: previewMessage?.createdAt,
-      unreadCount: unreadCountFromLatestMessages(
-        json['messages'],
-        currentUserId: currentUserId,
-      ),
+      unreadCount: fromServer != null && fromServer > fromMessages
+          ? fromServer
+          : fromMessages,
       isPinned: json['is_pinned'] == true,
     );
   }
@@ -448,7 +453,7 @@ class ChatMapper {
       if (map == null) continue;
       final userId = _parseInt(map['user_id']);
       if (userId == currentUserId) {
-        return _parseBool(map['read'], defaultValue: false);
+        return _statusIsRead(map);
       }
     }
     return true;
@@ -469,7 +474,7 @@ class ChatMapper {
         if (map == null) continue;
         final userId = _parseInt(map['user_id']);
         if (userId == currentUserId) {
-          return !_parseBool(map['read'], defaultValue: false);
+          return !_statusIsRead(map);
         }
       }
     }
@@ -494,7 +499,7 @@ class ChatMapper {
     for (final item in statuses) {
       final map = _asJsonMap(item);
       if (map == null) continue;
-      if (!_parseBool(map['read'], defaultValue: false)) return false;
+      if (!_statusIsRead(map)) return false;
     }
     return true;
   }
@@ -506,6 +511,22 @@ class ChatMapper {
     if (s == 'true' || s == '1') return true;
     if (s == 'false' || s == '0') return false;
     return defaultValue;
+  }
+
+  static bool _statusIsRead(Map<String, dynamic> map) {
+    if (map.containsKey('read')) {
+      return _parseBool(map['read'], defaultValue: false);
+    }
+    if (map.containsKey('is_read')) {
+      return _parseBool(map['is_read'], defaultValue: false);
+    }
+    if (map.containsKey('read_at')) {
+      final value = map['read_at'];
+      if (value == null) return false;
+      if (value is bool) return value;
+      return value.toString().trim().isNotEmpty;
+    }
+    return false;
   }
 
   static Map<String, dynamic>? _asJsonMap(Object? value) {

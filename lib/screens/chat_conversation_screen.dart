@@ -54,7 +54,8 @@ class ChatConversationScreen extends StatefulWidget {
   State<ChatConversationScreen> createState() => _ChatConversationScreenState();
 }
 
-class _ChatConversationScreenState extends State<ChatConversationScreen> {
+class _ChatConversationScreenState extends State<ChatConversationScreen>
+    with WidgetsBindingObserver {
   final _textCtrl = TextEditingController();
   final _focus = FocusNode();
   final _picker = ImagePicker();
@@ -75,6 +76,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   int _searchCursor = -1;
   String? _highlightedMessageId;
   Timer? _highlightTimer;
+  Timer? _liveRefresh;
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
@@ -96,6 +98,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _service.addListener(_onMsg);
     _callService.addListener(_onCallState);
     _callService.watchChat(widget.chat.id);
@@ -103,10 +106,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _service
         .loadMessages(widget.chat.id, force: true)
         .whenComplete(() => _service.markChatRead(widget.chat.id));
+    _liveRefresh = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted) return;
+      unawaited(
+        _service.loadMessages(
+          widget.chat.id,
+          force: true,
+          showLoading: false,
+        ),
+      );
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _liveRefresh?.cancel();
     _service.removeListener(_onMsg);
     _callService.removeListener(_onCallState);
     _callService.unwatchChat(widget.chat.id);
@@ -116,6 +131,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     _focus.dispose();
     _highlightTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(
+        _service.loadMessages(
+          widget.chat.id,
+          force: true,
+          showLoading: false,
+        ),
+      );
+    }
   }
 
   void _onMsg() {
@@ -339,7 +367,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final loading = _service.isMessagesLoading(widget.chat.id);
     final loadError = _service.messagesError(widget.chat.id);
     final c = _c;
-    final activeCall = _callService.activeCallFor(widget.chat.id);
+    final activeCall = _callService.bannerCallFor(widget.chat.id);
     final startingCall = _callService.isStartingCall;
 
     return CupertinoPageScaffold(
