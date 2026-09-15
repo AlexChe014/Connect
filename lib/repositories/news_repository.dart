@@ -65,6 +65,32 @@ class NewsRepository {
     return (likers: likers, viewers: viewers, news: merged);
   }
 
+  /// `POST /dashboard/news/reaction/{news}` → `data` — обновлённый пост.
+  ///
+  /// Ставит/меняет реакцию пользователя на [emoji]. Повторный вызов с тем же
+  /// эмодзи, судя по семантике бэкенда, снимает реакцию — это поведение
+  /// нужно подтвердить вживую (api-docs.json описывает только плоское
+  /// `likes: integer`, без деталей per-user состояния).
+  Future<NewsItem> react(String newsId, String emoji) async {
+    final decoded = await ApiClient.instance.post(
+      NewsRoutes.reactionUrl(newsId),
+      body: {'emoji': emoji},
+    );
+    // TEMP DEBUG — remove after verifying live response shape.
+    // ignore: avoid_print
+    print('REACTION DEBUG raw response: $decoded');
+    final data = ApiEnvelope.unwrapDataMap(
+      decoded,
+      defaultErrorMessage: 'Не удалось поставить реакцию',
+    );
+    return NewsItem.fromJson(data);
+  }
+
+  /// Снимает текущую реакцию пользователя. Пока сервер не подтверждён как
+  /// умеющий снимать реакцию повторным `reaction`-запросом, используем
+  /// существующий `remove-like` как надёжный фолбэк.
+  Future<int?> removeReaction(String newsId) => removeLike(newsId);
+
   /// `POST /dashboard/news/add-like/{news}` → `data` — новое число лайков.
   Future<int?> addLike(String newsId) async {
     final decoded = await ApiClient.instance.post(

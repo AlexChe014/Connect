@@ -12,6 +12,7 @@ class NewsItem {
   final int likesCount;
   final int viewsCount;
   final bool isLiked;
+  final String? myReaction;
   final bool isViewed;
   final bool isPinned;
   final NewsAuthor? author;
@@ -29,6 +30,7 @@ class NewsItem {
     this.likesCount = 0,
     this.viewsCount = 0,
     this.isLiked = false,
+    this.myReaction,
     this.isViewed = false,
     this.isPinned = false,
     this.author,
@@ -47,6 +49,8 @@ class NewsItem {
     int? likesCount,
     int? viewsCount,
     bool? isLiked,
+    String? myReaction,
+    bool clearReaction = false,
     bool? isViewed,
     bool? isPinned,
     NewsAuthor? author,
@@ -64,6 +68,7 @@ class NewsItem {
       likesCount: likesCount ?? this.likesCount,
       viewsCount: viewsCount ?? this.viewsCount,
       isLiked: isLiked ?? this.isLiked,
+      myReaction: clearReaction ? null : (myReaction ?? this.myReaction),
       isViewed: isViewed ?? this.isViewed,
       isPinned: isPinned ?? this.isPinned,
       author: author ?? this.author,
@@ -146,6 +151,7 @@ class NewsItem {
       likesCount: likesCount,
       viewsCount: viewsCount,
       isLiked: _parseIsLiked(json),
+      myReaction: _parseMyReaction(json),
       isViewed: _parseBool(json['is_viewed'] ?? json['isViewed']),
       isPinned: _parseBool(json['is_pinned'] ?? json['isPinned']),
       author: author,
@@ -209,6 +215,23 @@ class NewsItem {
       if (s == '1') return true;
     }
     return false;
+  }
+
+  /// Реакция текущего пользователя на пост. Точное имя поля в ответе
+  /// `POST .../reaction/{news}` не задокументировано в api-docs.json (там
+  /// только плоское `likes: integer`) — перебираем вероятные варианты,
+  /// а если сервер вообще не присылает своё эмодзи, оно трекается
+  /// оптимистично на клиенте сразу после успешного запроса.
+  static String? _parseMyReaction(Map<String, dynamic> json) {
+    for (final key in ['my_reaction', 'reaction', 'user_reaction']) {
+      final v = json[key];
+      if (v is String && v.trim().isNotEmpty) return v.trim();
+      if (v is Map) {
+        final emoji = v['emoji'];
+        if (emoji is String && emoji.trim().isNotEmpty) return emoji.trim();
+      }
+    }
+    return null;
   }
 
   static bool _parseBool(Object? v) {

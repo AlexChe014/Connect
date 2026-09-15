@@ -3,7 +3,6 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -19,6 +18,7 @@ import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/menu_button.dart';
 import '../widgets/news_people_sheet.dart';
+import '../widgets/news_reaction_button.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
 
@@ -208,42 +208,43 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     });
   }
 
-  Future<bool> _toggleLike(NewsItem item) async {
+  Future<void> _setReaction(NewsItem item, String? emoji) async {
     final id = item.id;
-    if (id.isEmpty) return false;
-    if (_likeInFlight.contains(id)) return false;
+    if (id.isEmpty) return;
+    if (_likeInFlight.contains(id)) return;
 
     setState(() => _likeInFlight.add(id));
-    final wasLiked = item.isLiked;
     try {
-      if (wasLiked) {
-        final count = await NewsRepository.instance.removeLike(id);
-        if (!mounted) return false;
+      if (emoji == null) {
+        final count = await NewsRepository.instance.removeReaction(id);
+        if (!mounted) return;
         _updateItem(
           id,
           (n) => n.copyWith(
+            clearReaction: true,
             isLiked: false,
             likesCount: count ?? (n.likesCount - 1).clamp(0, 1 << 30),
           ),
         );
       } else {
-        final count = await NewsRepository.instance.addLike(id);
-        if (!mounted) return false;
+        final updated = await NewsRepository.instance.react(id, emoji);
+        if (!mounted) return;
         _updateItem(
           id,
           (n) => n.copyWith(
+            myReaction: emoji,
             isLiked: true,
-            likesCount: count ?? n.likesCount + 1,
+            likesCount: updated.likesCount,
           ),
         );
       }
-      return true;
     } catch (_) {
-      if (!mounted) return false;
+      if (!mounted) return;
       _showCupertinoSnack(
-        wasLiked ? 'Не удалось убрать лайк' : 'Не удалось поставить лайк',
+        emoji == null
+            ? 'Не удалось убрать реакцию'
+            : 'Не удалось поставить реакцию',
       );
-      return false;
     } finally {
       if (mounted) {
         setState(() => _likeInFlight.remove(id));
@@ -334,7 +335,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
               news: news,
               dateLabel: _formatDate(news.date),
               isLikeInFlight: _likeInFlight.contains(news.id),
-              onLike: () => _toggleLike(news),
+              onReact: (emoji) => _setReaction(news, emoji),
               onOpen: () => _openDetail(news),
               onShowLikers: () => NewsPeopleSheet.show(
                 context,
@@ -390,7 +391,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 class _NewsCard extends StatelessWidget {
   final NewsItem news;
   final String dateLabel;
-  final Future<bool> Function() onLike;
+  final Future<void> Function(String? emoji) onReact;
   final VoidCallback onOpen;
   final VoidCallback onShowLikers;
   final VoidCallback onShowViewers;
@@ -399,7 +400,7 @@ class _NewsCard extends StatelessWidget {
   const _NewsCard({
     required this.news,
     required this.dateLabel,
-    required this.onLike,
+    required this.onReact,
     required this.onOpen,
     required this.onShowLikers,
     required this.onShowViewers,
@@ -541,11 +542,11 @@ class _NewsCard extends StatelessWidget {
                     onTap: onOpen,
                   ),
                   const SizedBox(width: 16),
-                  _LikeButton(
+                  NewsReactionButton(
+                    emoji: news.myReaction,
                     count: news.likesCount,
-                    isLiked: news.isLiked,
                     isLoading: isLikeInFlight,
-                    onPressed: onLike,
+                    onSelect: onReact,
                     onCountTap: onShowLikers,
                   ),
                 ],
@@ -690,101 +691,6 @@ class _StatChip extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: child,
-    );
-  }
-}
-
-/// Кнопка лайка в стиле iOS: сердце с bounce-анимацией и haptic-откликом.
-class _LikeButton extends StatefulWidget {
-  const _LikeButton({
-    required this.count,
-    required this.isLiked,
-    required this.isLoading,
-    required this.onPressed,
-    this.onCountTap,
-  });
-
-  final int count;
-  final bool isLiked;
-  final bool isLoading;
-  final Future<bool> Function() onPressed;
-  final VoidCallback? onCountTap;
-
-  @override
-  State<_LikeButton> createState() => _LikeButtonState();
-}
-
-class _LikeButtonState extends State<_LikeButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-  );
-  late final Animation<double> _scale = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.35), weight: 1),
-    TweenSequenceItem(tween: Tween(begin: 1.35, end: 1.0), weight: 1),
-  ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleTap() async {
-    if (widget.isLoading) return;
-    HapticFeedback.lightImpact();
-    unawaited(_controller.forward(from: 0));
-    await widget.onPressed();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = widget.isLiked
-        ? CupertinoColors.systemRed
-        : CupertinoColors.secondaryLabel.resolveFrom(context);
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _handleTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 2, 4),
-            child: widget.isLoading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CupertinoActivityIndicator(radius: 8),
-                  )
-                : ScaleTransition(
-                    scale: _scale,
-                    child: Icon(
-                      widget.isLiked
-                          ? CupertinoIcons.heart_fill
-                          : CupertinoIcons.heart,
-                      size: 20,
-                      color: color,
-                    ),
-                  ),
-          ),
-        ),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onCountTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(2, 4, 4, 4),
-            child: Text(
-              '${widget.count}',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
