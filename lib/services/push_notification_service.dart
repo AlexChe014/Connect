@@ -387,10 +387,11 @@ class PushNotificationService {
           AppNavigationService.storePendingBooking(bookingId);
         }
       case 'chat_call':
-        final chatId = data['chat_id'];
-        if (chatId != null && chatId.toString().isNotEmpty) {
-          AppNavigationService.storePendingChat(chatId.toString());
-        }
+        // Приложение было полностью убито, и Flutter поднялся из-за тапа
+        // по пушу (getInitialMessage) — раньше здесь просто запоминался
+        // чат для перехода, из-за чего разблокировка вела в переписку
+        // вместо экрана звонка. Ведём туда же, куда и живой _navigateFromData.
+        unawaited(IncomingCallService.instance.handlePushData(data));
     }
   }
 
