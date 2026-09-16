@@ -37,12 +37,12 @@ dependencies:
   table_calendar: ^3.0.9
   http: ^1.2.0
   shared_preferences: ^2.2.2
-  file_picker: ^8.0.0
+  file_picker: 8.3.7
   image_picker: ^1.0.0
   intl: ^0.20.2
   flutter_localizations:
     sdk: flutter
-  html: ^0.15.6
+  html: 0.15.6
   webview_flutter: ^4.14.0
   firebase_core: ^4.11.0
   firebase_messaging: ^16.4.1
@@ -59,7 +59,7 @@ dependencies:
   jitsi_meet_flutter_sdk: ^13.1.1
   flutter_slidable: ^4.0.0
   flutter_callkit_incoming: ^3.1.5
-  share_plus: ^12.0.2
+  share_plus: 12.0.2
   audioplayers: ^6.8.1
   laravel_reverb: ^0.7.1
 

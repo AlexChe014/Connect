@@ -1,3 +1,5 @@
+import com.android.build.gradle.BaseExtension
+
 allprojects {
     repositories {
         google()
@@ -15,6 +17,17 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
+// Register before evaluationDependsOn so callbacks exist when projects evaluate.
+subprojects {
+    afterEvaluate {
+        extensions.findByType(BaseExtension::class.java)?.apply {
+            // Plugins like jitsi/file_picker still declare compileSdk 34.
+            compileSdkVersion(36)
+        }
+    }
+}
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
