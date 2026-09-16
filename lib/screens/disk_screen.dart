@@ -12,7 +12,6 @@ import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
-import '../widgets/disk_share_sheet.dart';
 import '../widgets/swipe_actions_row.dart';
 
 /// Раздел «Диск» — просмотр, загрузка и шаринг файлов из Nextcloud
@@ -264,14 +263,6 @@ class _DiskScreenState extends State<DiskScreen> {
     }
   }
 
-  void _shareFolder(DiskFolder folder) {
-    DiskShareSheet.show(context, path: folder.path, name: folder.name);
-  }
-
-  void _shareFile(DiskFile file) {
-    DiskShareSheet.show(context, path: file.path, name: file.name);
-  }
-
   void _openFile(DiskFile file) {
     if (file.isImage) {
       Navigator.of(context).push(
@@ -293,13 +284,6 @@ class _DiskScreenState extends State<DiskScreen> {
               _saveToDevice(file);
             },
             child: const Text('Скачать'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              _shareFile(file);
-            },
-            child: const Text('Поделиться'),
           ),
           CupertinoActionSheetAction(
             isDestructiveAction: true,
@@ -451,12 +435,6 @@ class _DiskScreenState extends State<DiskScreen> {
               groupController: _swipeGroup,
               actions: [
                 SwipeAction(
-                  icon: CupertinoIcons.share,
-                  label: 'Поделиться',
-                  color: CupertinoColors.activeBlue,
-                  onTap: () => _shareFolder(folder),
-                ),
-                SwipeAction(
                   icon: CupertinoIcons.delete,
                   label: 'Удалить',
                   color: CupertinoColors.destructiveRed,
@@ -475,12 +453,6 @@ class _DiskScreenState extends State<DiskScreen> {
             id: 'file:${file.path}',
             groupController: _swipeGroup,
             actions: [
-              SwipeAction(
-                icon: CupertinoIcons.share,
-                label: 'Поделиться',
-                color: CupertinoColors.activeBlue,
-                onTap: () => _shareFile(file),
-              ),
               SwipeAction(
                 icon: CupertinoIcons.delete,
                 label: 'Удалить',
@@ -839,20 +811,6 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
                       CupertinoIcons.arrow_down_to_line,
                       color: CupertinoColors.white,
                     ),
-            ),
-            const SizedBox(width: 16),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              onPressed: () => DiskShareSheet.show(
-                context,
-                path: widget.file.path,
-                name: widget.file.name,
-              ),
-              child: const Icon(
-                CupertinoIcons.share,
-                color: CupertinoColors.white,
-              ),
             ),
           ],
         ),

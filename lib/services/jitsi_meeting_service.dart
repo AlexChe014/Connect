@@ -4,6 +4,7 @@ import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/utils/app_logger.dart';
+import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:flutter/foundation.dart';
 import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -66,6 +67,11 @@ class JitsiMeetingService {
         );
       }
 
+      // Скрываем кнопку "на главный экран" на всё время звонка, а не только
+      // на экране "Звоним…" — иначе после hangUp() она уже включена под
+      // нативным UI Jitsi и сразу проявляется.
+      HomeShortcutButton.suppressed.value = true;
+
       final options = JitsiMeetConferenceOptions(
         serverURL: server,
         room: room,
@@ -74,16 +80,34 @@ class JitsiMeetingService {
             ? JitsiMeetUserInfo(displayName: session.displayName)
             : null,
         configOverrides: {
-          'startWithAudioMuted': false,
-          'startWithVideoMuted': false,
+          'startWithAudioMuted': true,
+          'startWithVideoMuted': true,
           'disableInviteFunctions': true,
           'hideConferenceSubject': true,
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
           if (endWhenLeave) 'disableProfile': true,
+          'toolbarButtons': endWhenLeave
+              ? const ['microphone', 'camera', 'chat', 'settings', 'hangup']
+              : const [
+                  'microphone',
+                  'camera',
+                  'desktop',
+                  'chat',
+                  'raisehand',
+                  'tileview',
+                  'fullscreen',
+                  'settings',
+                  'hangup',
+                ],
         },
         featureFlags: {
+          // Звонком уже управляет наш flutter_callkit_incoming (см.
+          // incoming_call_service.dart и AppDelegate.swift) — если оставить
+          // и встроенную CallKit-интеграцию Jitsi, две системы конфликтуют
+          // и обычное завершение звонка показывается как "Встреча прервана".
+          'call-integration.enabled': false,
           'unsaferoomwarning.enabled': false,
           'add-people.enabled': false,
           'invite.enabled': false,
@@ -91,6 +115,21 @@ class JitsiMeetingService {
           'live-streaming.enabled': false,
           'recording.enabled': !endWhenLeave,
           'toolbox.enabled': true,
+          'toolbox.alwaysVisible': true,
+          'calendar.enabled': false,
+          'help.enabled': false,
+          'kick-out.enabled': false,
+          'lobby-mode.enabled': false,
+          'meeting-name.enabled': false,
+          'meeting-password.enabled': false,
+          'security-options.enabled': false,
+          'server-url-change.enabled': false,
+          'speakerstats.enabled': false,
+          'breakout-rooms.enabled': false,
+          'close-captions.enabled': false,
+          'raise-hand.enabled': !endWhenLeave,
+          'reactions.enabled': !endWhenLeave,
+          'tile-view.enabled': !endWhenLeave,
         },
       );
 
@@ -132,6 +171,9 @@ class JitsiMeetingService {
               : 'Не удалось открыть видеоконференцию',
         );
       }
+    } catch (e) {
+      HomeShortcutButton.suppressed.value = false;
+      rethrow;
     } finally {
       _joining = false;
     }
@@ -153,6 +195,7 @@ class JitsiMeetingService {
   void _notifyLeft() {
     if (_leaveNotified) return;
     _leaveNotified = true;
+    HomeShortcutButton.suppressed.value = false;
     final callId = _activeCallId;
     final cb = _onLeave;
     _activeCallId = null;

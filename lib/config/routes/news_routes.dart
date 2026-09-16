@@ -28,6 +28,9 @@ class NewsRoutes {
   static String removeLikeUrl(String newsId) =>
       '${ApiConfig.baseUrl}$_prefix/remove-like/$newsId';
 
+  static String reactionUrl(String newsId) =>
+      '${ApiConfig.baseUrl}$_prefix/reaction/$newsId';
+
   static String likesUrl(String newsId) =>
       '${ApiConfig.baseUrl}$_prefix/likes/$newsId';
 

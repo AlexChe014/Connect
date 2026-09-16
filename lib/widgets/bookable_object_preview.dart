@@ -17,7 +17,7 @@ class BookableObjectPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = object.previewImageUrl;
-    final imageSize = compact ? 56.0 : 72.0;
+    final imageSize = compact ? 44.0 : 56.0;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -34,7 +34,7 @@ class BookableObjectPreview extends StatelessWidget {
                 child: Icon(
                   CupertinoIcons.location_solid,
                   color: CupertinoColors.systemBlue,
-                  size: compact ? 26 : 32,
+                  size: compact ? 20 : 24,
                 ),
               )
             : AppNetworkImage(

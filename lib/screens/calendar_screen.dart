@@ -7,8 +7,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/app_icons.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
+import '../repositories/connector_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../utils/connector_launch.dart';
+import '../utils/connector_url_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
@@ -570,6 +573,17 @@ class _JoinMeetingChip extends StatelessWidget {
   final bool isPassed;
 
   Future<void> _open() async {
+    final room = connectorRoomFromUrl(url);
+    if (room != null) {
+      try {
+        final session = await ConnectorRepository.instance.join(room);
+        await openConnectorSession(session);
+        return;
+      } catch (_) {
+        // Фоллбэк на браузер ниже.
+      }
+    }
+
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
