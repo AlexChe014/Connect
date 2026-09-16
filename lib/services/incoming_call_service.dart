@@ -22,9 +22,6 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 @pragma('vm:entry-point')
 Future<void> incomingCallBackgroundHandler(CallEvent event) async {
   if (event case CallEventActionCallAccept(:final callKitParams)) {
-    // Отдельный фоновый изолят (приложение убито) — без этого
-    // AuthService.instance.token пуст, и acceptCall/join ниже уйдут
-    // без Bearer-токена.
     await AuthService.instance.init();
     await IncomingCallService.instance.handleBackgroundAccept(callKitParams);
   }
@@ -38,7 +35,9 @@ class IncomingCallService {
   StreamSubscription<CallEvent?>? _eventSub;
   bool _initialized = false;
   String? _lastVoipToken;
+  String? _pendingVoipToken;
   final Set<String> _acceptedLocally = {};
+  bool _acceptInFlight = false;
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -55,9 +54,6 @@ class IncomingCallService {
       await FlutterCallkitIncoming.onBackgroundMessage(
         incomingCallBackgroundHandler,
       );
-    }
-
-    if (Platform.isAndroid) {
       try {
         await FlutterCallkitIncoming.requestFullIntentPermission();
       } catch (e, st) {
@@ -71,8 +67,12 @@ class IncomingCallService {
     }
 
     if (Platform.isIOS) {
-      unawaited(_registerVoipTokenWhenReady());
+      // Не ждём FCM: PushKit-токен регистрируем отдельно.
+      unawaited(refreshVoipRegistration(force: true));
     }
+
+    // Accept с lock screen / cold start, пока Dart ещё поднимался.
+    unawaited(recoverPendingAcceptedCalls());
   }
 
   Future<void> dispose() async {
@@ -81,12 +81,26 @@ class IncomingCallService {
     _initialized = false;
   }
 
-  Future<void> refreshVoipRegistration() async {
+  /// После логина / FCM: сбросить кэш и снова отправить VoIP на бэкенд.
+  Future<void> refreshVoipRegistration({bool force = false}) async {
     if (!isSupported || !Platform.isIOS) return;
+    if (force) _lastVoipToken = null;
+
+    if (_pendingVoipToken != null &&
+        _pendingVoipToken!.isNotEmpty &&
+        AuthService.instance.isAuthenticated) {
+      await _registerVoipToken(_pendingVoipToken!);
+    }
+
     await _registerVoipTokenWhenReady();
   }
 
-  /// Показать системный экран входящего звонка.
+  void clearVoipCache() {
+    _lastVoipToken = null;
+    _pendingVoipToken = null;
+  }
+
+  /// Показать системный экран входящего звонка (в т.ч. на lock screen).
   Future<void> showIncomingCall(IncomingCallPayload payload) async {
     if (!isSupported) return;
 
@@ -133,6 +147,8 @@ class IncomingCallService {
         supportsHolding: false,
         supportsGrouping: false,
         supportsUngrouping: false,
+        audioSessionMode: 'voiceChat',
+        audioSessionActive: true,
         ringtonePath: 'system_ringtone_default',
       ),
     );
@@ -140,7 +156,6 @@ class IncomingCallService {
     await FlutterCallkitIncoming.showCallkitIncoming(params);
   }
 
-  /// Обработка FCM data / VoIP push (foreground и Android background).
   Future<void> handlePushData(Map<String, dynamic> data) async {
     if (!IncomingCallPayload.isChatCall(data)) return;
     if (!AuthService.instance.isAuthenticated) return;
@@ -151,6 +166,30 @@ class IncomingCallService {
     } catch (e, st) {
       AppLogger.e(
         'Invalid chat_call payload',
+        name: 'callkit',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  /// Если пользователь ответил на CallKit до готовности Flutter (убитое приложение).
+  Future<void> recoverPendingAcceptedCalls() async {
+    if (!isSupported) return;
+    try {
+      final calls = await FlutterCallkitIncoming.activeCalls();
+      for (final call in calls) {
+        if (!call.isAccepted) continue;
+        if (_acceptedLocally.contains(call.id)) continue;
+        AppLogger.d(
+          'Recovering accepted CallKit call ${call.id}',
+          name: 'callkit',
+        );
+        await _onAccept(call);
+      }
+    } catch (e, st) {
+      AppLogger.d(
+        'recoverPendingAcceptedCalls failed',
         name: 'callkit',
         error: e,
         stackTrace: st,
@@ -169,13 +208,12 @@ class IncomingCallService {
       case CallEventActionCallDecline(:final callKitParams):
         await _onDecline(callKitParams);
       case CallEventActionCallEnded(:final callKitParams):
-        // После Accept мы сами закрываем CallKit UI — это не отклонение.
         if (_acceptedLocally.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallTimeout(:final id):
         await _declineByCallId(id);
       case CallEventActionDidUpdateDevicePushTokenVoip():
-        await _registerVoipTokenWhenReady();
+        await refreshVoipRegistration(force: true);
       default:
         break;
     }
@@ -186,36 +224,43 @@ class IncomingCallService {
   }
 
   Future<void> _onAccept(CallKitParams params) async {
+    if (_acceptInFlight) return;
+    _acceptInFlight = true;
+
     final extra = params.extra ?? const {};
     final callId = params.id;
     final room = extra['room']?.toString();
     final chatId = extra['chat_id']?.toString();
     final topic = extra['topic']?.toString();
 
-    if (callId.isNotEmpty) {
-      _acceptedLocally.add(callId);
-      unawaited(ChatCallRepository.instance.acceptCall(callId));
-    }
-
-    await FlutterCallkitIncoming.setCallConnected(callId);
-
-    if (room == null || room.isEmpty) {
-      AppLogger.e('Accept call: room missing', name: 'callkit');
-      await FlutterCallkitIncoming.endCall(callId);
-      return;
-    }
-
-    final mediaOk = await CallPermissions.ensureMediaOnly();
-    if (!mediaOk) {
-      AppLogger.e('Accept call: media permissions denied', name: 'callkit');
-      await FlutterCallkitIncoming.endCall(callId);
-      if (callId.isNotEmpty) {
-        unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
-      }
-      return;
-    }
-
     try {
+      if (!AuthService.instance.isAuthenticated) {
+        await AuthService.instance.init();
+      }
+
+      if (callId.isNotEmpty) {
+        _acceptedLocally.add(callId);
+        unawaited(ChatCallRepository.instance.acceptCall(callId));
+      }
+
+      await FlutterCallkitIncoming.setCallConnected(callId);
+
+      if (room == null || room.isEmpty) {
+        AppLogger.e('Accept call: room missing', name: 'callkit');
+        await FlutterCallkitIncoming.endCall(callId);
+        return;
+      }
+
+      final mediaOk = await CallPermissions.ensureMediaOnly();
+      if (!mediaOk) {
+        AppLogger.e('Accept call: media permissions denied', name: 'callkit');
+        await FlutterCallkitIncoming.endCall(callId);
+        if (callId.isNotEmpty) {
+          unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
+        }
+        return;
+      }
+
       if (chatId != null && chatId.isNotEmpty) {
         ChatCallService.instance.registerIncomingDirectCall(
           chatId: chatId,
@@ -226,18 +271,22 @@ class IncomingCallService {
       }
 
       final session = await ConnectorRepository.instance.join(room);
-      await FlutterCallkitIncoming.endCall(callId);
+      // Не закрываем CallKit до входа в Jitsi — иначе на lock screen
+      // приложение может не подняться на передний план.
       await openConnectorSession(
         session,
         callId: callId,
         endWhenLeave: true,
       );
+      await FlutterCallkitIncoming.endCall(callId);
     } catch (e) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);
       await FlutterCallkitIncoming.endCall(callId);
       if (callId.isNotEmpty) {
         unawaited(ChatCallRepository.instance.endCall(callId));
       }
+    } finally {
+      _acceptInFlight = false;
     }
   }
 
@@ -263,26 +312,57 @@ class IncomingCallService {
   }
 
   Future<void> _registerVoipTokenWhenReady() async {
-    for (var i = 0; i < 10; i++) {
+    // ~45 с: PushKit часто приходит после cold start / после логина.
+    for (var i = 0; i < 20; i++) {
       try {
         final token = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
         if (token != null && token.isNotEmpty) {
           await _registerVoipToken(token);
           return;
         }
-      } catch (_) {}
+        AppLogger.d(
+          'VoIP token not ready yet (attempt ${i + 1})',
+          name: 'callkit',
+        );
+      } catch (e, st) {
+        AppLogger.d(
+          'getDevicePushTokenVoIP failed (attempt ${i + 1})',
+          name: 'callkit',
+          error: e,
+          stackTrace: st,
+        );
+      }
       await Future<void>.delayed(Duration(milliseconds: 500 * (i + 1)));
     }
+    AppLogger.e(
+      'VoIP token was never available after retries',
+      name: 'callkit',
+    );
   }
 
   Future<void> _registerVoipToken(String token) async {
-    if (token == _lastVoipToken) return;
-    if (!AuthService.instance.isAuthenticated) return;
+    if (token == _lastVoipToken) {
+      AppLogger.d('VoIP token unchanged, skip POST', name: 'callkit');
+      return;
+    }
+
+    if (!AuthService.instance.isAuthenticated) {
+      _pendingVoipToken = token;
+      AppLogger.d(
+        'VoIP token cached until login (${token.length} chars)',
+        name: 'callkit',
+      );
+      return;
+    }
 
     try {
       await DeviceTokenRepository.instance.registerVoipToken(token: token);
       _lastVoipToken = token;
-      AppLogger.d('VoIP token registered', name: 'callkit');
+      _pendingVoipToken = null;
+      AppLogger.d(
+        'VoIP token registered on backend (${token.length} chars)',
+        name: 'callkit',
+      );
     } catch (e, st) {
       AppLogger.e(
         'Failed to register VoIP token',

@@ -80,16 +80,17 @@ class JitsiMeetingService {
             ? JitsiMeetUserInfo(displayName: session.displayName)
             : null,
         configOverrides: {
-          'startWithAudioMuted': true,
-          'startWithVideoMuted': true,
+          'startWithAudioMuted': !endWhenLeave,
+          'startWithVideoMuted': !endWhenLeave,
           'disableInviteFunctions': true,
           'hideConferenceSubject': true,
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
           if (endWhenLeave) 'disableProfile': true,
+          // 1:1 — только завершение (настройки/участники/чат скрыты).
           'toolbarButtons': endWhenLeave
-              ? const ['microphone', 'camera', 'chat', 'settings', 'hangup']
+              ? const ['hangup']
               : const [
                   'microphone',
                   'camera',
@@ -130,6 +131,12 @@ class JitsiMeetingService {
           'raise-hand.enabled': !endWhenLeave,
           'reactions.enabled': !endWhenLeave,
           'tile-view.enabled': !endWhenLeave,
+          'participants-pane.enabled': !endWhenLeave,
+          'settings.enabled': !endWhenLeave,
+          'chat.enabled': !endWhenLeave,
+          'overflow-menu.enabled': !endWhenLeave,
+          'video-share.enabled': !endWhenLeave,
+          'filmstrip.enabled': !endWhenLeave,
         },
       );
 

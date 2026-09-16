@@ -167,6 +167,8 @@ class PushNotificationService {
         'Skip FCM register: Firebase is not initialized',
         name: 'push',
       );
+      // VoIP (PushKit) не зависит от Firebase — всё равно пробуем.
+      await IncomingCallService.instance.refreshVoipRegistration(force: true);
       return;
     }
     if (!AuthService.instance.isAuthenticated) {
@@ -181,19 +183,17 @@ class PushNotificationService {
           'Skip FCM register: empty FCM token (APNs/Google Play not ready?)',
           name: 'push',
         );
-        return;
+      } else {
+        _currentToken = token;
+        await DeviceTokenRepository.instance.registerToken(
+          token: token,
+          platform: _platformName(),
+        );
+        AppLogger.d(
+          'FCM token registered on backend (${_platformName()})',
+          name: 'push',
+        );
       }
-
-      _currentToken = token;
-      await DeviceTokenRepository.instance.registerToken(
-        token: token,
-        platform: _platformName(),
-      );
-      AppLogger.d(
-        'FCM token registered on backend (${_platformName()})',
-        name: 'push',
-      );
-      await IncomingCallService.instance.refreshVoipRegistration();
       await AppNavigationService.processPendingNavigation();
     } catch (e, st) {
       AppLogger.e(
@@ -202,6 +202,10 @@ class PushNotificationService {
         error: e,
         stackTrace: st,
       );
+    } finally {
+      // Важно: не привязывать VoIP к успеху FCM — иначе iOS теряет
+      // PushKit-токен, если APNs/FCM ещё не готов.
+      await IncomingCallService.instance.refreshVoipRegistration(force: true);
     }
   }
 
@@ -239,6 +243,7 @@ class PushNotificationService {
   }
 
   Future<void> unregisterCurrentDevice() async {
+    IncomingCallService.instance.clearVoipCache();
     if (!_initialized) return;
 
     final token = _currentToken ?? await FirebaseMessaging.instance.getToken();

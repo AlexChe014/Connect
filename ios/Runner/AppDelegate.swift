@@ -36,11 +36,16 @@ import flutter_callkit_incoming
 
   func pushRegistry(_ registry: PKPushRegistry, didUpdate credentials: PKPushCredentials, for type: PKPushType) {
     let deviceToken = credentials.token.map { String(format: "%02x", $0) }.joined()
+    NSLog("[callkit] PushKit VoIP token updated, length=%d", deviceToken.count)
+    // Плагин шлёт событие в Dart (DidUpdateDevicePushTokenVoip).
     SwiftFlutterCallkitIncomingPlugin.sharedInstance?.setDevicePushTokenVoIP(deviceToken)
+    UserDefaults.standard.set(deviceToken, forKey: "connect_voip_token")
   }
 
   func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {
+    NSLog("[callkit] PushKit VoIP token invalidated")
     SwiftFlutterCallkitIncomingPlugin.sharedInstance?.setDevicePushTokenVoIP("")
+    UserDefaults.standard.removeObject(forKey: "connect_voip_token")
   }
 
   func pushRegistry(
@@ -54,7 +59,10 @@ import flutter_callkit_incoming
       return
     }
 
-    let dict = payload.dictionaryPayload
+    // APNs может класть поля в корень или во вложенный data / custom.
+    let raw = payload.dictionaryPayload
+    let dict = flattenVoipPayload(raw)
+
     var info: [String: Any?] = [:]
 
     let callId = stringValue(dict["call_id"]) ?? UUID().uuidString
@@ -83,12 +91,31 @@ import flutter_callkit_incoming
       "is_video": isVideo ? "1" : "0",
     ]
 
+    // Обязательно сразу показать CallKit — иначе iOS отзовёт VoIP entitlement.
     let data = flutter_callkit_incoming.Data(args: info)
     SwiftFlutterCallkitIncomingPlugin.sharedInstance?.showCallkitIncoming(data, fromPushKit: true)
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
       completion()
     }
+  }
+
+  /// Разворачивает вложенные словари (data / custom), чтобы call_id/room
+  /// находились и при FCM-style обёртке, и при «плоском» APNs VoIP.
+  private func flattenVoipPayload(_ raw: [AnyHashable: Any]) -> [String: Any] {
+    var out: [String: Any] = [:]
+    for (key, value) in raw {
+      let k = String(describing: key)
+      if k == "aps" { continue }
+      if let nested = value as? [AnyHashable: Any] {
+        for (nk, nv) in nested {
+          out[String(describing: nk)] = nv
+        }
+      } else {
+        out[k] = value
+      }
+    }
+    return out
   }
 
   private func stringValue(_ value: Any?) -> String? {
@@ -102,9 +129,11 @@ import flutter_callkit_incoming
     return nil
   }
 
-  // MARK: - CallkitIncomingAppDelegate (fulfill actions immediately for Jitsi)
+  // MARK: - CallkitIncomingAppDelegate
 
   func onAccept(_ call: Call, _ action: CXAnswerCallAction) {
+    // Поднимаем приложение на передний план; Dart подхватит Accept через onEvent
+    // или recoverPendingAcceptedCalls при cold start.
     action.fulfill()
   }
 
@@ -116,9 +145,7 @@ import flutter_callkit_incoming
     action.fulfill()
   }
 
-  func onTimeOut(_ call: Call) {
-    // Dart handler sends decline to backend.
-  }
+  func onTimeOut(_ call: Call) {}
 
   func didActivateAudioSession(_ audioSession: AVAudioSession) {}
 

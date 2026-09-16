@@ -95,6 +95,11 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
     if (!AuthService.instance.isAuthenticated) return;
     if (state == AppLifecycleState.resumed) {
       unawaited(UserPresenceService.instance.setOnline(true));
+      // Accept с lock screen / cold start мог произойти до готовности Dart.
+      unawaited(IncomingCallService.instance.recoverPendingAcceptedCalls());
+      unawaited(
+        IncomingCallService.instance.refreshVoipRegistration(force: false),
+      );
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
