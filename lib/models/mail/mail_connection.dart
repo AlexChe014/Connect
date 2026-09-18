@@ -44,9 +44,19 @@ class MailConnection {
   }
 
   String get serviceLabel {
-    final s = service?.trim();
-    if (s == null || s.isEmpty) return 'Почта';
-    return s;
+    switch (service?.trim().toLowerCase()) {
+      case 'yandex':
+        return 'Яндекс Почта';
+      case 'mailru':
+        return 'Mail';
+      case null:
+      case '':
+        return 'Почта';
+      default:
+        // 'other'/'custom' и любые другие значения с бэкенда — это ящики,
+        // подключённые как «Корпоративная почта» в MailProviderKind.corporate.
+        return 'Корпоративная почта';
+    }
   }
 
   bool get isCustom =>

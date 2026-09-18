@@ -1062,6 +1062,26 @@ class ChatService extends ChangeNotifier {
     _upsertMessage(chatId, m, increaseUnread: false);
   }
 
+  /// Локальное системное сообщение (например, о звонке) — существует только
+  /// в этой сессии приложения, на сервер не отправляется и не синхронизируется
+  /// с другими устройствами/собеседником. [id] должен быть уникальным
+  /// (например, привязан к callId), чтобы не задублировать сообщение.
+  void appendLocalSystemMessage(String chatId, String text, {required String id}) {
+    _appendMessage(
+      chatId,
+      ChatMessage(
+        id: id,
+        chatId: chatId,
+        authorName: '',
+        isOutgoing: false,
+        createdAt: DateTime.now(),
+        text: text,
+        isSystem: true,
+        isRead: true,
+      ),
+    );
+  }
+
   /// Событие Reverb / Echo: новое, правка, удаление, прочтение, состав чата.
   void applyRealtimeEvent({
     required String eventName,

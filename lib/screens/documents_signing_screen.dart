@@ -91,46 +91,23 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     }
   }
 
-  Future<void> _authorizeService(DocumentService service) async {
-    final code = await _promptCode(
-      title: 'Авторизация в 1С',
-      subtitle: service.displayTitle,
-    );
-    if (code == null || !mounted) return;
-
+  Future<void> _logoutAll() async {
     try {
-      await DocumentsRepository.instance.authenticateService(
-        serviceId: service.id,
-        code: code,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('Сервис «${service.displayTitle}» авторизован')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _showError('Не удалось авторизоваться', e);
-    }
-  }
-
-  Future<void> _logoutService(DocumentService service) async {
-    try {
-      final removed = await DocumentsRepository.instance.logoutService(
-        service.id,
-      );
+      final removed = await DocumentsRepository.instance.logout();
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
             removed > 0
-                ? 'Сессия «${service.displayTitle}» завершена'
-                : 'Активная сессия не найдена',
+                ? 'Выполнен выход из всех сервисов 1С'
+                : 'Активные сессии не найдены',
           ),
         ),
       );
+      await _loadServices(promptAccessCodeIfEmpty: false);
     } catch (e) {
       if (!mounted) return;
-      _showError('Не удалось выйти из сервиса', e);
+      _showError('Не удалось выйти из сервисов 1С', e);
     }
   }
 
@@ -177,12 +154,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         title: Text(service.displayName),
         actions: [
           CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context, 'auth'),
-            child: const Text('Авторизоваться'),
-          ),
-          CupertinoActionSheetAction(
+            isDestructiveAction: true,
             onPressed: () => Navigator.pop(context, 'logout'),
-            child: const Text('Выйти'),
+            child: const Text('Выйти из всех сервисов 1С'),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
@@ -193,11 +167,8 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     );
 
     if (!mounted || action == null) return;
-    switch (action) {
-      case 'auth':
-        await _authorizeService(service);
-      case 'logout':
-        await _logoutService(service);
+    if (action == 'logout') {
+      await _logoutAll();
     }
   }
 

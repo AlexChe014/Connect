@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../config/app_icons.dart';
+import '../widgets/menu_button.dart';
 import 'create_instant_meeting_screen.dart';
 import 'schedule_video_meeting_screen.dart';
 
@@ -75,8 +76,9 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
         ),
         child: CustomScrollView(
           slivers: [
-            const CupertinoSliverNavigationBar(
-              largeTitle: Text('Коннектор'),
+            CupertinoSliverNavigationBar(
+              largeTitle: const Text('Коннектор'),
+              leading: const MenuButton(),
               backgroundColor: CupertinoColors.systemGroupedBackground,
               border: null,
             ),

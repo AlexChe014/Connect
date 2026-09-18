@@ -33,10 +33,13 @@ class HomeShortcutButton extends StatelessWidget {
         return child!;
       },
       child: SafeArea(
+        // bottomLeft — намеренно не bottomRight: экран почты держит там
+        // свою кнопку «написать письмо», и обе кнопки в одном углу
+        // накладывались друг на друга.
         child: Align(
-          alignment: Alignment.bottomRight,
+          alignment: Alignment.bottomLeft,
           child: Padding(
-            padding: const EdgeInsets.only(right: 16, bottom: 16),
+            padding: const EdgeInsets.only(left: 16, bottom: 16),
             child: _HomeButton(),
           ),
         ),
