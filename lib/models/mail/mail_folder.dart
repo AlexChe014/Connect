@@ -76,6 +76,67 @@ class MailFolder {
     return false;
   }
 
+  /// Служебные папки почтового сервера (контакты, календарь, задачи, RSS,
+  /// журналы, «Ошибки синхронизации» и т.п.) — Exchange/групповые серверы
+  /// отдают их как обычные IMAP-папки вперемешку с почтовыми, но пользователю
+  /// в списке почты они не нужны. Совпадение ищется и по русским, и по
+  /// английским названиям, т.к. локализация зависит от сервера.
+  static const _hiddenSystemFolderKeywords = [
+    'sync issues',
+    'ошибки синхронизации',
+    'conflicts',
+    'конфликты',
+    'local failures',
+    'локальные ошибки',
+    'server failures',
+    'ошибки сервера',
+    'contacts',
+    'контакты',
+    'deferred',
+    'отложен',
+    'rss feeds',
+    'rss каналы',
+    'rss subscriptions',
+    'rss подписки',
+    'journal',
+    'журнал',
+    'tasks',
+    'задачи',
+    'notes',
+    'заметки',
+    'scheduled',
+    'запланировано',
+    'archive',
+    'архив',
+    'calendar',
+    'календарь',
+  ];
+
+  bool get isHiddenSystemFolder {
+    if (isInbox || isSent || isDrafts || isTrash || isSpam) return false;
+    final original = (originalName ?? '').trim().toLowerCase();
+    final n = name.trim().toLowerCase();
+    for (final keyword in _hiddenSystemFolderKeywords) {
+      if (original.contains(keyword) || n.contains(keyword)) return true;
+    }
+    return false;
+  }
+
+  static final RegExp _inboxPrefix = RegExp(
+    r'^inbox[\s./\\:>-]+',
+    caseSensitive: false,
+  );
+
+  /// Имя папки для показа пользователю — без служебного префикса `INBOX`,
+  /// которым некоторые IMAP-серверы (Exchange/Dovecot с точечной иерархией)
+  /// предваряют имена всех вложенных папок (`INBOX.Отправленные`,
+  /// `INBOX/Черновики`).
+  String get displayName {
+    if (isInbox) return name;
+    final stripped = name.replaceFirst(_inboxPrefix, '');
+    return stripped.trim().isEmpty ? name : stripped;
+  }
+
   factory MailFolder.fromJson(Map<String, dynamic> json) {
     final originalName = _optionalString(json, [
       'original_name',

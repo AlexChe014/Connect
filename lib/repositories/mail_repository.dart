@@ -579,9 +579,32 @@ class MailRepository {
       for (final item in data) {
         _collectMailFolders(item, folders);
       }
-      return folders.where((f) => f.id > 0 || f.name.isNotEmpty).toList();
+      final visible = _hideSystemFolders(folders);
+      return visible.where((f) => f.id > 0 || f.name.isNotEmpty).toList();
     }
-    return _parseFolderList(decoded, errorMessage);
+    return _hideSystemFolders(_parseFolderList(decoded, errorMessage));
+  }
+
+  /// Убирает служебные папки групповых серверов (контакты, календарь,
+  /// задачи, RSS, «Ошибки синхронизации» и т.п.) вместе с их вложенными
+  /// подпапками. Список приходит «плоским», но с проставленной [MailFolder.depth],
+  /// поэтому подпапку легко узнать — это последующие элементы с депth больше,
+  /// чем у скрытого родителя.
+  List<MailFolder> _hideSystemFolders(List<MailFolder> folders) {
+    final result = <MailFolder>[];
+    int? hiddenDepth;
+    for (final folder in folders) {
+      if (hiddenDepth != null) {
+        if (folder.depth > hiddenDepth) continue;
+        hiddenDepth = null;
+      }
+      if (folder.isHiddenSystemFolder) {
+        hiddenDepth = folder.depth;
+        continue;
+      }
+      result.add(folder);
+    }
+    return result;
   }
 
   void _collectMailFolders(Object? item, List<MailFolder> out, {int depth = 0}) {

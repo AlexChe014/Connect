@@ -102,8 +102,22 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     }
   }
 
-  Future<void> _loadMessages({bool fallbackToService = false}) async {
+  Future<void> _loadMessages({
+    bool fallbackToService = false,
+    bool forceSync = false,
+  }) async {
     setState(() => _isLoadingMessages = true);
+    if (forceSync) {
+      try {
+        // getMessagesByFolder/getMessagesByService читают локальное зеркало
+        // почты, которое обновляет фоновая синхронизация бэкенда — потянуть
+        // вниз для обновления недостаточно, чтобы увидеть письма, удалённые
+        // из веб-версии почты. /mail/fetch форсирует опрос IMAP прямо сейчас.
+        await MailRepository.instance.fetchMessages(_connection.id);
+      } catch (_) {
+        // Не удалось форсировать синхронизацию — покажем то, что есть локально.
+      }
+    }
     try {
       final MailMessagePage page;
       final folder = _selectedFolder;
@@ -476,7 +490,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                             ),
                           Expanded(
                             child: RefreshIndicator(
-                              onRefresh: _loadMessages,
+                              onRefresh: () => _loadMessages(forceSync: true),
                               child: NotificationListener<ScrollNotification>(
                                 onNotification: (notification) {
                                   final metrics = notification.metrics;
@@ -545,7 +559,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                           message: _searchQuery.isNotEmpty
                                               ? 'Ничего не найдено'
                                               : _selectedFolder != null
-                                              ? 'В папке «${_selectedFolder!.name}» нет писем'
+                                              ? 'В папке «${_selectedFolder!.displayName}» нет писем'
                                               : 'Нет писем',
                                         ),
                                       )

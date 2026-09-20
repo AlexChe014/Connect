@@ -60,7 +60,13 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   }
 
   Future<void> _pickAttachments() async {
-    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    // withData обязателен: без него на iOS/Android FilePicker отдаёт файлы
+    // только с заполненным path, а bytes всегда null — вложения молча
+    // терялись при отправке.
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      withData: true,
+    );
     if (result == null) return;
 
     final picked = <_PendingAttachment>[];
@@ -95,24 +101,41 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
     setState(() => _isSending = true);
     try {
-      final files = _attachments
-          .map(
-            (a) => http.MultipartFile.fromBytes(
-              'attachments[]',
-              a.bytes,
-              filename: a.filename,
-            ),
-          )
-          .toList();
+      final replyTo = widget.replyTo;
+      // /mail/smtp/reply/{email} умеет отправить письмо именно с того ящика,
+      // которому принадлежит исходное сообщение (и корректно связать его как
+      // ответ) — но, в отличие от /mail/smtp/send, не поддерживает вложения.
+      // Поэтому им пользуемся только пока вложений нет; если пользователь
+      // что-то прикрепил — как и раньше, уходим через общий multipart-отправитель.
+      if (replyTo != null && _attachments.isEmpty) {
+        await MailRepository.instance.replyMail(
+          ReplyMailRequest(
+            messageId: replyTo.id,
+            to: _toController.text.trim(),
+            subject: _subjectController.text.trim(),
+            body: _bodyController.text,
+          ),
+        );
+      } else {
+        final files = _attachments
+            .map(
+              (a) => http.MultipartFile.fromBytes(
+                'attachments[]',
+                a.bytes,
+                filename: a.filename,
+              ),
+            )
+            .toList();
 
-      await MailRepository.instance.sendMail(
-        SendMailRequest(
-          to: _toController.text.trim(),
-          subject: _subjectController.text.trim(),
-          body: _bodyController.text,
-          attachments: files,
-        ),
-      );
+        await MailRepository.instance.sendMail(
+          SendMailRequest(
+            to: _toController.text.trim(),
+            subject: _subjectController.text.trim(),
+            body: _bodyController.text,
+            attachments: files,
+          ),
+        );
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {

@@ -148,7 +148,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       title: 'Переместить в папку',
       options: widget.folders,
       current: widget.folders.first,
-      labelOf: (f) => f.name,
+      labelOf: (f) => f.displayName,
     );
     if (folder == null || !mounted) return;
 
@@ -160,7 +160,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('Письмо перемещено в «${folder.name}»')),
+        SnackBar(content: Text('Письмо перемещено в «${folder.displayName}»')),
       );
       Navigator.of(context).pop(true);
     } catch (_) {
