@@ -383,11 +383,10 @@ class PushNotificationService {
             data['message_id'],
           );
         }
+      case 'booking_created':
       case 'meeting_invite':
       case 'meeting_reminder':
-        final bookingId = AppNavigationService.resolveDataField(data, [
-          'booking_id',
-        ]);
+        final bookingId = AppNavigationService.resolveBookingId(data);
         if (bookingId != null) {
           AppNavigationService.storePendingBooking(bookingId);
         }
@@ -397,6 +396,13 @@ class PushNotificationService {
         // чат для перехода, из-за чего разблокировка вела в переписку
         // вместо экрана звонка. Ведём туда же, куда и живой _navigateFromData.
         unawaited(IncomingCallService.instance.handlePushData(data));
+      default:
+        if (data['module']?.toString() == 'calendar') {
+          final bookingId = AppNavigationService.resolveBookingId(data);
+          if (bookingId != null) {
+            AppNavigationService.storePendingBooking(bookingId);
+          }
+        }
     }
   }
 
