@@ -68,17 +68,12 @@ class NewsRepository {
   /// `POST /dashboard/news/reaction/{news}` → `data` — обновлённый пост.
   ///
   /// Ставит/меняет реакцию пользователя на [emoji]. Повторный вызов с тем же
-  /// эмодзи, судя по семантике бэкенда, снимает реакцию — это поведение
-  /// нужно подтвердить вживую (api-docs.json описывает только плоское
-  /// `likes: integer`, без деталей per-user состояния).
+  /// эмодзи снимает реакцию.
   Future<NewsItem> react(String newsId, String emoji) async {
     final decoded = await ApiClient.instance.post(
       NewsRoutes.reactionUrl(newsId),
       body: {'emoji': emoji},
     );
-    // TEMP DEBUG — remove after verifying live response shape.
-    // ignore: avoid_print
-    print('REACTION DEBUG raw response: $decoded');
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
       defaultErrorMessage: 'Не удалось поставить реакцию',

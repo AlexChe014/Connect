@@ -40,10 +40,12 @@ import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/root_stack_observer.dart';
 import 'services/user_presence_service.dart';
+import 'services/vpn_detector_service.dart';
 import 'utils/media_url_utils.dart';
 import 'utils/user_display_name.dart';
 import 'widgets/chat_avatar.dart';
 import 'widgets/home_shortcut_button.dart';
+import 'widgets/vpn_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +57,7 @@ void main() async {
   await BrandingService.instance.init();
   await PushNotificationService.instance.init();
   await IncomingCallService.instance.init();
+  VpnDetectorService.instance.start();
   runApp(const ConnectApp());
 }
 
@@ -92,6 +95,13 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      VpnDetectorService.instance.start();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      VpnDetectorService.instance.stop();
+    }
     if (!AuthService.instance.isAuthenticated) return;
     if (state == AppLifecycleState.resumed) {
       unawaited(UserPresenceService.instance.setOnline(true));
@@ -141,7 +151,13 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: Stack(children: [child!, const HomeShortcutButton()]),
+              child: Stack(
+                children: [
+                  child!,
+                  const HomeShortcutButton(),
+                  const VpnBanner(),
+                ],
+              ),
             ),
           );
         },

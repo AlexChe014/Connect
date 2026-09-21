@@ -217,11 +217,8 @@ class NewsItem {
     return false;
   }
 
-  /// Реакция текущего пользователя на пост. Точное имя поля в ответе
-  /// `POST .../reaction/{news}` не задокументировано в api-docs.json (там
-  /// только плоское `likes: integer`) — перебираем вероятные варианты,
-  /// а если сервер вообще не присылает своё эмодзи, оно трекается
-  /// оптимистично на клиенте сразу после успешного запроса.
+  /// Реакция текущего пользователя на пост — приходит в поле `user_reaction`
+  /// (см. `NewsResource::toArray` на бэкенде).
   static String? _parseMyReaction(Map<String, dynamic> json) {
     for (final key in ['my_reaction', 'reaction', 'user_reaction']) {
       final v = json[key];
