@@ -88,9 +88,10 @@ class JitsiMeetingService {
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
           if (endWhenLeave) 'disableProfile': true,
-          // 1:1 — только завершение (настройки/участники/чат скрыты).
+          // 1:1 — микрофон/камера/шара экрана + завершение
+          // (настройки/участники/чат по-прежнему скрыты).
           'toolbarButtons': endWhenLeave
-              ? const ['hangup']
+              ? const ['microphone', 'camera', 'desktop', 'hangup']
               : const [
                   'microphone',
                   'camera',
@@ -135,7 +136,7 @@ class JitsiMeetingService {
           'settings.enabled': !endWhenLeave,
           'chat.enabled': !endWhenLeave,
           'overflow-menu.enabled': !endWhenLeave,
-          'video-share.enabled': !endWhenLeave,
+          'video-share.enabled': true,
           'filmstrip.enabled': !endWhenLeave,
         },
       );

@@ -17,11 +17,17 @@ class CreateChatRequest {
   Map<String, dynamic> toJson() {
     final body = <String, dynamic>{
       'user_ids': userIds,
+      'is_group': isGroup,
     };
 
     final titleValue = title?.trim();
     if (titleValue != null && titleValue.isNotEmpty) {
       body['title'] = titleValue;
+    }
+
+    final descriptionValue = description?.trim();
+    if (descriptionValue != null && descriptionValue.isNotEmpty) {
+      body['description'] = descriptionValue;
     }
 
     return body;

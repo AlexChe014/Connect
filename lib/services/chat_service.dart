@@ -463,24 +463,20 @@ class ChatService extends ChangeNotifier {
     final userId = _selfUserId;
     if (userId == null || userIds.isEmpty) return null;
 
-    try {
-      final record = await ChatManagementRepository.instance.createChat(
-        CreateChatRequest(
-          title: title,
-          description: description,
-          isGroup: true,
-          userIds: userIds,
-        ),
-        currentUserId: userId,
-      );
-      final chat = ChatMapper.fromRecord(record, currentUserId: userId);
-      _chats.insert(0, chat);
-      _sortChats();
-      notifyListeners();
-      return chat;
-    } catch (_) {
-      return null;
-    }
+    final record = await ChatManagementRepository.instance.createChat(
+      CreateChatRequest(
+        title: title,
+        description: description,
+        isGroup: true,
+        userIds: userIds,
+      ),
+      currentUserId: userId,
+    );
+    final chat = ChatMapper.fromRecord(record, currentUserId: userId);
+    _chats.insert(0, chat);
+    _sortChats();
+    notifyListeners();
+    return chat;
   }
 
   Future<Chat?> createDirect({
@@ -988,7 +984,11 @@ class ChatService extends ChangeNotifier {
     );
     _appendMessage(
       chatId,
-      sent.copyWith(replyTo: replyTo ?? sent.replyTo, isRead: true),
+      sent.copyWith(
+        replyTo: replyTo ?? sent.replyTo,
+        isRead: true,
+        files: sent.files.isNotEmpty ? sent.files : [uploaded],
+      ),
     );
   }
 

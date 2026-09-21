@@ -132,8 +132,18 @@ import flutter_callkit_incoming
   // MARK: - CallkitIncomingAppDelegate
 
   func onAccept(_ call: Call, _ action: CXAnswerCallAction) {
-    // Поднимаем приложение на передний план; Dart подхватит Accept через onEvent
-    // или recoverPendingAcceptedCalls при cold start.
+    // На UIScene-based Flutter (SceneDelegate) ОС не всегда сама поднимает сцену
+    // при ответе на звонок из фона — без этого экран CallKit закрывается,
+    // а показать Jitsi/экран звонка не на чем, пока пользователь не откроет
+    // приложение вручную. Форсируем активацию сцены явно.
+    if #available(iOS 13.0, *) {
+      DispatchQueue.main.async {
+        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: nil, options: nil) { error in
+          NSLog("[callkit] requestSceneSessionActivation failed: %@", error.localizedDescription)
+        }
+      }
+    }
+    // Dart подхватит Accept через onEvent или recoverPendingAcceptedCalls при cold start.
     action.fulfill()
   }
 

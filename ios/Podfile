@@ -69,8 +69,8 @@ post_install do |installer|
         'PERMISSION_PHOTOS_ADD_ONLY=1',
 
         ## dart: PermissionGroup.location*
-        'PERMISSION_LOCATION=1',
-        'PERMISSION_LOCATION_WHENINUSE=1',
+        'PERMISSION_LOCATION=0',
+        'PERMISSION_LOCATION_WHENINUSE=0',
         'PERMISSION_LOCATION_ALWAYS=0',
 
         ## dart: PermissionGroup.notification
@@ -86,7 +86,7 @@ post_install do |installer|
         'PERMISSION_BLUETOOTH=0',
 
         ## dart: PermissionGroup.appTrackingTransparency
-        'PERMISSION_APP_TRACKING_TRANSPARENCY=1',
+        'PERMISSION_APP_TRACKING_TRANSPARENCY=0',
 
         ## dart: PermissionGroup.criticalAlerts
         'PERMISSION_CRITICAL_ALERTS=0',

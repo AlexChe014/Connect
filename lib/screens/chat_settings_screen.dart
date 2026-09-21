@@ -637,6 +637,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         return [
           _sectionLabel(group.key.toUpperCase()),
           CupertinoListSection.insetGrouped(
+            margin: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
             children: group.value.map((m) {
               final name = m.files.isNotEmpty
                   ? m.files.first.originalName
@@ -681,6 +682,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         return [
           _sectionLabel(group.key.toUpperCase()),
           CupertinoListSection.insetGrouped(
+            margin: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
             children: group.value.map((entry) {
               final domain = _domainFor(entry.url);
               final label = domain.isEmpty ? entry.url : domain;
