@@ -33,6 +33,11 @@ class ChatCallService extends ChangeNotifier {
   final Set<String> _acceptedCalls = {};
   bool _startingCall = false;
 
+  /// callId 1:1 звонков, для которых уже показано локальное сообщение
+  /// "Начат звонок" — используется, чтобы показать ровно одно сообщение
+  /// о завершении и не показывать его для звонков без ответа.
+  final Set<String> _callsWithStartMessage = {};
+
   /// callId активного 1:1 звонка в Jitsi (чтобы hangUp по push).
   String? _liveDirectCallId;
 
@@ -53,6 +58,7 @@ class ChatCallService extends ChangeNotifier {
 
   void notifyCallEnded(String callId, String status) {
     _endedCalls[callId] = status;
+    _appendCallEndedMessage(callId);
     _clearActiveByCallId(callId);
     unawaited(_hangUpRemote(callId));
     notifyListeners();
@@ -165,6 +171,7 @@ class ChatCallService extends ChangeNotifier {
         }
 
         _liveDirectCallId = callId;
+        _appendCallStartedMessage(chat.id, callId);
         await openConnectorSession(
           session,
           callId: callId,
@@ -227,6 +234,7 @@ class ChatCallService extends ChangeNotifier {
     _liveDirectCallId = null;
     if (id == null || id.isEmpty) return;
 
+    _appendCallEndedMessage(id);
     _clearActiveByCallId(id);
     notifyListeners();
     await ChatCallRepository.instance.endCall(id);
@@ -405,5 +413,52 @@ class ChatCallService extends ChangeNotifier {
       ),
     );
     _liveDirectCallId = callId;
+    _appendCallStartedMessage(chatId, callId);
+  }
+
+  /// Локальное сообщение "Начат звонок" — только для этого устройства,
+  /// без обращения к бэкенду.
+  void _appendCallStartedMessage(String chatId, String? callId) {
+    if (callId == null || callId.isEmpty) return;
+    if (!_callsWithStartMessage.add(callId)) return;
+    ChatService.instance.appendLocalSystemMessage(
+      chatId,
+      'Начат звонок',
+      id: 'call_start_$callId',
+    );
+  }
+
+  /// Локальное сообщение "Звонок завершён · MM:SS" — показывается только
+  /// если для этого callId было показано сообщение о начале (то есть звонок
+  /// был реально принят, а не пропущен/отклонён), и только один раз, даже
+  /// если и локальный выход из комнаты, и push о завершении сработают оба.
+  void _appendCallEndedMessage(String callId) {
+    if (!_callsWithStartMessage.remove(callId)) return;
+
+    ChatActiveCall? call;
+    for (final c in _activeByChat.values) {
+      if (c.callId == callId) {
+        call = c;
+        break;
+      }
+    }
+    if (call == null) return;
+
+    final duration = DateTime.now().difference(call.startedAt);
+    ChatService.instance.appendLocalSystemMessage(
+      call.chatId,
+      'Звонок завершён · ${_formatCallDuration(duration)}',
+      id: 'call_end_$callId',
+    );
+  }
+
+  String _formatCallDuration(Duration d) {
+    final duration = d.isNegative ? Duration.zero : d;
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    final mm = minutes.toString().padLeft(2, '0');
+    final ss = seconds.toString().padLeft(2, '0');
+    return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
   }
 }

@@ -14,17 +14,31 @@ import '../widgets/app_loading.dart';
 import 'compose_mail_screen.dart';
 import 'mail_folders_screen.dart';
 import 'mail_message_screen.dart';
+import 'mail_screen.dart';
 
 class MailInboxScreen extends StatefulWidget {
-  const MailInboxScreen({super.key, required this.connection});
+  const MailInboxScreen({
+    super.key,
+    required this.connection,
+    this.connections = const [],
+  });
 
   final MailConnection connection;
+
+  /// Остальные подключённые ящики пользователя — чтобы показать
+  /// переключатель в шапке. Если пуст или содержит только [connection],
+  /// переключатель скрыт (переключаться не между чем).
+  final List<MailConnection> connections;
 
   @override
   State<MailInboxScreen> createState() => _MailInboxScreenState();
 }
 
 class _MailInboxScreenState extends State<MailInboxScreen> {
+  late MailConnection _connection = widget.connection;
+  late List<MailConnection> _connections = widget.connections.isEmpty
+      ? [widget.connection]
+      : widget.connections;
   List<MailFolder> _folders = [];
   List<MailMessage> _messages = [];
   MailFolder? _selectedFolder;
@@ -64,7 +78,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     setState(() => _isLoadingFolders = true);
     try {
       final folders = await MailRepository.instance.getMailboxes(
-        widget.connection.id,
+        _connection.id,
       );
       if (!mounted) return;
       MailFolder? selected;
@@ -95,12 +109,12 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
       final folder = _selectedFolder;
       if (!fallbackToService && folder != null && folder.id > 0) {
         page = await MailRepository.instance.getMessagesByFolder(
-          connectionId: widget.connection.id,
+          connectionId: _connection.id,
           folderId: folder.id,
         );
       } else {
         page = await MailRepository.instance.getMessagesByService(
-          widget.connection.id,
+          _connection.id,
         );
       }
       if (!mounted) return;
@@ -116,7 +130,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
       if (!fallbackToService && _selectedFolder != null) {
         try {
           final page = await MailRepository.instance.getMessagesByService(
-            widget.connection.id,
+            _connection.id,
           );
           if (!mounted) return;
           setState(() {
@@ -145,13 +159,13 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
       final folder = _selectedFolder;
       if (!_usingServiceFallback && folder != null && folder.id > 0) {
         page = await MailRepository.instance.getMessagesByFolder(
-          connectionId: widget.connection.id,
+          connectionId: _connection.id,
           folderId: folder.id,
           page: _nextPage,
         );
       } else {
         page = await MailRepository.instance.getMessagesByService(
-          widget.connection.id,
+          _connection.id,
           page: _nextPage,
         );
       }
@@ -176,7 +190,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     final sent = await Navigator.of(context).push<bool>(
       CupertinoPageRoute<bool>(
         builder: (context) =>
-            ComposeMailScreen(connection: widget.connection, replyTo: replyTo),
+            ComposeMailScreen(connection: _connection, replyTo: replyTo),
       ),
     );
     if (sent == true) await _loadMessages();
@@ -186,7 +200,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     final changed = await Navigator.of(context).push<bool>(
       CupertinoPageRoute<bool>(
         builder: (context) => MailMessageScreen(
-          connection: widget.connection,
+          connection: _connection,
           messageId: message.id,
           initialMessage: message,
           folders: _folders,
@@ -214,11 +228,11 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     try {
       final updated = message.isRead
           ? await MailRepository.instance.markUnread(
-              connectionId: widget.connection.id,
+              connectionId: _connection.id,
               messageId: message.id,
             )
           : await MailRepository.instance.markRead(
-              connectionId: widget.connection.id,
+              connectionId: _connection.id,
               messageId: message.id,
             );
       if (!mounted || index == -1) return;
@@ -238,7 +252,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     setState(() => _messages.removeAt(index));
     try {
       await MailRepository.instance.deleteMessage(
-        connectionId: widget.connection.id,
+        connectionId: _connection.id,
         messageId: message.id,
       );
       if (!message.isRead) MailUnreadService.instance.refresh();
@@ -249,6 +263,88 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         const SnackBar(content: Text('Не удалось удалить письмо')),
       );
     }
+  }
+
+  void _selectConnection(MailConnection connection) {
+    if (connection.id == _connection.id) return;
+    setState(() {
+      _connection = connection;
+      _folders = [];
+      _messages = [];
+      _selectedFolder = null;
+      _isLoadingFolders = true;
+      _hasMoreMessages = false;
+      _nextPage = 1;
+      _usingServiceFallback = false;
+      _isSearching = false;
+      _searchController.clear();
+      _searchQuery = '';
+    });
+    _loadFolders();
+  }
+
+  Future<void> _showAccountPicker() async {
+    if (_connections.length < 2) return;
+    final picked = await showCupertinoModalPopup<MailConnection>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Почтовые ящики'),
+        actions: [
+          for (final c in _connections)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, c),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (c.id == _connection.id)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 6),
+                      child: Icon(CupertinoIcons.check_mark, size: 18),
+                    ),
+                  Flexible(
+                    child: Text(
+                      '${c.displayName} · ${c.email}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (picked != null) _selectConnection(picked);
+  }
+
+  Future<void> _openManageMailboxes() async {
+    await Navigator.of(context).push<void>(
+      CupertinoPageRoute<void>(
+        builder: (context) => const MailScreen(autoOpenInbox: false),
+      ),
+    );
+    if (!mounted) return;
+    await _refreshConnections();
+  }
+
+  Future<void> _refreshConnections() async {
+    try {
+      final items = await MailScreen.loadConnectionsForCurrentUser();
+      if (!mounted || items.isEmpty) return;
+      final stillSelected = items.where((c) => c.id == _connection.id);
+      final nextConnection = stillSelected.isNotEmpty
+          ? stillSelected.first
+          : items.firstWhere((c) => c.isDefault, orElse: () => items.first);
+      final changed = nextConnection.id != _connection.id;
+      setState(() {
+        _connections = items;
+        _connection = nextConnection;
+      });
+      if (changed) await _loadFolders();
+    } catch (_) {}
   }
 
   @override
@@ -264,16 +360,48 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
       body: CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         navigationBar: CupertinoNavigationBar(
-          middle: Text(
-            widget.connection.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+          middle: _connections.length > 1
+              ? CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  onPressed: _showAccountPicker,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _connection.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 14,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Text(
+                  _connection.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
           backgroundColor: CupertinoColors.systemGroupedBackground,
           border: null,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: _openManageMailboxes,
+                child: const Icon(CupertinoIcons.gear, size: 24),
+              ),
               CupertinoButton(
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
@@ -326,7 +454,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                             child: Text(
-                              widget.connection.email,
+                              _connection.email,
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
@@ -366,8 +494,8 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                     88,
                                   ),
                                   children: [
-                                    if (!widget.connection.isActive ||
-                                        (widget.connection.lastError ?? '')
+                                    if (!_connection.isActive ||
+                                        (_connection.lastError ?? '')
                                             .isNotEmpty)
                                       Container(
                                         margin: const EdgeInsets.only(
@@ -394,7 +522,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: Text(
-                                                widget.connection.lastError ??
+                                                _connection.lastError ??
                                                     'Почтовое подключение неактивно',
                                                 style: const TextStyle(
                                                   fontSize: 13,

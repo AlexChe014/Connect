@@ -224,7 +224,9 @@ class AppNavigationService {
 
     if (!navigator.mounted) return;
     await navigator.push<void>(
-      CupertinoPageRoute<void>(builder: (context) => const MailScreen()),
+      CupertinoPageRoute<void>(
+        builder: (context) => const MailScreen(autoOpenInbox: false),
+      ),
     );
 
     final id = int.tryParse(connectionId);

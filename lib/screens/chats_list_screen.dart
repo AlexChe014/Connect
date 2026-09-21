@@ -232,10 +232,12 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                 onTap: () => _chat.toggleMute(c.id),
               ),
               SwipeAction(
-                icon: CupertinoIcons.delete,
-                label: 'Удалить',
-                color: CupertinoColors.destructiveRed,
-                onTap: () => _confirmDeleteChat(c),
+                icon: c.isFavorite
+                    ? CupertinoIcons.star_slash
+                    : CupertinoIcons.star_fill,
+                label: c.isFavorite ? 'Убрать из избранного' : 'Избранное',
+                color: CupertinoColors.systemYellow,
+                onTap: () => _chat.toggleFavorite(c.id),
               ),
             ],
             child: _ChatRow(
@@ -278,11 +280,6 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
             onPressed: () => Navigator.pop(context, 'mute'),
             child: Text(c.isMuted ? 'Включить звук' : 'Без звука'),
           ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, 'delete'),
-            child: const Text('Удалить'),
-          ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.pop(context),
@@ -298,8 +295,6 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         _chat.toggleFavorite(c.id);
       case 'mute':
         _chat.toggleMute(c.id);
-      case 'delete':
-        _confirmDeleteChat(c);
     }
   }
 
@@ -308,33 +303,6 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     if (!mounted) return;
     if (!success) {
       _showMessage(_chat.lastActionError ?? 'Не удалось изменить закрепление');
-    }
-  }
-
-  Future<void> _confirmDeleteChat(Chat c) async {
-    final ok = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('Удалить чат?'),
-        content: Text('Переписка с «${c.title}» будет удалена безвозвратно.'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final success = await _chat.deleteChat(c.id);
-    if (!mounted) return;
-    if (!success) {
-      _showMessage(_chat.lastActionError ?? 'Не удалось удалить чат');
     }
   }
 

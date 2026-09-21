@@ -13,24 +13,16 @@ import 'mail_inbox_screen.dart';
 import 'mail_provider_picker_screen.dart';
 
 class MailScreen extends StatefulWidget {
-  const MailScreen({super.key, this.showAppBar = true});
+  const MailScreen({super.key, this.showAppBar = true, this.autoOpenInbox = true});
 
   final bool showAppBar;
 
-  @override
-  State<MailScreen> createState() => _MailScreenState();
-}
-
-class _MailScreenState extends State<MailScreen> {
-  List<MailConnection> _connections = [];
-  bool _isLoading = true;
-  int? _userId;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadConnections();
-  }
+  /// Если есть хотя бы один подключённый ящик, сразу открывает его письма
+  /// вместо списка ящиков — список нужен только чтобы добавить/отредактировать
+  /// подключение, поэтому его пропускают, когда выбирать не из чего.
+  /// `false` используется, когда экран открыт явно для управления ящиками
+  /// (например, из [MailInboxScreen]).
+  final bool autoOpenInbox;
 
   static int? _parseUserId(Map<String, dynamic>? json) {
     if (json == null) return null;
@@ -50,7 +42,7 @@ class _MailScreenState extends State<MailScreen> {
     return null;
   }
 
-  Future<int?> _resolveUserId() async {
+  static Future<int?> resolveUserId() async {
     try {
       final profile = await ProfileRepository.instance.getProfile();
       final profileId = _parseUserId(profile);
@@ -60,10 +52,31 @@ class _MailScreenState extends State<MailScreen> {
     return _parseUserId(await AuthService.instance.getStoredUser());
   }
 
+  static Future<List<MailConnection>> loadConnectionsForCurrentUser() async {
+    final userId = await resolveUserId();
+    if (userId == null) return const [];
+    return MailRepository.instance.getConnectionsByUser(userId);
+  }
+
+  @override
+  State<MailScreen> createState() => _MailScreenState();
+}
+
+class _MailScreenState extends State<MailScreen> {
+  List<MailConnection> _connections = [];
+  bool _isLoading = true;
+  int? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConnections();
+  }
+
   Future<void> _loadConnections() async {
     setState(() => _isLoading = true);
     try {
-      final userId = await _resolveUserId();
+      final userId = await MailScreen.resolveUserId();
       _userId = userId;
       if (userId == null) {
         if (!mounted) return;
@@ -75,6 +88,19 @@ class _MailScreenState extends State<MailScreen> {
       }
       final items = await MailRepository.instance.getConnectionsByUser(userId);
       if (!mounted) return;
+      if (widget.autoOpenInbox && items.isNotEmpty) {
+        final selected = items.firstWhere(
+          (c) => c.isDefault,
+          orElse: () => items.first,
+        );
+        Navigator.of(context).pushReplacement<void, void>(
+          CupertinoPageRoute<void>(
+            builder: (context) =>
+                MailInboxScreen(connection: selected, connections: items),
+          ),
+        );
+        return;
+      }
       setState(() {
         _connections = items;
         _isLoading = false;
@@ -100,7 +126,10 @@ class _MailScreenState extends State<MailScreen> {
   void _openInbox(MailConnection connection) {
     Navigator.of(context).push<void>(
       CupertinoPageRoute<void>(
-        builder: (context) => MailInboxScreen(connection: connection),
+        builder: (context) => MailInboxScreen(
+          connection: connection,
+          connections: _connections,
+        ),
       ),
     );
   }
