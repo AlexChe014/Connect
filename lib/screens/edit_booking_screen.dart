@@ -4,14 +4,38 @@ import '../models/bookings/booking_detail.dart';
 import '../models/bookings/update_booking_request.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
+import '../utils/booking_time_utils.dart';
 import '../widgets/bookable_object_preview.dart';
 import '../widgets/selected_staff_field.dart';
 
+const _weekdayNames = [
+  'Понедельник',
+  'Вторник',
+  'Среда',
+  'Четверг',
+  'Пятница',
+  'Суббота',
+  'Воскресенье',
+];
+
 /// Редактирование брони (`POST /booking/update/{id}`).
+///
+/// Бэкенд на данный момент принимает изменение только темы, описания,
+/// ссылки и участников — дата, время и дни повторения не редактируются,
+/// поэтому здесь они только показаны для контекста, недоступны для правки.
 class EditBookingScreen extends StatefulWidget {
-  const EditBookingScreen({super.key, required this.detail});
+  const EditBookingScreen({
+    super.key,
+    required this.detail,
+    this.updateAll = false,
+  });
 
   final BookingDetail detail;
+
+  /// Область правки для повторяющейся брони: обновить всю серию
+  /// (`update_all=1`) — выбирается пользователем до открытия этого экрана,
+  /// см. `booking_detail_sheet.dart`.
+  final bool updateAll;
 
   @override
   State<EditBookingScreen> createState() => _EditBookingScreenState();
@@ -22,7 +46,6 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   late final TextEditingController _descriptionController;
   late final TextEditingController _linkController;
   late List<StaffUser> _participants;
-  bool _updateAll = false;
   bool _isSubmitting = false;
   String? _themeError;
 
@@ -34,7 +57,6 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
     _descriptionController = TextEditingController(text: d.description ?? '');
     _linkController = TextEditingController(text: d.link ?? '');
     _participants = List<StaffUser>.from(d.participants);
-    _updateAll = d.isRecurring;
   }
 
   @override
@@ -66,7 +88,9 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
           description: _descriptionController.text.trim(),
           link: _linkController.text.trim(),
           userIds: _participantIds,
-          updateAll: widget.detail.isRecurring && _updateAll ? true : null,
+          updateAll: widget.detail.isRecurring && widget.updateAll
+              ? true
+              : null,
         ),
       );
       if (!mounted) return;
@@ -98,6 +122,9 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   Widget build(BuildContext context) {
     final detail = widget.detail;
     final object = detail.object;
+    final disabledStyle = TextStyle(
+      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+    );
 
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
@@ -206,18 +233,71 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
                   ),
                 ),
               ),
-              if (detail.isRecurring) ...[
-                const SizedBox(height: 20),
-                CupertinoFormSection.insetGrouped(
-                  children: [
+              const SizedBox(height: 20),
+              CupertinoFormSection.insetGrouped(
+                header: const Text('ДАТА И ВРЕМЯ'),
+                children: [
+                  CupertinoListTile(
+                    title: const Text('День'),
+                    additionalInfo: Text(
+                      BookingTimeUtils.formatDateShort(detail.datetimeStart),
+                      style: disabledStyle,
+                    ),
+                  ),
+                  CupertinoListTile(
+                    title: const Text('Начало'),
+                    additionalInfo: Text(
+                      BookingTimeUtils.formatHm(detail.datetimeStart),
+                      style: disabledStyle,
+                    ),
+                  ),
+                  CupertinoListTile(
+                    title: const Text('Окончание'),
+                    additionalInfo: Text(
+                      BookingTimeUtils.formatHm(detail.datetimeEnd),
+                      style: disabledStyle,
+                    ),
+                  ),
+                  if (detail.isRecurring &&
+                      detail.recurring!.daysOfWeek.isNotEmpty)
                     CupertinoListTile(
-                      title: const Text('Изменить всю серию повторений'),
-                      trailing: CupertinoSwitch(
-                        value: _updateAll,
-                        onChanged: (v) => setState(() => _updateAll = v),
+                      title: const Text('Дни недели'),
+                      additionalInfo: Text(
+                        detail.recurring!.daysOfWeek
+                            .map((d) => _weekdayNames[(d - 1).clamp(0, 6)])
+                            .join(', '),
+                        style: disabledStyle,
                       ),
                     ),
-                  ],
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                child: Text(
+                  'Дату, время и дни повторения пока нельзя изменить.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(
+                      context,
+                    ),
+                  ),
+                ),
+              ),
+              if (detail.isRecurring) ...[
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    widget.updateAll
+                        ? 'Изменения будут применены ко всей серии повторений.'
+                        : 'Изменения будут применены только к этой встрече.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ],
