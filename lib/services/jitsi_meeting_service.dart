@@ -58,6 +58,11 @@ class JitsiMeetingService {
     _onLeave = onLeave;
     _leaveNotified = false;
 
+    // Скрываем кнопку "на главный экран" сразу, до запроса разрешений —
+    // иначе она успевает мелькнуть, пока ждём ответ CallPermissions, а после
+    // hangUp() остаётся включена под нативным UI Jitsi и сразу проявляется.
+    HomeShortcutButton.suppressed.value = true;
+
     try {
       final granted = await CallPermissions.ensureMediaOnly();
       if (!granted) {
@@ -66,11 +71,6 @@ class JitsiMeetingService {
           'Нужен доступ к камере и микрофону для видеоконференции',
         );
       }
-
-      // Скрываем кнопку "на главный экран" на всё время звонка, а не только
-      // на экране "Звоним…" — иначе после hangUp() она уже включена под
-      // нативным UI Jitsi и сразу проявляется.
-      HomeShortcutButton.suppressed.value = true;
 
       final options = JitsiMeetConferenceOptions(
         serverURL: server,

@@ -42,6 +42,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   Timer? _timeoutTimer;
   String? _statusOverride;
   bool _resolved = false;
+  OutgoingCallOutcome? _outcome;
 
   @override
   void initState() {
@@ -79,7 +80,12 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   @override
   void dispose() {
-    HomeShortcutButton.suppressed.value = false;
+    // Если дозвонились — звонок продолжается в Jitsi, кнопку не возвращаем:
+    // JitsiMeetingService сам держит её скрытой до конца разговора. Иначе
+    // между закрытием этого экрана и стартом Jitsi она успела бы мелькнуть.
+    if (_outcome != OutgoingCallOutcome.proceed) {
+      HomeShortcutButton.suppressed.value = false;
+    }
     _timeoutTimer?.cancel();
     ChatCallService.instance.removeListener(_onCallServiceChanged);
     _pulseController.dispose();
@@ -122,6 +128,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   void _resolve(OutgoingCallOutcome outcome) {
     if (_resolved || !mounted) return;
     _resolved = true;
+    _outcome = outcome;
     _timeoutTimer?.cancel();
     Navigator.of(context).pop(outcome);
   }
