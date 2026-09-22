@@ -83,6 +83,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   final Map<String, List<String>> _localReactions = {};
   final Map<String, GlobalKey> _messageKeys = {};
   bool _sendingAttachment = false;
+  bool _sendingText = false;
 
   void _toggleReaction(ChatMessage m, String emoji) {
     setState(() {
@@ -675,19 +676,26 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 
   Future<void> _send() async {
-    final t = _textCtrl.text;
-    if (t.trim().isEmpty) return;
     if (_editingMessage != null) {
       await _saveEdit();
       return;
     }
+    if (_sendingText) return;
+    final t = _textCtrl.text;
+    if (t.trim().isEmpty) return;
+    final replyTo = _replyingTo;
+    _sendingText = true;
+    _textCtrl.clear();
+    if (mounted) setState(() => _replyingTo = null);
     try {
-      await _service.sendText(widget.chat.id, t, replyTo: _replyingTo);
-      _textCtrl.clear();
-      if (mounted) setState(() => _replyingTo = null);
+      await _service.sendText(widget.chat.id, t, replyTo: replyTo);
     } catch (e) {
-      if (!mounted) return;
-      _showSnack('Не удалось отправить: $e');
+      if (mounted) {
+        _textCtrl.text = t;
+        _showSnack('Не удалось отправить: $e');
+      }
+    } finally {
+      _sendingText = false;
     }
   }
 
