@@ -124,7 +124,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       NotificationsRepository.instance.markAsRead(item.id).catchError((_) {});
     }
 
-    await AppNavigationService.openFromData({'type': item.type, ...item.data});
+    await AppNavigationService.openFromData(item.toNavigationData());
   }
 
   void _openSettings() {

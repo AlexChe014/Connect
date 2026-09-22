@@ -80,10 +80,10 @@ abstract final class NotificationTopics {
 
   static const meetingInvite = NotificationTopic(
     id: 'meeting_invite',
-    type: 'meeting_invite',
+    type: 'booking_created',
     title: 'Приглашение на встречу',
     description: 'Вас добавили участником брони',
-    dataFields: ['booking_id'],
+    dataFields: ['booking_id (во вложенном data; дублируется как id брони)'],
     icon: CupertinoIcons.calendar_badge_plus,
     color: CupertinoColors.systemOrange,
   );
@@ -106,9 +106,24 @@ abstract final class NotificationTopics {
     meetingReminder,
   ];
 
+  /// Типы, по тапу на которые открывается карточка брони.
+  /// `booking_created` — фактический тип из БД бэкенда;
+  /// `meeting_invite` / `meeting_reminder` оставлены как прежние имена клиента.
+  static const bookingOpenTypes = <String>{
+    'booking_created',
+    'meeting_invite',
+    'meeting_reminder',
+  };
+
+  static bool isBookingType(String? type) =>
+      type != null && bookingOpenTypes.contains(type);
+
   /// Категория по значению `data.type` push/ленты уведомлений — `null`,
   /// если тип не входит в каталог (например `chat_message`).
   static NotificationTopic? byType(String type) {
+    if (type == 'meeting_invite' || type == 'booking_created') {
+      return meetingInvite;
+    }
     for (final topic in all) {
       if (topic.type == type) return topic;
     }

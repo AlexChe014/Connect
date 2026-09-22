@@ -87,9 +87,13 @@ class JitsiMeetingService {
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
-          if (endWhenLeave) 'disableProfile': true,
-          // 1:1 — микрофон/камера/шара экрана + завершение
-          // (настройки/участники/чат по-прежнему скрыты).
+          // Вкладка профиля — не "устройства"/"язык", прячем как вторичную
+          // настройку и в 1:1, и в групповом звонке.
+          'disableProfile': true,
+          // 1:1 — только завершение (настройки/участники/чат скрыты).
+          // Групповой звонок — базовый набор кнопок Jitsi; панель участников
+          // видна всем, но управление ими (kick-out и т.п.) Jitsi показывает
+          // только модератору автоматически.
           'toolbarButtons': endWhenLeave
               ? const ['microphone', 'camera', 'desktop', 'hangup']
               : const [
@@ -98,9 +102,15 @@ class JitsiMeetingService {
                   'desktop',
                   'chat',
                   'raisehand',
+                  'reactions',
                   'tileview',
                   'fullscreen',
+                  'videoquality',
+                  'participants-pane',
                   'settings',
+                  'stats',
+                  'shortcuts',
+                  'select-background',
                   'hangup',
                 ],
         },
@@ -120,7 +130,9 @@ class JitsiMeetingService {
           'toolbox.alwaysVisible': true,
           'calendar.enabled': false,
           'help.enabled': false,
-          'kick-out.enabled': false,
+          // Управление участниками (кикнуть и т.п.) — доступно только
+          // модератору, Jitsi сам скрывает эти действия от остальных.
+          'kick-out.enabled': !endWhenLeave,
           'lobby-mode.enabled': false,
           'meeting-name.enabled': false,
           'meeting-password.enabled': false,
