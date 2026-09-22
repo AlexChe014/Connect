@@ -18,7 +18,6 @@ import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/menu_button.dart';
 import '../widgets/news_people_sheet.dart';
-import '../widgets/news_reaction_button.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
 
@@ -38,7 +37,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   bool _isLoadingMore = false;
   String? _nextPageUrl;
   final ScrollController _scrollController = ScrollController();
-  final Set<String> _likeInFlight = <String>{};
   final Set<String> _viewInFlight = <String>{};
 
   /// Id новостей, которые сейчас полностью видны (чтобы отметить просмотр
@@ -208,56 +206,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     });
   }
 
-  Future<void> _setReaction(NewsItem item, String? emoji) async {
-    final id = item.id;
-    if (id.isEmpty) return;
-    if (_likeInFlight.contains(id)) return;
-
-    setState(() => _likeInFlight.add(id));
-    try {
-      if (emoji == null) {
-        final count = await NewsRepository.instance.removeReaction(id);
-        if (!mounted) return;
-        _updateItem(
-          id,
-          (n) => n.copyWith(
-            clearReaction: true,
-            isLiked: false,
-            likesCount: count ?? (n.likesCount - 1).clamp(0, 1 << 30),
-          ),
-        );
-      } else {
-        final updated = await NewsRepository.instance.react(id, emoji);
-        if (!mounted) return;
-        _updateItem(
-          id,
-          (n) => n.copyWith(
-            myReaction: emoji,
-            isLiked: true,
-            likesCount: updated.likesCount,
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-      _showCupertinoSnack(
-        emoji == null
-            ? 'Не удалось убрать реакцию'
-            : 'Не удалось поставить реакцию',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _likeInFlight.remove(id));
-      }
-    }
-  }
-
-  void _showCupertinoSnack(String message) {
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
-  }
-
   Future<void> _addView(NewsItem item) async {
     final id = item.id;
     if (id.isEmpty) return;
@@ -334,8 +282,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
             child: _NewsCard(
               news: news,
               dateLabel: _formatDate(news.date),
-              isLikeInFlight: _likeInFlight.contains(news.id),
-              onReact: (emoji) => _setReaction(news, emoji),
               onOpen: () => _openDetail(news),
               onShowLikers: () => NewsPeopleSheet.show(
                 context,
@@ -391,20 +337,16 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 class _NewsCard extends StatelessWidget {
   final NewsItem news;
   final String dateLabel;
-  final Future<void> Function(String? emoji) onReact;
   final VoidCallback onOpen;
   final VoidCallback onShowLikers;
   final VoidCallback onShowViewers;
-  final bool isLikeInFlight;
 
   const _NewsCard({
     required this.news,
     required this.dateLabel,
-    required this.onReact,
     required this.onOpen,
     required this.onShowLikers,
     required this.onShowViewers,
-    required this.isLikeInFlight,
   });
 
   @override
@@ -542,12 +484,12 @@ class _NewsCard extends StatelessWidget {
                     onTap: onOpen,
                   ),
                   const SizedBox(width: 16),
-                  NewsReactionButton(
-                    emoji: news.myReaction,
-                    count: news.likesCount,
-                    isLoading: isLikeInFlight,
-                    onSelect: onReact,
-                    onCountTap: onShowLikers,
+                  _StatChip(
+                    icon: news.isLiked
+                        ? CupertinoIcons.heart_fill
+                        : CupertinoIcons.heart,
+                    label: '${news.likesCount}',
+                    onTap: onShowLikers,
                   ),
                 ],
               ),
