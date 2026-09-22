@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connect/models/chat.dart';
+import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
@@ -95,16 +96,22 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
     }
 
     setState(() => _creating = true);
-    final c = await ChatService.instance.createGroup(
-      title: name,
-      description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-      userIds: _selected.toList(),
-    );
+    Chat? c;
+    String? errorMessage;
+    try {
+      c = await ChatService.instance.createGroup(
+        title: name,
+        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+        userIds: _selected.toList(),
+      );
+    } catch (e) {
+      errorMessage = e is ApiException ? e.message : 'Не удалось создать группу';
+    }
     if (!mounted) return;
     setState(() => _creating = false);
 
     if (c == null) {
-      _showMessage('Не удалось создать группу');
+      _showMessage(errorMessage ?? 'Не удалось создать группу');
       return;
     }
     Navigator.of(context).pop<Chat>(c);

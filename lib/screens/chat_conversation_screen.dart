@@ -398,18 +398,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       c.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     if (c.isGroup && c.memberNames.isNotEmpty)
                       Text(
                         '${c.memberNames.length} участников',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: CupertinoColors.secondaryLabel,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                         ),
                       ),
                   ],
@@ -802,12 +804,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         }
       }
     } catch (e) {
+      debugPrint('attach: pick failed: $e');
       if (!mounted) return;
       _showSnack('Не удалось выбрать файл');
       return;
     }
 
-    if (bytes == null || bytes.isEmpty) return;
+    if (bytes == null || bytes.isEmpty) {
+      debugPrint('attach: picked file has no bytes (choice=$choice)');
+      if (!mounted) return;
+      _showSnack('Не удалось выбрать файл');
+      return;
+    }
 
     setState(() => _sendingAttachment = true);
     try {
@@ -819,8 +827,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       );
       if (_replyingTo != null && mounted) setState(() => _replyingTo = null);
     } catch (e) {
+      debugPrint('attach: send failed: $e');
       if (!mounted) return;
-      _showSnack('Не удалось отправить файл');
+      _showSnack(
+        e is ApiException ? e.message : 'Не удалось отправить файл',
+      );
     } finally {
       if (mounted) setState(() => _sendingAttachment = false);
     }

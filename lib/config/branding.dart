@@ -13,7 +13,7 @@ abstract final class BrandingAssets {
   static const String appIconPng = 'assets/branding/app_icon.png';
 
   /// Запасной логотип, пока сеть не отдала `connect.light_logo` из настроек.
-  static const String loginLogoPng = 'assets/branding/login_logo.jpg';
+  static const String loginLogoPng = 'assets/branding/login_logo.png';
 }
 
 /// Главный логотип компании: `GET /settings/get?module=connect` → `light_logo`,

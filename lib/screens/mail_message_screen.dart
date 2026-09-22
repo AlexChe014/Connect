@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart'
     show ScaffoldMessenger, SnackBar;
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
@@ -148,7 +150,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       title: 'Переместить в папку',
       options: widget.folders,
       current: widget.folders.first,
-      labelOf: (f) => f.name,
+      labelOf: (f) => f.displayName,
     );
     if (folder == null || !mounted) return;
 
@@ -160,7 +162,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('Письмо перемещено в «${folder.name}»')),
+        SnackBar(content: Text('Письмо перемещено в «${folder.displayName}»')),
       );
       Navigator.of(context).pop(true);
     } catch (_) {
@@ -178,13 +180,17 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         attachmentId: attachment.id,
         filename: attachment.filename,
       );
-      final dir = Directory.systemTemp;
-      final file = File('${dir.path}/${attachment.filename}');
-      await file.writeAsBytes(bytes);
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(
-        context,
-      )?.showSnackBar(SnackBar(content: Text('Сохранено: ${file.path}')));
+      if (kIsWeb) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile.fromData(bytes, name: attachment.filename)],
+          ),
+        );
+        return;
+      }
+      final path = '${Directory.systemTemp.path}/${attachment.filename}';
+      await File(path).writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(

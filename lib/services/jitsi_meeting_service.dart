@@ -95,7 +95,7 @@ class JitsiMeetingService {
           // видна всем, но управление ими (kick-out и т.п.) Jitsi показывает
           // только модератору автоматически.
           'toolbarButtons': endWhenLeave
-              ? const ['hangup']
+              ? const ['microphone', 'camera', 'desktop', 'hangup']
               : const [
                   'microphone',
                   'camera',
@@ -148,7 +148,7 @@ class JitsiMeetingService {
           'settings.enabled': !endWhenLeave,
           'chat.enabled': !endWhenLeave,
           'overflow-menu.enabled': !endWhenLeave,
-          'video-share.enabled': !endWhenLeave,
+          'video-share.enabled': true,
           'filmstrip.enabled': !endWhenLeave,
         },
       );

@@ -79,7 +79,7 @@ class MailFoldersScreen extends StatelessWidget {
                           ),
                         ),
                         title: Text(
-                          folder.name,
+                          folder.displayName,
                           style: isNested
                               ? TextStyle(
                                   fontSize: 15,
