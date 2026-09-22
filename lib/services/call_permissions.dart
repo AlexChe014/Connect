@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:connect/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -95,11 +96,32 @@ class CallPermissions {
   /// Перед входом в Jitsi после Accept (камера + микрофон).
   static Future<bool> ensureMediaOnly() async {
     if (kIsWeb) return true;
+    await _waitForForegroundIfNeeded();
     final statuses = await [
       Permission.camera,
       Permission.microphone,
     ].request();
     return (statuses[Permission.camera]?.isGranted ?? false) &&
         (statuses[Permission.microphone]?.isGranted ?? false);
+  }
+
+  /// iOS не показывает системный алерт запроса камеры/микрофона, пока
+  /// приложение в фоне — если это первый Accept звонка (разрешение ещё не
+  /// выдано) сразу после подъёма CallKit, .request() может тихо не
+  /// показать диалог, пока сцена ещё поднимается на передний план.
+  /// Пропускаем, если разрешения уже выданы — тогда .request() и так не
+  /// показывает UI.
+  static Future<void> _waitForForegroundIfNeeded() async {
+    if (!Platform.isIOS) return;
+    final cameraGranted = await Permission.camera.status.isGranted;
+    final microphoneGranted = await Permission.microphone.status.isGranted;
+    if (cameraGranted && microphoneGranted) return;
+
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (WidgetsBinding.instance.lifecycleState !=
+            AppLifecycleState.resumed &&
+        DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
 }

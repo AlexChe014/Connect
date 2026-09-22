@@ -18,6 +18,24 @@ class HomeShortcutButton extends StatelessWidget {
   /// (например, экран «Звоним…» — `popUntil` до корня сбрасывает звонок).
   static final ValueNotifier<bool> suppressed = ValueNotifier<bool>(false);
 
+  /// Держит кнопку скрытой после звонка, пока пользователь не совершит
+  /// следующую реальную навигацию (push/pop). Глубина стека сразу после
+  /// разговора обычно не меняется (звонили из того же экрана), поэтому
+  /// простое снятие [suppressed] тут же возвращало кнопку — она выглядела
+  /// как "выскочившая после звонка".
+  static void suppressUntilNextNavigation() {
+    suppressed.value = true;
+    final depthAtCallEnd = RootStackObserver.instance.depth.value;
+    void listener() {
+      if (RootStackObserver.instance.depth.value != depthAtCallEnd) {
+        RootStackObserver.instance.depth.removeListener(listener);
+        suppressed.value = false;
+      }
+    }
+
+    RootStackObserver.instance.depth.addListener(listener);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(

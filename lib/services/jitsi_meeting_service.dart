@@ -223,7 +223,10 @@ class JitsiMeetingService {
   void _notifyLeft() {
     if (_leaveNotified) return;
     _leaveNotified = true;
-    HomeShortcutButton.suppressed.value = false;
+    // Не снимаем скрытие сразу: если звонили из того же экрана, глубина
+    // стека не изменилась, и кнопка тут же "выскочила" бы после звонка.
+    // Держим её скрытой до следующей настоящей навигации.
+    HomeShortcutButton.suppressUntilNextNavigation();
     final callId = _activeCallId;
     final cb = _onLeave;
     _activeCallId = null;

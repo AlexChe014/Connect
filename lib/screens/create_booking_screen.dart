@@ -12,20 +12,26 @@ import '../widgets/bookable_object_preview.dart';
 import '../widgets/booking_pickers.dart';
 import '../widgets/selected_staff_field.dart';
 
-/// Форма создания брони по выбранному объекту.
+/// Форма создания брони: по выбранному объекту, либо, если [object] не
+/// задан, встречи без объекта (`model_type`/`model_id` — см.
+/// [CreateBookingRequest.meetingModelType]).
 class CreateBookingScreen extends StatefulWidget {
   const CreateBookingScreen({
     super.key,
-    required this.object,
+    this.object,
     required this.modelType,
+    required this.modelId,
     required this.initialStart,
     required this.initialEnd,
   });
 
-  final BookableObject object;
+  final BookableObject? object;
   final int modelType;
+  final int modelId;
   final DateTime initialStart;
   final DateTime initialEnd;
+
+  bool get isMeeting => object == null;
 
   @override
   State<CreateBookingScreen> createState() => _CreateBookingScreenState();
@@ -57,7 +63,14 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
   void initState() {
     super.initState();
     _initDateTimeFromInitial();
-    _loadAdditions();
+    if (widget.isMeeting) {
+      // Дополнения (кейтеринг, оборудование и т.п.) привязаны к
+      // бронированию физического объекта — для встречи без объекта
+      // их не показываем и не загружаем.
+      _additionsLoading = false;
+    } else {
+      _loadAdditions();
+    }
   }
 
   void _initDateTimeFromInitial() {
@@ -192,7 +205,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
         CreateBookingRequest(
           theme: theme,
           modelType: widget.modelType,
-          modelId: widget.object.id,
+          modelId: widget.modelId,
           datetimeStartSeconds: _startDateTime.millisecondsSinceEpoch ~/ 1000,
           datetimeEndSeconds: _endDateTime.millisecondsSinceEpoch ~/ 1000,
           description: _descriptionController.text.trim(),
@@ -271,7 +284,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       navigationBar: CupertinoNavigationBar(
-        middle: const Text('Новая бронь'),
+        middle: Text(widget.isMeeting ? 'Новая встреча' : 'Новая бронь'),
         backgroundColor: CupertinoColors.systemGroupedBackground,
         border: null,
         leading: CupertinoButton(
@@ -286,9 +299,9 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
           onPressed: (_isSubmitting || rangeError != null) ? null : _submit,
           child: _isSubmitting
               ? const CupertinoActivityIndicator()
-              : const Text(
-                  'Забронировать',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+              : Text(
+                  widget.isMeeting ? 'Создать' : 'Забронировать',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
         ),
       ),
@@ -307,19 +320,21 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
           child: ListView(
             padding: const EdgeInsets.only(top: 12, bottom: 32),
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.secondarySystemGroupedBackground
-                        .resolveFrom(context),
-                    borderRadius: BorderRadius.circular(12),
+              if (widget.object != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.secondarySystemGroupedBackground
+                          .resolveFrom(context),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(14),
+                    child: BookableObjectPreview(object: widget.object!),
                   ),
-                  padding: const EdgeInsets.all(14),
-                  child: BookableObjectPreview(object: widget.object),
                 ),
-              ),
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
+              ],
               CupertinoFormSection.insetGrouped(
                 header: const Text('О БРОНИ'),
                 children: [
@@ -530,50 +545,51 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                   ),
                 ),
               const SizedBox(height: 20),
-              if (_additionsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: CupertinoActivityIndicator()),
-                )
-              else if (_additionsError != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    _additionsError!,
-                    style: const TextStyle(
-                      color: CupertinoColors.systemRed,
-                      fontSize: 13,
-                    ),
-                  ),
-                )
-              else if (_additions.isNotEmpty)
-                CupertinoFormSection.insetGrouped(
-                  header: const Text('ДОПОЛНЕНИЯ'),
-                  children: _additions.map((a) {
-                    final qty = _additionQuantities[a.id] ?? 0;
-                    return CupertinoListTile(
-                      title: Text(a.name),
-                      subtitle: (a.description ?? '').isNotEmpty
-                          ? Text(a.description!)
-                          : null,
-                      additionalInfo: _AdditionStepper(
-                        quantity: qty,
-                        onDecrement: qty > 0
-                            ? () => setState(() {
-                                if (qty <= 1) {
-                                  _additionQuantities.remove(a.id);
-                                } else {
-                                  _additionQuantities[a.id] = qty - 1;
-                                }
-                              })
-                            : null,
-                        onIncrement: () => setState(() {
-                          _additionQuantities[a.id] = qty + 1;
-                        }),
+              if (!widget.isMeeting)
+                if (_additionsLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CupertinoActivityIndicator()),
+                  )
+                else if (_additionsError != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Text(
+                      _additionsError!,
+                      style: const TextStyle(
+                        color: CupertinoColors.systemRed,
+                        fontSize: 13,
                       ),
-                    );
-                  }).toList(),
-                ),
+                    ),
+                  )
+                else if (_additions.isNotEmpty)
+                  CupertinoFormSection.insetGrouped(
+                    header: const Text('ДОПОЛНЕНИЯ'),
+                    children: _additions.map((a) {
+                      final qty = _additionQuantities[a.id] ?? 0;
+                      return CupertinoListTile(
+                        title: Text(a.name),
+                        subtitle: (a.description ?? '').isNotEmpty
+                            ? Text(a.description!)
+                            : null,
+                        additionalInfo: _AdditionStepper(
+                          quantity: qty,
+                          onDecrement: qty > 0
+                              ? () => setState(() {
+                                  if (qty <= 1) {
+                                    _additionQuantities.remove(a.id);
+                                  } else {
+                                    _additionQuantities[a.id] = qty - 1;
+                                  }
+                                })
+                              : null,
+                          onIncrement: () => setState(() {
+                            _additionQuantities[a.id] = qty + 1;
+                          }),
+                        ),
+                      );
+                    }).toList(),
+                  ),
             ],
           ),
         ),

@@ -9,6 +9,7 @@ import 'package:connect/models/chat_message.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/services/chat_draft_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
@@ -77,6 +78,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   Timer? _liveRefresh;
+  Timer? _draftSaveTimer;
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
@@ -116,6 +118,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         ),
       );
     });
+    _textCtrl.addListener(_onDraftTextChanged);
+    unawaited(_restoreDraft());
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await ChatDraftService.instance.getDraft(widget.chat.id);
+    if (!mounted || draft == null || draft.isEmpty) return;
+    if (_editingMessage != null || _textCtrl.text.isNotEmpty) return;
+    setState(() {
+      _textCtrl.text = draft;
+      _textCtrl.selection = TextSelection.collapsed(offset: draft.length);
+    });
+  }
+
+  void _onDraftTextChanged() {
+    if (_editingMessage != null) return;
+    _draftSaveTimer?.cancel();
+    final text = _textCtrl.text;
+    _draftSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(ChatDraftService.instance.setDraft(widget.chat.id, text));
+    });
   }
 
   @override
@@ -126,6 +149,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _callService.removeListener(_onCallState);
     _callService.unwatchChat(widget.chat.id);
     _service.clearActiveChat(widget.chat.id);
+    _draftSaveTimer?.cancel();
+    if (_editingMessage == null) {
+      unawaited(
+        ChatDraftService.instance.setDraft(widget.chat.id, _textCtrl.text),
+      );
+    }
+    _textCtrl.removeListener(_onDraftTextChanged);
     _textCtrl.dispose();
     _searchCtrl.dispose();
     _focus.dispose();
