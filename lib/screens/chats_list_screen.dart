@@ -328,7 +328,9 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                   largeTitle: const Text('Чаты'),
                   leading: const MenuButton(),
                   backgroundColor: CupertinoColors.systemGroupedBackground
-                      .withValues(alpha: 0.9),
+                      .resolveFrom(context)
+                      .withValues(alpha: 1.0),
+                  automaticBackgroundVisibility: false,
                   border: null,
                   trailing: CupertinoButton(
                     padding: EdgeInsets.zero,
