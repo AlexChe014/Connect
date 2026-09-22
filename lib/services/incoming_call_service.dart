@@ -244,7 +244,16 @@ class IncomingCallService {
         unawaited(ChatCallRepository.instance.acceptCall(callId));
       }
 
-      await FlutterCallkitIncoming.setCallConnected(callId);
+      if (Platform.isAndroid) {
+        // Android ConnectionService должен явно узнать, что звонок принят.
+        // На iOS этот же вызов (setCallConnected -> connectedCall) заново
+        // отправляет CXAnswerCallAction через CXCallController — CallKit уже
+        // считает входящий звонок connected сразу после фулфилла исходного
+        // action в onAccept (AppDelegate), а повторный answer иногда
+        // отклоняется системой (Code=6, maximumCallGroupsReached) и рвёт
+        // звонок целиком — именно так выглядел баг "не подключается само".
+        await FlutterCallkitIncoming.setCallConnected(callId);
+      }
 
       if (room == null || room.isEmpty) {
         AppLogger.e('Accept call: room missing', name: 'callkit');
