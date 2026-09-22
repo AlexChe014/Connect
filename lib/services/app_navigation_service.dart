@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:connect/config/notification_topics.dart';
 import 'package:connect/models/documents/document_service.dart';
 import 'package:connect/models/mail/mail_connection.dart';
 import 'package:connect/repositories/chat_repository.dart';
@@ -349,13 +350,44 @@ class AppNavigationService {
             messageId: data['message_id']?.toString(),
           );
         }
+      case 'booking_created':
       case 'meeting_invite':
       case 'meeting_reminder':
-        final bookingId = resolveDataField(data, ['booking_id']);
+        final bookingId = resolveBookingId(data);
         if (bookingId != null) {
           await openBookingById(bookingId);
         }
+      default:
+        if (data['module']?.toString() == 'calendar') {
+          final bookingId = resolveBookingId(data);
+          if (bookingId != null) {
+            await openBookingById(bookingId);
+          }
+        }
     }
+  }
+
+  /// Id брони: `booking_id` наверху или во вложенном `data`, иначе `id`
+  /// только во вложенном объекте. Верхний `id` — id уведомления, не брони.
+  static String? resolveBookingId(Map<String, dynamic> data) {
+    final bookingId = data['booking_id'];
+    if (bookingId != null && bookingId.toString().isNotEmpty) {
+      return bookingId.toString();
+    }
+
+    final nested = _nestedDataMap(data);
+    if (nested == null) return null;
+
+    final nestedBookingId = nested['booking_id'];
+    if (nestedBookingId != null && nestedBookingId.toString().isNotEmpty) {
+      return nestedBookingId.toString();
+    }
+
+    final nestedId = nested['id'];
+    if (nestedId != null && nestedId.toString().isNotEmpty) {
+      return nestedId.toString();
+    }
+    return null;
   }
 
   /// Достаёт первое непустое значение из [keys] в data-payload: сначала на
@@ -371,19 +403,7 @@ class AppNavigationService {
       }
     }
 
-    final nested = data['data'];
-    Map<dynamic, dynamic>? nestedMap;
-    if (nested is String && nested.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(nested);
-        if (decoded is Map) nestedMap = decoded;
-      } catch (_) {
-        // повреждённый/неожиданный payload — просто не находим значение
-      }
-    } else if (nested is Map) {
-      nestedMap = nested;
-    }
-
+    final nestedMap = _nestedDataMap(data);
     if (nestedMap != null) {
       for (final key in keys) {
         final value = nestedMap[key];
@@ -393,6 +413,20 @@ class AppNavigationService {
       }
     }
 
+    return null;
+  }
+
+  static Map<dynamic, dynamic>? _nestedDataMap(Map<String, dynamic> data) {
+    final nested = data['data'];
+    if (nested is String && nested.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(nested);
+        if (decoded is Map) return decoded;
+      } catch (_) {
+        return null;
+      }
+    }
+    if (nested is Map) return nested;
     return null;
   }
 
