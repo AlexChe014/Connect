@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart'
-    show ScaffoldMessenger, SnackBar;
+import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -11,6 +10,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/booking_pickers.dart';
@@ -54,7 +54,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         messageId: widget.messageId,
       );
       final initial = widget.initialMessage;
-      final resolved = !message.hasBody && initial != null && initial.hasBody
+      var resolved = !message.hasBody && initial != null && initial.hasBody
           ? MailMessage(
               id: message.id,
               subject: message.subject != '(без темы)'
@@ -72,6 +72,36 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                   : initial.attachments,
             )
           : message;
+
+      // Открытие письма — это фактическое прочтение: getMessage() сам по себе
+      // ничего не помечает на сервере, поэтому раньше письмо оставалось
+      // непрочитанным (и точка-индикатор в списке не пропадала), пока
+      // пользователь вручную не свайпал «прочитано».
+      if (!resolved.isRead) {
+        try {
+          await MailRepository.instance.markRead(
+            connectionId: widget.connection.id,
+            messageId: widget.messageId,
+          );
+          resolved = MailMessage(
+            id: resolved.id,
+            subject: resolved.subject,
+            from: resolved.from,
+            to: resolved.to,
+            body: resolved.body,
+            bodyHtml: resolved.bodyHtml,
+            date: resolved.date,
+            isRead: true,
+            hasAttachments: resolved.hasAttachments,
+            attachments: resolved.attachments,
+          );
+          MailUnreadService.instance.refresh();
+        } catch (_) {
+          // Не удалось отметить прочитанным — письмо всё равно откроется,
+          // просто точка-индикатор в списке останется до следующей попытки.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _message = resolved;
@@ -211,12 +241,29 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     if (sent == true && mounted) Navigator.of(context).pop(true);
   }
 
+  Future<void> _forward() async {
+    final message = _message;
+    if (message == null) return;
+    final sent = await Navigator.of(context).push<bool>(
+      CupertinoPageRoute<bool>(
+        builder: (context) => ComposeMailScreen(
+          connection: widget.connection,
+          forwardOf: message,
+        ),
+      ),
+    );
+    if (sent == true && mounted) Navigator.of(context).pop(true);
+  }
+
   Widget _iconBadge(IconData icon, Color color) {
     return Container(
       width: 29,
       height: 29,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(7),
+      ),
       child: Icon(icon, size: 16, color: CupertinoColors.white),
     );
   }
@@ -242,6 +289,15 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                     minimumSize: Size.zero,
                     onPressed: _reply,
                     child: const Icon(CupertinoIcons.reply, size: 22),
+                  ),
+                  CupertinoButton(
+                    padding: const EdgeInsets.only(left: 16),
+                    minimumSize: Size.zero,
+                    onPressed: _forward,
+                    child: const Icon(
+                      CupertinoIcons.arrowshape_turn_up_right,
+                      size: 22,
+                    ),
                   ),
                   if (widget.folders.isNotEmpty)
                     CupertinoButton(

@@ -13,23 +13,17 @@ class MailFoldersScreen extends StatelessWidget {
   final MailFolder? selected;
 
   static (IconData, CupertinoDynamicColor) _iconFor(MailFolder folder) {
-    if (folder.isInbox) {
+    if (folder.isAllInbox || folder.isInbox) {
       return (CupertinoIcons.tray_full, CupertinoColors.systemTeal);
     }
     if (folder.isSent) {
-      return (
-        CupertinoIcons.paperplane,
-        CupertinoColors.secondaryLabel,
-      );
+      return (CupertinoIcons.paperplane, CupertinoColors.secondaryLabel);
     }
     if (folder.isDrafts) {
       return (CupertinoIcons.doc_text, CupertinoColors.secondaryLabel);
     }
     if (folder.isSpam) {
-      return (
-        CupertinoIcons.hand_thumbsdown,
-        CupertinoColors.secondaryLabel,
-      );
+      return (CupertinoIcons.hand_thumbsdown, CupertinoColors.secondaryLabel);
     }
     if (folder.isTrash) {
       return (CupertinoIcons.trash, CupertinoColors.systemRed);
