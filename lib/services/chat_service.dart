@@ -14,6 +14,7 @@ import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/users_repository.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_draft_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/chat_realtime_payload.dart';
@@ -140,16 +141,19 @@ class ChatService extends ChangeNotifier {
     _error = null;
     notifyListeners();
     await ChatPreferencesService.instance.ensureLoaded();
+    await ChatDraftService.instance.ensureLoaded();
     await _refreshSelfProfile();
     await refreshChats();
   }
 
   Chat _applyLocalFlags(Chat c) {
     final prefs = ChatPreferencesService.instance;
-    return c.copyWithFlags(
-      isMuted: prefs.isMuted(c.id),
-      isFavorite: prefs.isFavorite(c.id),
-    );
+    return c
+        .copyWithFlags(
+          isMuted: prefs.isMuted(c.id),
+          isFavorite: prefs.isFavorite(c.id),
+        )
+        .copyWithDraft(ChatDraftService.instance.draftFor(c.id));
   }
 
   void setActiveChat(String chatId) {
@@ -177,6 +181,7 @@ class ChatService extends ChangeNotifier {
 
     try {
       await ChatPreferencesService.instance.ensureLoaded();
+      await ChatDraftService.instance.ensureLoaded();
       final loaded = await ChatRepository.instance.getChats(
         currentUserId: userId,
       );
@@ -794,6 +799,7 @@ class ChatService extends ChangeNotifier {
       isMuted: c.isMuted,
       isFavorite: c.isFavorite,
       isPinned: c.isPinned,
+      draftText: c.draftText,
     );
     notifyListeners();
   }
@@ -817,6 +823,19 @@ class ChatService extends ChangeNotifier {
     _chats[idx] = _chats[idx].copyWithFlags(isFavorite: next);
     notifyListeners();
     await ChatPreferencesService.instance.setFavorite(chatId, next);
+  }
+
+  /// Недописанный текст в композере чата — обновляется по мере ввода в
+  /// [ChatConversationScreen], чтобы список чатов сразу показывал
+  /// "Черновик: …" (см. [ChatDraftService]).
+  Future<void> setDraftText(String chatId, String text) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    final next = text.trim().isEmpty ? null : text;
+    if (idx >= 0 && _chats[idx].draftText != next) {
+      _chats[idx] = _chats[idx].copyWithDraft(next);
+      notifyListeners();
+    }
+    await ChatDraftService.instance.setDraft(chatId, text);
   }
 
   Future<bool> togglePin(String chatId) async {

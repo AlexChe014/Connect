@@ -35,6 +35,10 @@ class ChatDraftService {
     return _drafts[chatId];
   }
 
+  /// Синхронный доступ к уже загруженному кэшу — для применения черновика
+  /// к списку чатов сразу после [ensureLoaded] (см. [ChatService]).
+  String? draftFor(String chatId) => _drafts[chatId];
+
   Future<void> setDraft(String chatId, String text) async {
     await ensureLoaded();
     if (text.trim().isEmpty) {

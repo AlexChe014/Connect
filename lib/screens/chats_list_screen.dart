@@ -787,11 +787,14 @@ class _ChatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle =
-        chat.lastMessagePreview ??
-        (chat.isGroup && chat.memberNames.isNotEmpty
-            ? chat.memberNames.join(', ')
-            : '');
+    final draft = chat.draftText;
+    final hasDraft = draft != null && draft.trim().isNotEmpty;
+    final subtitle = hasDraft
+        ? draft
+        : (chat.lastMessagePreview ??
+            (chat.isGroup && chat.memberNames.isNotEmpty
+                ? chat.memberNames.join(', ')
+                : ''));
 
     return Container(
       decoration: BoxDecoration(
@@ -854,18 +857,41 @@ class _ChatRow extends StatelessWidget {
                     ),
                     if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                          height: 1.25,
-                        ),
-                      ),
+                      hasDraft
+                          ? Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'Черновик: ',
+                                    style: TextStyle(
+                                      color: CupertinoColors.destructiveRed
+                                          .resolveFrom(context),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  TextSpan(text: subtitle),
+                                ],
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context),
+                                height: 1.25,
+                              ),
+                            )
+                          : Text(
+                              subtitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context),
+                                height: 1.25,
+                              ),
+                            ),
                     ],
                   ],
                 ),

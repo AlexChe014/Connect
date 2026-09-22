@@ -37,6 +37,7 @@ class Chat {
     this.isMuted = false,
     this.isFavorite = false,
     this.isPinned = false,
+    this.draftText,
   });
 
   final String id;
@@ -68,6 +69,9 @@ class Chat {
   final bool isFavorite;
   /// Закреплён для текущего пользователя на сервере (`is_pinned`).
   final bool isPinned;
+  /// Недописанный текст в поле ввода этого чата — только локально
+  /// (см. [ChatDraftService]).
+  final String? draftText;
 
   /// Закреплённые чаты выше, затем по времени последнего сообщения.
   static int compareForList(Chat a, Chat b) {
@@ -124,6 +128,7 @@ class Chat {
       isMuted: isMuted,
       isFavorite: isFavorite,
       isPinned: isPinned,
+      draftText: draftText,
     );
   }
 
@@ -146,6 +151,7 @@ class Chat {
       isMuted: isMuted,
       isFavorite: isFavorite,
       isPinned: isPinned,
+      draftText: draftText,
     );
   }
 
@@ -168,6 +174,7 @@ class Chat {
       isMuted: isMuted,
       isFavorite: isFavorite,
       isPinned: isPinned,
+      draftText: draftText,
     );
   }
 
@@ -185,6 +192,7 @@ class Chat {
     bool? isMuted,
     bool? isFavorite,
     bool? isPinned,
+    Object? draftText = _unset,
   }) {
     return Chat(
       id: id,
@@ -204,6 +212,7 @@ class Chat {
       isMuted: isMuted ?? this.isMuted,
       isFavorite: isFavorite ?? this.isFavorite,
       isPinned: isPinned ?? this.isPinned,
+      draftText: draftText == _unset ? this.draftText : draftText as String?,
     );
   }
 
@@ -212,4 +221,12 @@ class Chat {
   Chat copyWithFlags({bool? isMuted, bool? isFavorite}) {
     return copyWithDetails(isMuted: isMuted, isFavorite: isFavorite);
   }
+
+  /// Черновик поля ввода этого чата — единственное место, где он меняется
+  /// (см. [ChatDraftService]). `null` очищает черновик.
+  Chat copyWithDraft(String? draftText) {
+    return copyWithDetails(draftText: draftText);
+  }
 }
+
+const _unset = Object();
