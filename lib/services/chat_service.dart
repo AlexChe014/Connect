@@ -971,6 +971,7 @@ class ChatService extends ChangeNotifier {
     }
 
     final uploaded = await ChatRepository.instance.uploadFile(
+      chatId: chatIntId,
       bytes: bytes,
       filename: fileName,
     );

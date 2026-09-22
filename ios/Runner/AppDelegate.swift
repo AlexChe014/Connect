@@ -136,9 +136,17 @@ import flutter_callkit_incoming
     // при ответе на звонок из фона — без этого экран CallKit закрывается,
     // а показать Jitsi/экран звонка не на чем, пока пользователь не откроет
     // приложение вручную. Форсируем активацию сцены явно.
+    //
+    // Важно: если приложение просто свёрнуто (не убито), сцена уже существует,
+    // но неактивна — запрос на создание НОВОЙ сцены (nil) в этом случае не
+    // подходит, т.к. UIApplicationSupportsMultipleScenes = false. Нужно
+    // активировать именно существующую сессию, если она есть.
     if #available(iOS 13.0, *) {
       DispatchQueue.main.async {
-        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: nil, options: nil) { error in
+        let existingSession = UIApplication.shared.connectedScenes
+          .first(where: { $0 is UIWindowScene })?.session
+        NSLog("[callkit] onAccept: activating scene, existingSession=%@", existingSession == nil ? "nil (new)" : "existing")
+        UIApplication.shared.requestSceneSessionActivation(existingSession, userActivity: nil, options: nil) { error in
           NSLog("[callkit] requestSceneSessionActivation failed: %@", error.localizedDescription)
         }
       }

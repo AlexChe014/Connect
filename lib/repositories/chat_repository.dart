@@ -202,6 +202,7 @@ class ChatRepository {
   }
 
   Future<ChatFile> uploadFile({
+    required int chatId,
     required List<int> bytes,
     required String filename,
   }) async {
@@ -210,7 +211,7 @@ class ChatRepository {
     }
 
     final decoded = await ApiClient.instance.postMultipart(
-      ChatRoutes.filesUrl,
+      ChatRoutes.filesUrl(chatId),
       files: [
         http.MultipartFile.fromBytes('file', bytes, filename: filename),
       ],

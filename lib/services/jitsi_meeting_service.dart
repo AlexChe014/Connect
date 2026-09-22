@@ -95,10 +95,17 @@ class JitsiMeetingService {
           // видна всем, но управление ими (kick-out и т.п.) Jitsi показывает
           // только модератору автоматически.
           'toolbarButtons': endWhenLeave
-              ? const ['microphone', 'camera', 'desktop', 'hangup']
+              ? const [
+                  'microphone',
+                  'camera',
+                  'toggle-camera',
+                  'desktop',
+                  'hangup',
+                ]
               : const [
                   'microphone',
                   'camera',
+                  'toggle-camera',
                   'desktop',
                   'chat',
                   'raisehand',
@@ -120,6 +127,7 @@ class JitsiMeetingService {
           // и встроенную CallKit-интеграцию Jitsi, две системы конфликтуют
           // и обычное завершение звонка показывается как "Встреча прервана".
           'call-integration.enabled': false,
+          'toggle-camera.enabled': true,
           'unsaferoomwarning.enabled': false,
           'add-people.enabled': false,
           'invite.enabled': false,

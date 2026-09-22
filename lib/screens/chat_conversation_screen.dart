@@ -375,7 +375,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       navigationBar: CupertinoNavigationBar(
         backgroundColor: CupertinoColors.secondarySystemGroupedBackground
             .resolveFrom(context)
-            .withValues(alpha: 0.94),
+            .withValues(alpha: 1.0),
         border: Border(
           bottom: BorderSide(
             color: CupertinoColors.separator.resolveFrom(context),

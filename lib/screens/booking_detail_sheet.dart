@@ -79,9 +79,38 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     final detail = _detail;
     if (detail == null) return;
 
+    var updateAll = false;
+    if (detail.isRecurring) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Изменить бронь?'),
+          content: const Text('Выберите, что изменить из серии повторений.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'one'),
+              child: const Text('Только эту'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'all'),
+              child: const Text('Всю серию'),
+            ),
+          ],
+        ),
+      );
+      if (choice == null) return;
+      if (!mounted) return;
+      updateAll = choice == 'all';
+    }
+
     final updated = await Navigator.of(context).push<bool>(
       CupertinoPageRoute(
-        builder: (context) => EditBookingScreen(detail: detail),
+        builder: (context) =>
+            EditBookingScreen(detail: detail, updateAll: updateAll),
       ),
     );
 

@@ -30,7 +30,8 @@ class ChatRoutes {
   static String messageDeleteUrl(int chatId, int messageId) =>
       '${ApiConfig.baseUrl}$_prefix/$chatId/messages/$messageId/delete';
 
-  static String get filesUrl => '${ApiConfig.baseUrl}$_prefix/files';
+  static String filesUrl(int chatId) =>
+      '${ApiConfig.baseUrl}$_prefix/$chatId/files';
 
   static String fileUrl(int fileId) =>
       '${ApiConfig.baseUrl}$_prefix/files/$fileId';

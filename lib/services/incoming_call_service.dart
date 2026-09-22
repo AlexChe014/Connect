@@ -5,6 +5,7 @@ import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/repositories/chat_call_repository.dart';
 import 'package:connect/repositories/connector_repository.dart';
 import 'package:connect/repositories/device_token_repository.dart';
+import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_call_service.dart';
@@ -269,6 +270,17 @@ class IncomingCallService {
           topic: topic,
         );
       }
+
+      // Принятие звонка идёт мимо обычной навигации (нативный оверлей
+      // CallKit/Jitsi), поэтому глубина корневого стека не меняется. Если до
+      // звонка пользователь был глубоко в другом разделе, после разговора
+      // кнопка «на главный экран» остаётся видна на любом экране. Сворачиваем
+      // стек до вкладки «Чаты», как это уже делает openChatById для пуш-уведомлений.
+      AppNavigationService.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+        arguments: {'initialIndex': 2},
+      );
 
       final session = await ConnectorRepository.instance.join(room);
       // Не закрываем CallKit до входа в Jitsi — иначе на lock screen
