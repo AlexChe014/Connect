@@ -18,6 +18,8 @@ import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
+import 'package:connect/widgets/home_shortcut_button.dart';
+import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -78,6 +80,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Timer? _highlightTimer;
   Timer? _liveRefresh;
   Timer? _draftSaveTimer;
+  VoidCallback? _releaseHomeSuppress;
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
@@ -100,6 +103,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void initState() {
     super.initState();
+    // Кнопке «на главный экран» тут не место: попытка ей воспользоваться
+    // молча оставила бы активный звонок/навигацию из чата, поэтому она
+    // скрыта весь срок жизни этого экрана — не только на время самого звонка.
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
     WidgetsBinding.instance.addObserver(this);
     _service.addListener(_onMsg);
     _callService.addListener(_onCallState);
@@ -137,6 +144,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   @override
   void dispose() {
+    _releaseHomeSuppress?.call();
     WidgetsBinding.instance.removeObserver(this);
     _liveRefresh?.cancel();
     _service.removeListener(_onMsg);
@@ -1880,7 +1888,7 @@ class _MessageTile extends StatelessWidget {
                     ),
                     if (m.isOutgoing) ...[
                       const SizedBox(width: 3),
-                      _ReadReceipt(read: m.readByRecipients),
+                      ReadReceipt(read: m.readByRecipients),
                     ],
                   ],
                 ),
@@ -1995,40 +2003,6 @@ class _SwipeToReplyState extends State<_SwipeToReply>
   }
 }
 
-/// Индикатор доставки/прочтения исходящего сообщения:
-/// одна галочка — доставлено, две синие — прочитано получателем.
-class _ReadReceipt extends StatelessWidget {
-  const _ReadReceipt({required this.read});
-
-  final bool read;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = read
-        ? CupertinoColors.activeBlue
-        : CupertinoColors.tertiaryLabel.resolveFrom(context);
-
-    if (!read) {
-      return Icon(CupertinoIcons.checkmark, size: 12, color: color);
-    }
-
-    // В Cupertino-наборе иконок нет готовой "двойной галочки" —
-    // рисуем её как две перекрывающиеся одинарные (как в WhatsApp/Telegram).
-    return SizedBox(
-      width: 16,
-      height: 12,
-      child: Stack(
-        children: [
-          Icon(CupertinoIcons.checkmark, size: 12, color: color),
-          Positioned(
-            left: 4,
-            child: Icon(CupertinoIcons.checkmark, size: 12, color: color),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ForwardBlock extends StatelessWidget {
   const _ForwardBlock({required this.ref, required this.onBubble});

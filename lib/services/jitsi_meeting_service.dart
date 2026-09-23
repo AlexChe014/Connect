@@ -38,6 +38,7 @@ class JitsiMeetingService {
   JitsiLeaveCallback? _onLeave;
   final Set<String> _remoteParticipantIds = {};
   Timer? _participantLeftGraceTimer;
+  VoidCallback? _releaseHomeSuppress;
 
   /// Сколько ждём перед тем, как считать participantLeft настоящим уходом
   /// собеседника: SDK Jitsi иногда шлёт participantLeft/participantJoined
@@ -86,7 +87,8 @@ class JitsiMeetingService {
     // Скрываем кнопку "на главный экран" сразу, до запроса разрешений —
     // иначе она успевает мелькнуть, пока ждём ответ CallPermissions, а после
     // hangUp() остаётся включена под нативным UI Jitsi и сразу проявляется.
-    HomeShortcutButton.suppressed.value = true;
+    _releaseHomeSuppress?.call();
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
 
     try {
       final granted = await CallPermissions.ensureMediaOnly();
@@ -269,7 +271,8 @@ class JitsiMeetingService {
       }
       isInCall.value = true;
     } catch (e) {
-      HomeShortcutButton.suppressed.value = false;
+      _releaseHomeSuppress?.call();
+      _releaseHomeSuppress = null;
       rethrow;
     } finally {
       _joining = false;
@@ -296,10 +299,11 @@ class JitsiMeetingService {
     _participantLeftGraceTimer?.cancel();
     _participantLeftGraceTimer = null;
     _remoteParticipantIds.clear();
-    // Не снимаем скрытие сразу: если звонили из того же экрана, глубина
-    // стека не изменилась, и кнопка тут же "выскочила" бы после звонка.
-    // Держим её скрытой до следующей настоящей навигации.
-    HomeShortcutButton.suppressUntilNextNavigation();
+    // Экран/список чата, откуда звонили (если звонок начат оттуда), держит
+    // кнопку скрытой своим собственным suppress() всё время, пока смонтирован
+    // — так что снятие здесь не покажет её, если мы всё ещё в чате.
+    _releaseHomeSuppress?.call();
+    _releaseHomeSuppress = null;
     final callId = _activeCallId;
     final cb = _onLeave;
     _activeCallId = null;

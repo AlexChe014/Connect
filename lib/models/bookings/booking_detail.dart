@@ -22,6 +22,7 @@ class BookingDetail {
   final List<StaffUser> participants;
   final BookingRecurringInfo? recurring;
   final int? recurringParentId;
+  final bool isRecurrent;
 
   const BookingDetail({
     required this.id,
@@ -40,9 +41,14 @@ class BookingDetail {
     this.participants = const [],
     this.recurring,
     this.recurringParentId,
+    this.isRecurrent = false,
   });
 
-  bool get isRecurring => recurring != null && (recurring!.type ?? '').isNotEmpty;
+  /// Бэкенд не всегда отдаёт вложенный `recurring{type,...}` — реальный
+  /// признак серии в ответе `GET /booking/get/{id}` это `is_recurrent`,
+  /// поэтому проверяем оба варианта.
+  bool get isRecurring =>
+      isRecurrent || (recurring != null && (recurring!.type ?? '').isNotEmpty);
 
   String get displayObjectName {
     final fromObject = object?.name.trim();
@@ -110,6 +116,7 @@ class BookingDetail {
       participants: participants,
       recurring: BookingRecurringInfo.fromJson(json['recurring']),
       recurringParentId: BookingJson.parseInt(json['recurring_parent_id'] ?? json['parent_id']),
+      isRecurrent: BookingJson.parseBool(json['is_recurrent']),
     );
   }
 }

@@ -1071,9 +1071,9 @@ class ChatService extends ChangeNotifier {
     final last = list.last;
     final idx = _chats.indexWhere((c) => c.id == chatId);
     if (idx < 0) return;
-    _chats[idx] = _chats[idx].withPreview(
+    _chats[idx] = _chats[idx].withPreviewFromMessage(
+      last,
       _messagePreview(last),
-      last.createdAt,
     );
     _sortChats();
   }
@@ -1239,6 +1239,14 @@ class ChatService extends ChangeNotifier {
         changed = true;
       }
     }
+    if (changed && list.isNotEmpty && list.last.isOutgoing) {
+      final chatIdx = _chats.indexWhere((c) => c.id == chatId);
+      if (chatIdx >= 0 && !_chats[chatIdx].lastMessageReadByRecipients) {
+        _chats[chatIdx] = _chats[chatIdx].copyWithPreview(
+          lastMessageReadByRecipients: true,
+        );
+      }
+    }
     if (changed) notifyListeners();
   }
 
@@ -1301,9 +1309,9 @@ class ChatService extends ChangeNotifier {
     if (replaced) {
       _upsertLastMessage(chatId);
     } else {
-      _chats[chatIdx] = _chats[chatIdx].withPreview(
+      _chats[chatIdx] = _chats[chatIdx].withPreviewFromMessage(
+        incoming,
         _messagePreview(incoming),
-        incoming.createdAt,
       );
       _sortChats();
     }
@@ -1338,10 +1346,12 @@ class ChatService extends ChangeNotifier {
 }
 
 extension on Chat {
-  Chat withPreview(String? preview, DateTime? at) {
+  Chat withPreviewFromMessage(ChatMessage m, String? preview) {
     return copyWithPreview(
       lastMessagePreview: preview,
-      lastMessageAt: at,
+      lastMessageAt: m.createdAt,
+      lastMessageIsOutgoing: m.isOutgoing,
+      lastMessageReadByRecipients: m.readByRecipients,
     );
   }
 }

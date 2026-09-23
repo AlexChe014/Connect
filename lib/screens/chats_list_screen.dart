@@ -7,7 +7,9 @@ import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
+import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:connect/widgets/menu_button.dart';
+import 'package:connect/widgets/read_receipt.dart';
 import 'package:connect/widgets/swipe_actions_row.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -77,10 +79,15 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   final _swipeGroup = SwipeGroupController();
   String _query = '';
   _ChatFilter _filter = _ChatFilter.all;
+  VoidCallback? _releaseHomeSuppress;
 
   @override
   void initState() {
     super.initState();
+    // Список чатов — таб верхнего уровня, кнопке «на главный экран» тут не
+    // место в принципе (см. HomeShortcutButton) — держим её скрытой всё
+    // время, пока этот таб открыт, а не полагаемся на глубину стека.
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
     _chat.addListener(_onChats);
     _chat.init();
     _chat.loadContacts();
@@ -88,6 +95,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
 
   @override
   void dispose() {
+    _releaseHomeSuppress?.call();
     _chat.removeListener(_onChats);
     _searchCtrl.dispose();
     super.dispose();
@@ -927,6 +935,10 @@ class _ChatRow extends StatelessWidget {
                                 context,
                               ),
                             ),
+                            if (time.isNotEmpty) const SizedBox(width: 4),
+                          ],
+                          if (chat.lastMessageIsOutgoing) ...[
+                            ReadReceipt(read: chat.lastMessageReadByRecipients),
                             if (time.isNotEmpty) const SizedBox(width: 4),
                           ],
                           if (time.isNotEmpty)

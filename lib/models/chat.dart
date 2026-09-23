@@ -33,6 +33,8 @@ class Chat {
     this.members = const [],
     this.lastMessagePreview,
     this.lastMessageAt,
+    this.lastMessageIsOutgoing = false,
+    this.lastMessageReadByRecipients = false,
     this.unreadCount = 0,
     this.isMuted = false,
     this.isFavorite = false,
@@ -58,6 +60,12 @@ class Chat {
   final List<ChatMemberSummary> members;
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
+  /// Последнее сообщение отправлено текущим пользователем (а не собеседником).
+  /// Индикатор доставки/прочтения в списке чатов имеет смысл только для него.
+  final bool lastMessageIsOutgoing;
+  /// Для исходящего последнего сообщения: прочитано ли всеми получателями
+  /// (двойная галочка), иначе — доставлено (одна галочка).
+  final bool lastMessageReadByRecipients;
   /// Количество непрочитанных входящих сообщений в чате.
   final int unreadCount;
   /// Порог, после которого бейдж показывает `10+`, как в Telegram.
@@ -108,6 +116,8 @@ class Chat {
   Chat copyWithPreview({
     String? lastMessagePreview,
     DateTime? lastMessageAt,
+    bool? lastMessageIsOutgoing,
+    bool? lastMessageReadByRecipients,
     int? unreadCount,
   }) {
     return Chat(
@@ -124,6 +134,10 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      lastMessageIsOutgoing:
+          lastMessageIsOutgoing ?? this.lastMessageIsOutgoing,
+      lastMessageReadByRecipients:
+          lastMessageReadByRecipients ?? this.lastMessageReadByRecipients,
       unreadCount: unreadCount ?? this.unreadCount,
       isMuted: isMuted,
       isFavorite: isFavorite,
@@ -147,6 +161,8 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview,
       lastMessageAt: lastMessageAt,
+      lastMessageIsOutgoing: lastMessageIsOutgoing,
+      lastMessageReadByRecipients: lastMessageReadByRecipients,
       unreadCount: unreadCount,
       isMuted: isMuted,
       isFavorite: isFavorite,
@@ -170,6 +186,8 @@ class Chat {
       members: members,
       lastMessagePreview: lastMessagePreview,
       lastMessageAt: lastMessageAt,
+      lastMessageIsOutgoing: lastMessageIsOutgoing,
+      lastMessageReadByRecipients: lastMessageReadByRecipients,
       unreadCount: unreadCount,
       isMuted: isMuted,
       isFavorite: isFavorite,
@@ -188,6 +206,8 @@ class Chat {
     String? peerAvatarUrl,
     String? lastMessagePreview,
     DateTime? lastMessageAt,
+    bool? lastMessageIsOutgoing,
+    bool? lastMessageReadByRecipients,
     int? unreadCount,
     bool? isMuted,
     bool? isFavorite,
@@ -208,6 +228,10 @@ class Chat {
       members: members ?? this.members,
       lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      lastMessageIsOutgoing:
+          lastMessageIsOutgoing ?? this.lastMessageIsOutgoing,
+      lastMessageReadByRecipients:
+          lastMessageReadByRecipients ?? this.lastMessageReadByRecipients,
       unreadCount: unreadCount ?? this.unreadCount,
       isMuted: isMuted ?? this.isMuted,
       isFavorite: isFavorite ?? this.isFavorite,
