@@ -9,6 +9,7 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
@@ -293,6 +294,11 @@ class IncomingCallService {
 
       if (room == null || room.isEmpty) {
         AppLogger.e('Accept call: room missing', name: 'callkit');
+        CrashReportingService.recordNonFatal(
+          StateError('Accept call: room missing (callId=$callId)'),
+          StackTrace.current,
+          reason: 'callkit_accept_room_missing',
+        );
         await FlutterCallkitIncoming.endCall(callId);
         return;
       }
@@ -300,6 +306,11 @@ class IncomingCallService {
       final mediaOk = await CallPermissions.ensureMediaOnly();
       if (!mediaOk) {
         AppLogger.e('Accept call: media permissions denied', name: 'callkit');
+        CrashReportingService.recordNonFatal(
+          StateError('Accept call: media permissions denied (callId=$callId)'),
+          StackTrace.current,
+          reason: 'callkit_accept_media_denied',
+        );
         await FlutterCallkitIncoming.endCall(callId);
         if (callId.isNotEmpty) {
           unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
@@ -336,8 +347,13 @@ class IncomingCallService {
         endWhenLeave: true,
       );
       await FlutterCallkitIncoming.endCall(callId);
-    } catch (e) {
+    } catch (e, st) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);
+      CrashReportingService.recordNonFatal(
+        e,
+        st,
+        reason: 'callkit_accept_join_failed',
+      );
       await FlutterCallkitIncoming.endCall(callId);
       if (callId.isNotEmpty) {
         unawaited(ChatCallRepository.instance.endCall(callId));
