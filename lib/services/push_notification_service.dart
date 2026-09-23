@@ -290,10 +290,6 @@ class PushNotificationService {
     if (message.data['type'] == 'chat_call_ended') {
       final callId = message.data['call_id']?.toString();
       final status = message.data['status']?.toString();
-      AppLogger.d(
-        'chat_call_ended push: callId=$callId status=$status raw=${message.data}',
-        name: 'push.call',
-      );
       if (callId != null && callId.isNotEmpty && status != null) {
         ChatCallService.instance.notifyCallEnded(callId, status);
       }
@@ -302,10 +298,6 @@ class PushNotificationService {
 
     if (message.data['type'] == 'chat_call_accepted') {
       final callId = message.data['call_id']?.toString();
-      AppLogger.d(
-        'chat_call_accepted push: callId=$callId raw=${message.data}',
-        name: 'push.call',
-      );
       if (callId != null && callId.isNotEmpty) {
         ChatCallService.instance.notifyCallAccepted(callId);
       }

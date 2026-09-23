@@ -1,9 +1,7 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
-import 'package:connect/services/branding_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/widgets/home_shortcut_button.dart';
@@ -21,32 +19,12 @@ class JitsiMeetingService {
   static final JitsiMeetingService instance = JitsiMeetingService._();
 
   final JitsiMeet _jitsi = JitsiMeet();
-
-  /// true, пока нативный экран звонка Jitsi показан поверх Flutter — от
-  /// успешного join() (экран открылся) до реального завершения звонка в
-  /// _notifyLeft() (а не от Future join(), который резолвится сразу при
-  /// показе экрана). Слушают AppNavigationService/main.dart, чтобы не
-  /// затирать Flutter-навигацию pushNamedAndRemoveUntil из push-уведомлений,
-  /// пока пользователь всё ещё в звонке — иначе после звонка можно
-  /// оказаться на случайном экране вместо того, откуда звонили.
-  static final ValueNotifier<bool> isInCall = ValueNotifier(false);
-
   bool _joining = false;
   String? _activeCallId;
   bool _endWhenLeave = false;
   bool _leaveNotified = false;
   JitsiLeaveCallback? _onLeave;
-  final Set<String> _remoteParticipantIds = {};
-  Timer? _participantLeftGraceTimer;
   VoidCallback? _releaseHomeSuppress;
-
-  /// Сколько ждём перед тем, как считать participantLeft настоящим уходом
-  /// собеседника: SDK Jitsi иногда шлёт participantLeft/participantJoined
-  /// подряд для одного и того же участника при переключении JVB → P2P сразу
-  /// после подключения второго человека к 1:1 звонку — без этой паузы такое
-  /// переключение выглядело бы как "собеседник положил трубку" и рвало
-  /// звонок сразу после ответа.
-  static const _participantLeftGrace = Duration(seconds: 3);
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -80,15 +58,6 @@ class JitsiMeetingService {
     _endWhenLeave = endWhenLeave;
     _onLeave = onLeave;
     _leaveNotified = false;
-    _remoteParticipantIds.clear();
-    _participantLeftGraceTimer?.cancel();
-    _participantLeftGraceTimer = null;
-
-    // Скрываем кнопку "на главный экран" сразу, до запроса разрешений —
-    // иначе она успевает мелькнуть, пока ждём ответ CallPermissions, а после
-    // hangUp() остаётся включена под нативным UI Jitsi и сразу проявляется.
-    _releaseHomeSuppress?.call();
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
 
     try {
       final granted = await CallPermissions.ensureMediaOnly();
@@ -99,11 +68,11 @@ class JitsiMeetingService {
         );
       }
 
-      // BrandingService отдаёт light_logo с сервера как абсолютный URL — он
-      // и нужен нативному UI Jitsi (defaultLogoUrl грузится не из Flutter-
-      // ассетов, а самим Jitsi по сети). Пока URL не подтянулся, просто не
-      // переопределяем — Jitsi покажет свой водяной знак по умолчанию.
-      final logoUrl = BrandingService.instance.logoUrl?.trim();
+      // Скрываем кнопку "на главный экран" на всё время звонка, а не только
+      // на экране "Звоним…" — иначе после hangUp() она уже включена под
+      // нативным UI Jitsi и сразу проявляется.
+      _releaseHomeSuppress?.call();
+      _releaseHomeSuppress = HomeShortcutButton.suppress();
 
       final options = JitsiMeetConferenceOptions(
         serverURL: server,
@@ -113,20 +82,13 @@ class JitsiMeetingService {
             ? JitsiMeetUserInfo(displayName: session.displayName)
             : null,
         configOverrides: {
-          'startWithAudioMuted': true,
-          'startWithVideoMuted': true,
+          'startWithAudioMuted': !endWhenLeave,
+          'startWithVideoMuted': !endWhenLeave,
           'disableInviteFunctions': true,
           'hideConferenceSubject': true,
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
-          // Косметика под наш брендинг — не трогает поведение звонка.
-          if (logoUrl != null && logoUrl.isNotEmpty) 'defaultLogoUrl': logoUrl,
-          'defaultLocalDisplayName': 'Вы',
-          'hideDominantSpeakerBadge': true,
-          'backgroundAlpha': 0.6,
-          'toolbarConfig': {'backgroundColor': 'rgba(17, 24, 39, 0.85)'},
-          'filmstrip': {'initialWidth': 120},
           // Вкладка профиля — не "устройства"/"язык", прячем как вторичную
           // настройку и в 1:1, и в групповом звонке.
           'disableProfile': true,
@@ -134,21 +96,19 @@ class JitsiMeetingService {
           // Групповой звонок — базовый набор кнопок Jitsi; панель участников
           // видна всем, но управление ими (kick-out и т.п.) Jitsi показывает
           // только модератору автоматически.
-          // 'desktop' (демонстрация экрана) временно отключена во всех
-          // звонках — закомментирована, а не удалена, чтобы легко вернуть.
           'toolbarButtons': endWhenLeave
               ? const [
                   'microphone',
                   'camera',
                   'toggle-camera',
-                  // 'desktop',
+                  'desktop',
                   'hangup',
                 ]
               : const [
                   'microphone',
                   'camera',
                   'toggle-camera',
-                  // 'desktop',
+                  'desktop',
                   'chat',
                   'raisehand',
                   'reactions',
@@ -198,13 +158,8 @@ class JitsiMeetingService {
           'settings.enabled': !endWhenLeave,
           'chat.enabled': !endWhenLeave,
           'overflow-menu.enabled': !endWhenLeave,
-          // Демонстрация экрана временно отключена (см. toolbarButtons выше).
-          // 'video-share.enabled': true,
-          'video-share.enabled': false,
-          // filmstrip — не только миниатюры других участников, но и
-          // собственное превью (self-view) поверх видео собеседника, поэтому
-          // включаем всегда, а не только в групповых звонках.
-          'filmstrip.enabled': true,
+          'video-share.enabled': true,
+          'filmstrip.enabled': !endWhenLeave,
         },
       );
 
@@ -225,38 +180,15 @@ class JitsiMeetingService {
             AppLogger.d('Jitsi readyToClose', name: 'meeting');
             _notifyLeft();
           },
-          participantJoined: (email, name, role, participantId) {
-            if (!_endWhenLeave || participantId == null) return;
-            _remoteParticipantIds.add(participantId);
-            // Собеседник снова в комнате (например, после JVB → P2P
-            // переключения) — отменяем отложенное завершение звонка.
-            _participantLeftGraceTimer?.cancel();
-            _participantLeftGraceTimer = null;
-          },
           participantLeft: (participantId) {
             if (!_endWhenLeave) return;
-            if (participantId != null) {
-              _remoteParticipantIds.remove(participantId);
-            }
             AppLogger.d(
-              'Jitsi participantLeft: $participantId, remaining=$_remoteParticipantIds',
+              'Jitsi participantLeft: $participantId — ending 1:1 call',
               name: 'meeting',
             );
-            // Не рвём звонок по первому participantLeft: SDK может прислать
-            // его как часть JVB → P2P переключения сразу после ответа
-            // собеседника, а через мгновение — participantJoined с тем же
-            // ID. Ждём немного и завершаем, только если никто не вернулся.
-            _participantLeftGraceTimer?.cancel();
-            _participantLeftGraceTimer = Timer(_participantLeftGrace, () {
-              if (_remoteParticipantIds.isNotEmpty) return;
-              AppLogger.d(
-                'Jitsi participantLeft confirmed after grace period — ending 1:1 call',
-                name: 'meeting',
-              );
-              _notifyLeft();
-              // ignore: discarded_futures
-              hangUp();
-            });
+            _notifyLeft();
+            // ignore: discarded_futures
+            hangUp();
           },
         ),
       );
@@ -269,7 +201,6 @@ class JitsiMeetingService {
               : 'Не удалось открыть видеоконференцию',
         );
       }
-      isInCall.value = true;
     } catch (e) {
       _releaseHomeSuppress?.call();
       _releaseHomeSuppress = null;
@@ -295,13 +226,6 @@ class JitsiMeetingService {
   void _notifyLeft() {
     if (_leaveNotified) return;
     _leaveNotified = true;
-    isInCall.value = false;
-    _participantLeftGraceTimer?.cancel();
-    _participantLeftGraceTimer = null;
-    _remoteParticipantIds.clear();
-    // Экран/список чата, откуда звонили (если звонок начат оттуда), держит
-    // кнопку скрытой своим собственным suppress() всё время, пока смонтирован
-    // — так что снятие здесь не покажет её, если мы всё ещё в чате.
     _releaseHomeSuppress?.call();
     _releaseHomeSuppress = null;
     final callId = _activeCallId;

@@ -36,7 +36,6 @@ import 'services/chat_service.dart';
 import 'services/chat_realtime_service.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/incoming_call_service.dart';
-import 'services/jitsi_meeting_service.dart';
 import 'services/mail_unread_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
@@ -233,7 +232,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     unawaited(ChatRealtimeService.instance.start());
     MailUnreadService.instance.addListener(_onMailUnreadChanged);
     MailUnreadService.instance.refresh();
-    JitsiMeetingService.isInCall.addListener(_onCallStateChanged);
   }
 
   @override
@@ -241,19 +239,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     WidgetsBinding.instance.removeObserver(this);
     ChatService.instance.removeListener(_onChatsChanged);
     MailUnreadService.instance.removeListener(_onMailUnreadChanged);
-    JitsiMeetingService.isInCall.removeListener(_onCallStateChanged);
     unawaited(ChatRealtimeService.instance.stop());
     super.dispose();
-  }
-
-  // Пока шёл звонок, processPendingNavigation() мог пропустить пуш (чат,
-  // почта и т.п.) — см. guard в app_navigation_service.dart. Повторяем тот
-  // же вызов, что и при старте экрана, чтобы отложенная навигация всё же
-  // произошла, но уже после звонка, а не поверх него.
-  void _onCallStateChanged() {
-    if (!JitsiMeetingService.isInCall.value) {
-      AppNavigationService.processPendingNavigation();
-    }
   }
 
   @override

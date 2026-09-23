@@ -32,19 +32,6 @@ import flutter_callkit_incoming
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 
-  // Фиктивная URL-схема (см. onAccept) — сама по себе никуда не ведёт,
-  // используется только как гарантированный способ поднять сцену.
-  override func application(
-    _ app: UIApplication,
-    open url: URL,
-    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-  ) -> Bool {
-    if url.scheme == "iksonconnect-callkit" {
-      return true
-    }
-    return super.application(app, open: url, options: options)
-  }
-
   // MARK: - PushKit
 
   func pushRegistry(_ registry: PKPushRegistry, didUpdate credentials: PKPushCredentials, for type: PKPushType) {
@@ -163,20 +150,6 @@ import flutter_callkit_incoming
           NSLog("[callkit] requestSceneSessionActivation failed: %@", error.localizedDescription)
         }
       }
-    }
-    // requestSceneSessionActivation — best-effort и иногда молча не срабатывает,
-    // если приложение было именно свёрнуто (не убито): CallKit-экран закрывается,
-    // а окно Flutter остаётся в фоне, пока пользователь не откроет приложение
-    // вручную (после чего звонок подключается мгновенно — он уже был принят
-    // нативно). Подстраховываемся: если через секунду приложение так и не
-    // стало активным, форсируем передний план через открытие собственной
-    // URL-схемы — в отличие от requestSceneSessionActivation это гарантированно
-    // активирует сцену.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      guard UIApplication.shared.applicationState != .active else { return }
-      guard let url = URL(string: "iksonconnect-callkit://call") else { return }
-      NSLog("[callkit] onAccept: scene still inactive after 1s, forcing foreground via URL scheme")
-      UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
     // Dart подхватит Accept через onEvent или recoverPendingAcceptedCalls при cold start.
     action.fulfill()

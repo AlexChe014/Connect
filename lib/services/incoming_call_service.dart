@@ -9,7 +9,6 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_call_service.dart';
-import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
@@ -40,13 +39,6 @@ class IncomingCallService {
   String? _pendingVoipToken;
   final Set<String> _acceptedLocally = {};
   bool _acceptInFlight = false;
-
-  /// callId звонков, которые сами же инициировали (см.
-  /// [ChatCallService.isOwnOutgoingCallId]) — бэкенд иногда репортит их
-  /// нам обратно как "входящие". Копим сюда, чтобы отфильтровать все
-  /// последующие CallKit-события по такому id и не погасить этим настоящий
-  /// разговор.
-  final Set<String> _selfEchoCallIds = {};
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -212,28 +204,14 @@ class IncomingCallService {
     AppLogger.d('CallKit event: ${event.eventName}', name: 'callkit');
 
     switch (event) {
-      case CallEventActionCallIncoming(:final callKitParams):
-        final callId = callKitParams.id;
-        if (callId.isNotEmpty &&
-            ChatCallService.instance.isOwnOutgoingCallId(callId)) {
-          // Бэкенд прислал ring-пуш нам самим — это не настоящий входящий,
-          // а эхо нашего же исходящего звонка. Гасим фантомный CallKit-экран
-          // сразу, не давая ему затронуть реальный разговор.
-          _selfEchoCallIds.add(callId);
-          unawaited(FlutterCallkitIncoming.endCall(callId));
-        }
       case CallEventActionCallAccept(:final callKitParams):
-        if (_selfEchoCallIds.contains(callKitParams.id)) break;
         await _onAccept(callKitParams);
       case CallEventActionCallDecline(:final callKitParams):
-        if (_selfEchoCallIds.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallEnded(:final callKitParams):
-        if (_selfEchoCallIds.remove(callKitParams.id)) break;
         if (_acceptedLocally.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallTimeout(:final id):
-        if (_selfEchoCallIds.remove(id)) break;
         await _declineByCallId(id);
       case CallEventActionDidUpdateDevicePushTokenVoip():
         await refreshVoipRegistration(force: true);
@@ -248,25 +226,10 @@ class IncomingCallService {
 
   Future<void> _onAccept(CallKitParams params) async {
     if (_acceptInFlight) return;
-
-    final callId = params.id;
-    if (callId.isNotEmpty && ChatCallService.instance.isCallAlreadyLive(callId)) {
-      // recoverPendingAcceptedCalls() перезапускается на каждый возврат
-      // приложения на передний план и видит этот звонок как "принят, но не
-      // обработан локально", если предыдущий заход не дошёл до endCall
-      // (например, процесс убила система в фоне сразу после accept, ещё до
-      // входа в Jitsi). Повторный join в ту же комнату — не no-op, а
-      // дублирующее подключение под тем же участником, которое роняет уже
-      // идущий звонок у собеседника. Звонок и так уже живой — просто гасим
-      // лишнюю запись в CallKit.
-      _acceptedLocally.add(callId);
-      unawaited(FlutterCallkitIncoming.endCall(callId));
-      return;
-    }
-
     _acceptInFlight = true;
 
     final extra = params.extra ?? const {};
+    final callId = params.id;
     final room = extra['room']?.toString();
     final chatId = extra['chat_id']?.toString();
     final topic = extra['topic']?.toString();
@@ -281,24 +244,10 @@ class IncomingCallService {
         unawaited(ChatCallRepository.instance.acceptCall(callId));
       }
 
-      if (Platform.isAndroid) {
-        // Android ConnectionService должен явно узнать, что звонок принят.
-        // На iOS этот же вызов (setCallConnected -> connectedCall) заново
-        // отправляет CXAnswerCallAction через CXCallController — CallKit уже
-        // считает входящий звонок connected сразу после фулфилла исходного
-        // action в onAccept (AppDelegate), а повторный answer иногда
-        // отклоняется системой (Code=6, maximumCallGroupsReached) и рвёт
-        // звонок целиком — именно так выглядел баг "не подключается само".
-        await FlutterCallkitIncoming.setCallConnected(callId);
-      }
+      await FlutterCallkitIncoming.setCallConnected(callId);
 
       if (room == null || room.isEmpty) {
         AppLogger.e('Accept call: room missing', name: 'callkit');
-        CrashReportingService.recordNonFatal(
-          StateError('Accept call: room missing (callId=$callId)'),
-          StackTrace.current,
-          reason: 'callkit_accept_room_missing',
-        );
         await FlutterCallkitIncoming.endCall(callId);
         return;
       }
@@ -306,11 +255,6 @@ class IncomingCallService {
       final mediaOk = await CallPermissions.ensureMediaOnly();
       if (!mediaOk) {
         AppLogger.e('Accept call: media permissions denied', name: 'callkit');
-        CrashReportingService.recordNonFatal(
-          StateError('Accept call: media permissions denied (callId=$callId)'),
-          StackTrace.current,
-          reason: 'callkit_accept_media_denied',
-        );
         await FlutterCallkitIncoming.endCall(callId);
         if (callId.isNotEmpty) {
           unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
@@ -347,13 +291,8 @@ class IncomingCallService {
         endWhenLeave: true,
       );
       await FlutterCallkitIncoming.endCall(callId);
-    } catch (e, st) {
+    } catch (e) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);
-      CrashReportingService.recordNonFatal(
-        e,
-        st,
-        reason: 'callkit_accept_join_failed',
-      );
       await FlutterCallkitIncoming.endCall(callId);
       if (callId.isNotEmpty) {
         unawaited(ChatCallRepository.instance.endCall(callId));

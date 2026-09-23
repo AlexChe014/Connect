@@ -80,9 +80,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   @override
   void dispose() {
-    // Если дозвонились — звонок продолжается в Jitsi, JitsiMeetingService уже
-    // держит кнопку скрытой своим собственным suppress() (см. joinSession) —
-    // снятие нашего здесь не покажет её, пока действует чужой.
     _releaseHomeSuppress?.call();
     _timeoutTimer?.cancel();
     ChatCallService.instance.removeListener(_onCallServiceChanged);

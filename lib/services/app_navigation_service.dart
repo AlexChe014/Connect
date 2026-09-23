@@ -13,7 +13,6 @@ import 'package:connect/screens/mail_inbox_screen.dart';
 import 'package:connect/screens/mail_message_screen.dart';
 import 'package:connect/screens/mail_screen.dart';
 import 'package:connect/services/auth_service.dart';
-import 'package:connect/services/jitsi_meeting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -431,14 +430,6 @@ class AppNavigationService {
   }
 
   static Future<void> processPendingNavigation() async {
-    // Пока пользователь в звонке Jitsi (нативный экран поверх Flutter),
-    // openXxx ниже могут стереть весь Navigator стек через
-    // pushNamedAndRemoveUntil — после звонка человек оказывался на
-    // случайном экране вместо того, откуда звонил. Не трогаем pending-поля
-    // (не вызываем take...), чтобы навигация просто повторилась, когда
-    // JitsiMeetingService.isInCall станет false — см. main.dart.
-    if (JitsiMeetingService.isInCall.value) return;
-
     final chatId = takePendingChatId();
     if (chatId != null) {
       await openChatById(chatId);
