@@ -4,6 +4,7 @@ import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 /// Скачивает файл чата и открывает системный шаринг.
@@ -37,7 +38,8 @@ class ChatFileShare {
       return;
     }
 
-    final path = '${Directory.systemTemp.path}/$name';
+    final tempDir = await getTemporaryDirectory();
+    final path = '${tempDir.path}/$name';
     await File(path).writeAsBytes(bytes, flush: true);
     await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
   }

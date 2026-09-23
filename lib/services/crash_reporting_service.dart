@@ -37,4 +37,23 @@ class CrashReportingService {
     if (!_isAvailable) return;
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
   }
+
+  /// Для ошибок, уже пойманных в `try/catch` и показанных пользователю
+  /// снэкбаром/диалогом — не крашит приложение, но иначе теряется, чего
+  /// именно не хватило (например, реальная причина «не скачивается файл»
+  /// на конкретной платформе). `reason` — короткий идентификатор места
+  /// вызова, попадает в Crashlytics как `reason` в списке нефатальных.
+  static void recordNonFatal(
+    Object error,
+    StackTrace stack, {
+    required String reason,
+  }) {
+    if (!_isAvailable) return;
+    FirebaseCrashlytics.instance.recordError(
+      error,
+      stack,
+      reason: reason,
+      fatal: false,
+    );
+  }
 }

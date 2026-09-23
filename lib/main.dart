@@ -414,15 +414,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                       setState(() => _currentIndex = 4);
                     },
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.person_crop_circle,
-                    label: 'Профиль',
-                    selected: _isProfileOpen,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _openProfile();
-                    },
-                  ),
                 ],
               ),
               const SizedBox(height: 10),

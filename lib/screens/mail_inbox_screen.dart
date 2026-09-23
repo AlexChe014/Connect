@@ -48,6 +48,15 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   bool _hasMoreMessages = false;
   int _nextPage = 1;
   bool _usingServiceFallback = false;
+
+  /// Кэш id писем в папке(ах) «Спам» — используется, чтобы вычесть их из
+  /// сводной ленты «Все входящие» (см. [_filterSpamIfNeeded]): бэкенд в
+  /// `/mail/get/service` отдаёт вообще все письма ящика без привязки к
+  /// папке в ответе, поэтому единственный способ исключить спам на клиенте —
+  /// заранее узнать id спам-писем и отфильтровать по ним.
+  Set<int>? _spamMessageIds;
+  Future<Set<int>>? _spamMessageIdsFuture;
+
   String _searchQuery = '';
   final _searchController = TextEditingController();
   bool _isEditing = false;
@@ -88,6 +97,9 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         _selectedFolder = _buildAllInboxFolder(folders);
         _isLoadingFolders = false;
       });
+      // Папки (и их id) могли смениться — кэш id спам-писем не годится.
+      _spamMessageIds = null;
+      _spamMessageIdsFuture = null;
       await _loadMessages();
     } catch (_) {
       if (!mounted) return;
@@ -127,12 +139,78 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
       if (folder.depth == 0 && !folder.isInbox) folder,
   ];
 
+  /// Забирает id всех писем из папки(ок) «Спам» — по одной странице
+  /// `getMessagesByFolder` за раз, пока сервер не скажет `hasMore == false`.
+  /// Результат кэшируется в [_spamMessageIds]; при параллельных вызовах
+  /// (загрузка + подгрузка следующей страницы) все ждут один и тот же Future.
+  /// [_maxSpamPagesPerFolder] — защита от зависания, если сервер вдруг
+  /// вечно возвращает `hasMore: true`.
+  static const int _maxSpamPagesPerFolder = 50;
+
+  Future<Set<int>> _ensureSpamMessageIds() {
+    if (_spamMessageIds != null) return Future.value(_spamMessageIds);
+    return _spamMessageIdsFuture ??= _fetchSpamMessageIds().then((ids) {
+      _spamMessageIds = ids;
+      return ids;
+    }).whenComplete(() => _spamMessageIdsFuture = null);
+  }
+
+  Future<Set<int>> _fetchSpamMessageIds() async {
+    final spamFolders = _folders.where((f) => f.isSpam);
+    final ids = <int>{};
+    for (final folder in spamFolders) {
+      var page = 1;
+      for (var i = 0; i < _maxSpamPagesPerFolder; i++) {
+        final MailMessagePage result;
+        try {
+          result = await MailRepository.instance.getMessagesByFolder(
+            connectionId: _connection.id,
+            folderId: folder.id,
+            page: page,
+          );
+        } catch (_) {
+          // Папка «Спам» не прочиталась — лучше показать письма как есть,
+          // чем вовсе не показать «Все входящие» из-за побочного запроса.
+          break;
+        }
+        ids.addAll(result.messages.map((m) => m.id));
+        if (!result.hasMore) break;
+        page = result.nextPage;
+      }
+    }
+    return ids;
+  }
+
+  /// «Все входящие» построено поверх `getMessagesByService`, который
+  /// отдаёт вообще все письма ящика (в т.ч. спам) одним списком без пометки
+  /// папки — поэтому спам вычитается на клиенте по id, полученным из
+  /// [_ensureSpamMessageIds]. К письмам, загруженным напрямую по папке
+  /// (`getMessagesByFolder`), фильтр не применяется — там пользователь и
+  /// так открыл конкретную папку явно, включая саму папку «Спам».
+  Future<List<MailMessage>> _filterSpamIfNeeded(
+    List<MailMessage> messages, {
+    required bool usingService,
+  }) async {
+    if (!usingService) return messages;
+    try {
+      final spamIds = await _ensureSpamMessageIds();
+      if (spamIds.isEmpty) return messages;
+      return messages.where((m) => !spamIds.contains(m.id)).toList();
+    } catch (_) {
+      return messages;
+    }
+  }
+
   Future<void> _loadMessages({
     bool fallbackToService = false,
     bool forceSync = false,
   }) async {
     setState(() => _isLoadingMessages = true);
     if (forceSync) {
+      // Спам за это время мог пополниться/опустеть — не показываем письма
+      // по устаревшему списку id.
+      _spamMessageIds = null;
+      _spamMessageIdsFuture = null;
       try {
         // getMessagesByFolder/getMessagesByService читают локальное зеркало
         // почты, которое обновляет фоновая синхронизация бэкенда — потянуть
@@ -146,7 +224,9 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     try {
       final MailMessagePage page;
       final folder = _selectedFolder;
-      if (!fallbackToService && folder != null && folder.id > 0) {
+      final usingService =
+          fallbackToService || folder == null || folder.id <= 0;
+      if (!usingService) {
         page = await MailRepository.instance.getMessagesByFolder(
           connectionId: _connection.id,
           folderId: folder.id,
@@ -156,13 +236,16 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
           _connection.id,
         );
       }
+      final filteredMessages = await _filterSpamIfNeeded(
+        page.messages,
+        usingService: usingService,
+      );
       if (!mounted) return;
       setState(() {
-        _messages = page.messages;
+        _messages = filteredMessages;
         _hasMoreMessages = page.hasMore;
         _nextPage = page.nextPage;
-        _usingServiceFallback =
-            fallbackToService || folder == null || folder.id <= 0;
+        _usingServiceFallback = usingService;
         _isLoadingMessages = false;
       });
     } catch (_) {
@@ -171,10 +254,14 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
           final page = await MailRepository.instance.getMessagesByService(
             _connection.id,
           );
+          final filteredMessages = await _filterSpamIfNeeded(
+            page.messages,
+            usingService: true,
+          );
           if (!mounted) return;
           final failedFolder = _selectedFolder;
           setState(() {
-            _messages = page.messages;
+            _messages = filteredMessages;
             _hasMoreMessages = page.hasMore;
             _nextPage = page.nextPage;
             _usingServiceFallback = true;
@@ -208,7 +295,9 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     try {
       final MailMessagePage page;
       final folder = _selectedFolder;
-      if (!_usingServiceFallback && folder != null && folder.id > 0) {
+      final usingService =
+          _usingServiceFallback || folder == null || folder.id <= 0;
+      if (!usingService) {
         page = await MailRepository.instance.getMessagesByFolder(
           connectionId: _connection.id,
           folderId: folder.id,
@@ -220,12 +309,16 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
           page: _nextPage,
         );
       }
+      final newMessages = await _filterSpamIfNeeded(
+        page.messages,
+        usingService: usingService,
+      );
       if (!mounted) return;
       final existingIds = _messages.map((m) => m.id).toSet();
       setState(() {
         _messages = [
           ..._messages,
-          ...page.messages.where((m) => !existingIds.contains(m.id)),
+          ...newMessages.where((m) => !existingIds.contains(m.id)),
         ];
         _hasMoreMessages = page.hasMore;
         _nextPage = page.nextPage;

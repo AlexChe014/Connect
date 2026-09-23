@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat_message.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:flutter/cupertino.dart';
@@ -29,7 +30,8 @@ class MediaViewer extends StatelessWidget {
     final ChatFile file = candidates.first;
     try {
       await ChatFileShare.share(file);
-    } catch (_) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'chat_video_download');
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось открыть видео')),

@@ -2,14 +2,17 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
+import 'package:flutter/material.dart'
+    show ScaffoldMessenger, SelectableText, SnackBar;
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/crash_reporting_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
@@ -218,10 +221,12 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         );
         return;
       }
-      final path = '${Directory.systemTemp.path}/${attachment.filename}';
+      final tempDir = await getTemporaryDirectory();
+      final path = '${tempDir.path}/${attachment.filename}';
       await File(path).writeAsBytes(bytes, flush: true);
       await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
-    } catch (_) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'mail_attachment_download');
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось скачать вложение')),
@@ -365,11 +370,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                           ),
                           additionalInfo: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 220),
-                            child: Text(
+                            child: SelectableText(
                               message.from,
                               textAlign: TextAlign.right,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -384,11 +387,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                             ),
                             additionalInfo: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 220),
-                              child: Text(
+                              child: SelectableText(
                                 message.to!,
                                 textAlign: TextAlign.right,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
@@ -401,7 +402,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                                 color: CupertinoColors.secondaryLabel,
                               ),
                             ),
-                            additionalInfo: Text(
+                            additionalInfo: SelectableText(
                               dateFormat.format(message.date!.toLocal()),
                             ),
                           ),

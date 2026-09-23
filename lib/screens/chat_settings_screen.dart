@@ -7,6 +7,7 @@ import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_avatar.dart';
@@ -456,7 +457,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       final uri = Uri.tryParse(url);
       if (uri == null) return;
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'chat_settings_file_open');
       if (!mounted) return;
       _showSnack('Не удалось открыть файл');
     }

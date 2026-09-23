@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
+import '../services/crash_reporting_service.dart';
 import '../utils/document_file_share.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
@@ -186,7 +187,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         response,
         fallbackName: file['namefile']?.toString() ?? 'Файл',
       );
-    } catch (e) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'document_file_download');
       if (!mounted) return;
       _showError('Не удалось скачать файл', e);
     } finally {

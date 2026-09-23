@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -80,7 +81,8 @@ class DocumentFileShare {
       );
       return;
     }
-    final path = '${Directory.systemTemp.path}/$name';
+    final tempDir = await getTemporaryDirectory();
+    final path = '${tempDir.path}/$name';
     await File(path).writeAsBytes(bytes, flush: true);
     await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
   }

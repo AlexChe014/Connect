@@ -10,6 +10,7 @@ import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
@@ -969,7 +970,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Future<void> _openChatFile(ChatFile file) async {
     try {
       await ChatFileShare.share(file);
-    } catch (e) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'chat_file_download');
       if (!mounted) return;
       _showSnack('Не удалось скачать файл');
     }
