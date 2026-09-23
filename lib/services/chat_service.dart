@@ -951,6 +951,25 @@ class ChatService extends ChangeNotifier {
 
     final repliedId = replyTo != null ? int.tryParse(replyTo.messageId) : null;
 
+    // Показываем сообщение в ленте сразу, не дожидаясь ответа сервера —
+    // иначе при заметной задержке пользователь решает, что тап мимо кнопки
+    // не сработал, и отправляет то же самое повторно (дублирование).
+    final tempId = 'local_${DateTime.now().microsecondsSinceEpoch}';
+    _appendMessage(
+      chatId,
+      ChatMessage(
+        id: tempId,
+        chatId: chatId,
+        authorName: '',
+        isOutgoing: true,
+        createdAt: DateTime.now(),
+        text: t,
+        replyTo: replyTo,
+        isRead: true,
+        isSending: true,
+      ),
+    );
+
     try {
       final sent = await ChatRepository.instance.sendTextMessage(
         chatIntId,
@@ -959,6 +978,7 @@ class ChatService extends ChangeNotifier {
         repliedMessageId: repliedId,
       );
 
+      _removeLocalMessage(chatId, tempId);
       _appendMessage(
         chatId,
         sent.copyWith(
@@ -968,8 +988,19 @@ class ChatService extends ChangeNotifier {
         ),
       );
     } catch (e) {
+      _removeLocalMessage(chatId, tempId);
       rethrow;
     }
+  }
+
+  /// Убирает локальное оптимистичное сообщение (по временному id), не трогая
+  /// уже подтверждённые сервером сообщения.
+  void _removeLocalMessage(String chatId, String tempId) {
+    final list = _messages[chatId];
+    if (list == null) return;
+    final removed = list.any((m) => m.id == tempId);
+    list.removeWhere((m) => m.id == tempId);
+    if (removed) notifyListeners();
   }
 
   Future<void> sendMedia(

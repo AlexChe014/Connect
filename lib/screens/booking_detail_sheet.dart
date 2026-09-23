@@ -10,6 +10,7 @@ import '../services/api_client.dart';
 import '../utils/connector_launch.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/booking_pickers.dart';
 import '../widgets/chat_avatar.dart';
 import 'edit_booking_screen.dart';
 
@@ -81,30 +82,14 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
 
     var updateAll = false;
     if (detail.isRecurring) {
-      final choice = await showDialog<String>(
+      final choice = await showRecurringScopeSheet(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Изменить бронь?'),
-          content: const Text('Выберите, что изменить из серии повторений.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'one'),
-              child: const Text('Только эту'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, 'all'),
-              child: const Text('Всю серию'),
-            ),
-          ],
-        ),
+        title: 'Изменить бронь?',
+        message: 'Выберите, что изменить из серии повторений.',
       );
       if (choice == null) return;
       if (!mounted) return;
-      updateAll = choice == 'all';
+      updateAll = choice;
     }
 
     final updated = await Navigator.of(context).push<bool>(
@@ -126,42 +111,29 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
 
     bool deleteAll = false;
     if (detail.isRecurring) {
-      final choice = await showDialog<String>(
+      final choice = await showRecurringScopeSheet(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Удалить бронь?'),
-          content: const Text('Выберите, что удалить из серии повторений.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'one'),
-              child: const Text('Только эту'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, 'all'),
-              child: const Text('Всю серию'),
-            ),
-          ],
-        ),
+        title: 'Удалить бронь?',
+        message: 'Выберите, что удалить из серии повторений.',
+        isDestructive: true,
       );
       if (choice == null) return;
-      deleteAll = choice == 'all';
+      if (!mounted) return;
+      deleteAll = choice;
     } else {
       final ok =
-          await showDialog<bool>(
+          await showCupertinoDialog<bool>(
             context: context,
-            builder: (context) => AlertDialog(
+            builder: (context) => CupertinoAlertDialog(
               title: const Text('Удалить бронь?'),
               content: const Text('Это действие нельзя отменить.'),
               actions: [
-                TextButton(
+                CupertinoDialogAction(
                   onPressed: () => Navigator.pop(context, false),
                   child: const Text('Отмена'),
                 ),
-                FilledButton(
+                CupertinoDialogAction(
+                  isDestructiveAction: true,
                   onPressed: () => Navigator.pop(context, true),
                   child: const Text('Удалить'),
                 ),

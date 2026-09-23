@@ -37,6 +37,44 @@ Future<T?> showBookingOptionSheet<T>({
   );
 }
 
+/// Выбор области действия для операции над повторяющейся бронью —
+/// применить только к этой записи или ко всей серии. Возвращает `true`
+/// (вся серия), `false` (только эта запись) или `null` (отмена).
+Future<bool?> showRecurringScopeSheet({
+  required BuildContext context,
+  required String title,
+  required String message,
+  String thisLabel = 'Только эту',
+  String allLabel = 'Всю серию',
+  bool isDestructive = false,
+}) {
+  return showCupertinoModalPopup<bool>(
+    context: context,
+    builder: (sheetContext) {
+      return CupertinoActionSheet(
+        title: Text(title),
+        message: Text(message),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext, false),
+            isDestructiveAction: isDestructive,
+            child: Text(thisLabel),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext, true),
+            isDestructiveAction: isDestructive,
+            child: Text(allLabel),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(sheetContext),
+          child: const Text('Отмена'),
+        ),
+      );
+    },
+  );
+}
+
 /// Выбор даты бронирования колесом `CupertinoDatePicker`.
 Future<DateTime?> showBookingDateSheet({
   required BuildContext context,

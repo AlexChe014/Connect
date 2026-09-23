@@ -1544,6 +1544,7 @@ class _MessageTile extends StatelessWidget {
   }
 
   Future<void> _showActions(BuildContext context) async {
+    if (m.isSending) return;
     final canEdit =
         m.isOutgoing &&
         m.attachmentKind == ChatAttachmentKind.none &&
@@ -1738,7 +1739,10 @@ class _MessageTile extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   _SwipeToReply(
-                    onReply: () => onLongMenu(_MsgAction.reply),
+                    onReply: () {
+                      if (m.isSending) return;
+                      onLongMenu(_MsgAction.reply);
+                    },
                     child: GestureDetector(
                       onLongPress: () => _showActions(context),
                       child: Container(
@@ -1890,7 +1894,15 @@ class _MessageTile extends StatelessWidget {
                     ),
                     if (m.isOutgoing) ...[
                       const SizedBox(width: 3),
-                      ReadReceipt(read: m.readByRecipients),
+                      m.isSending
+                          ? Icon(
+                              CupertinoIcons.clock,
+                              size: 12,
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(
+                                context,
+                              ),
+                            )
+                          : ReadReceipt(read: m.readByRecipients),
                     ],
                   ],
                 ),

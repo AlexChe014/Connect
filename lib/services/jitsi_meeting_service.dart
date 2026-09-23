@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:connect/models/connector/connector_session.dart';
@@ -17,6 +18,30 @@ typedef JitsiLeaveCallback = void Function(String? callId);
 class JitsiMeetingService {
   JitsiMeetingService._();
   static final JitsiMeetingService instance = JitsiMeetingService._();
+
+  /// Брендинг Jitsi через `dynamicBrandingUrl` (см. config.js в исходниках
+  /// jitsi-meet, раздел "External API url used to receive branding specific
+  /// information"). Отдаём как data:-URI, без отдельного хостинга под JSON.
+  ///
+  /// ВАЖНО: бо́льшая часть полей этого JSON (`customTheme` — акцентные
+  /// цвета кнопок, `logoImageUrl` — водяной знак, `backgroundColor` — фон
+  /// видео) в исходниках jitsi-meet обрабатывается только веб-клиентом
+  /// (react/features/dynamic-branding/middleware.web.ts,
+  /// .../base/react/components/web/Watermarks.tsx) — у нативного
+  /// iOS/Android SDK, которым пользуется наше приложение, нет своего кода,
+  /// который бы их читал, поэтому там эти поля молча игнорируются.
+  /// Единственное поле, которое нативный SDK реально учитывает
+  /// (middleware.native.ts → base/avatar/functions.ts:getAvatarColor) —
+  /// `avatarBackgrounds`: цвет кружка-аватарки участника, когда у него
+  /// выключена камера. Красим его в синий приложения — с учётом, что
+  /// камера/микрофон теперь по умолчанию выключены, аватарку будет видно
+  /// почти в каждом звонке.
+  static final String _brandingDataUri = () {
+    final json = jsonEncode({
+      'avatarBackgrounds': ['#1677FF'],
+    });
+    return 'data:application/json;base64,${base64Encode(utf8.encode(json))}';
+  }();
 
   final JitsiMeet _jitsi = JitsiMeet();
   bool _joining = false;
@@ -82,13 +107,21 @@ class JitsiMeetingService {
             ? JitsiMeetUserInfo(displayName: session.displayName)
             : null,
         configOverrides: {
-          'startWithAudioMuted': !endWhenLeave,
-          'startWithVideoMuted': !endWhenLeave,
+          // Камера и микрофон при входе в звонок всегда выключены — участник
+          // включает их сам, если нужно (и в 1:1, и в групповом звонке).
+          'startWithAudioMuted': true,
+          'startWithVideoMuted': true,
           'disableInviteFunctions': true,
           'hideConferenceSubject': true,
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
           'subject': session.topic ?? '',
+          'dynamicBrandingUrl': _brandingDataUri,
+          // Явно гарантируем, что окошко с собственным видео не спрятано —
+          // в групповом звонке настройки доступны пользователю (settings.
+          // enabled ниже), и он мог сам выключить self-view в прошлый раз;
+          // Jitsi запоминает этот выбор локально между звонками.
+          'disableSelfView': false,
           // Вкладка профиля — не "устройства"/"язык", прячем как вторичную
           // настройку и в 1:1, и в групповом звонке.
           'disableProfile': true,
@@ -159,7 +192,14 @@ class JitsiMeetingService {
           'chat.enabled': !endWhenLeave,
           'overflow-menu.enabled': !endWhenLeave,
           'video-share.enabled': true,
-          'filmstrip.enabled': !endWhenLeave,
+          // Filmstrip — это не только миниатюры остальных участников, но и
+          // окошко с собственным видео (self-view). Раньше в 1:1-звонке
+          // (endWhenLeave=true) filmstrip целиком выключался, чтобы не
+          // показывать дублирующую миниатюру собеседника — но тем самым
+          // пропадало и окошко "видишь себя". Включаем всегда; миниатюры
+          // остальных участников в 1:1 всё равно не нужны — их там просто
+          // нет (собеседник и так на весь экран).
+          'filmstrip.enabled': true,
         },
       );
 
