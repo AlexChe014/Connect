@@ -4,6 +4,7 @@ import 'package:connect/utils/app_logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Результат проверки разрешений перед звонком.
 class CallPermissionsResult {
@@ -90,6 +91,37 @@ class CallPermissions {
       notifications: notifications,
       fullScreenIntent: fullScreenIntent,
     );
+  }
+
+  static const _batteryExemptionAskedKey = 'battery_optimization_exemption_asked';
+
+  /// Разово (после первого логина) предлагает исключить приложение из
+  /// оптимизации батареи Android. Без этого на части прошивок (MIUI, EMUI
+  /// и т.п.) система может не поднять headless-движок для входящего звонка
+  /// вовсе, если приложение полностью выгружено из памяти — экран Accept
+  /// тогда просто не появится. Спрашивает не чаще одного раза за установку,
+  /// независимо от ответа пользователя.
+  static Future<void> ensureBatteryOptimizationExemptionOnce() async {
+    if (!Platform.isAndroid) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_batteryExemptionAskedKey) ?? false) return;
+
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      if (!status.isGranted) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+    } catch (e, st) {
+      AppLogger.d(
+        'Battery optimization exemption request failed',
+        name: 'call.permissions',
+        error: e,
+        stackTrace: st,
+      );
+    } finally {
+      await prefs.setBool(_batteryExemptionAskedKey, true);
+    }
   }
 
   /// Перед входом в Jitsi после Accept (камера + микрофон).

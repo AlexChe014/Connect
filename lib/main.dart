@@ -32,6 +32,7 @@ import 'repositories/profile_repository.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/branding_service.dart';
+import 'services/call_permissions.dart';
 import 'services/chat_service.dart';
 import 'services/chat_realtime_service.dart';
 import 'services/crash_reporting_service.dart';
@@ -88,6 +89,7 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
         await PushNotificationService.instance.registerAfterLogin();
         await NotificationPreferencesService.instance.syncAll();
         unawaited(UserPresenceService.instance.setOnline(true));
+        unawaited(CallPermissions.ensureBatteryOptimizationExemptionOnce());
       }
     });
   }

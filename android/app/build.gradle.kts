@@ -34,6 +34,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // ConnectApplication регистрирует нативный колбэк на Accept входящего
+        // звонка (см. ConnectApplication.kt) — нужен для запуска приложения,
+        // когда процесс полностью убит и headless-движок звонка не может
+        // сам поднять экран на передний план.
+        manifestPlaceholders["applicationName"] = "com.ikson.connect.ConnectApplication"
     }
 
     signingConfigs {

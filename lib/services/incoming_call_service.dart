@@ -9,6 +9,7 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
@@ -220,8 +221,31 @@ class IncomingCallService {
     }
   }
 
+  /// Accept, полученный в headless-движке Android (приложение было убито).
+  ///
+  /// У этого движка нет привязанной Activity: `jitsi_meet_flutter_sdk` на
+  /// Android входит в конференцию через
+  /// `WrapperJitsiMeetActivity.launch(activity!!, ...)`, и без Activity это
+  /// падает NPE — полноценный `_onAccept` (permissions, навигация, Jitsi)
+  /// здесь отработать не может. Экран на передний план уже поднимает
+  /// нативный код (ConnectApplication.kt, колбэк
+  /// `flutter_callkit_incoming`), а сам вход в звонок доделает
+  /// [recoverPendingAcceptedCalls] в движке с реальной Activity, который
+  /// стартует вместе с этим Accept. Здесь — только быстрое уведомление
+  /// бэкенда, чтобы звонящий увидел "принято" без задержки на cold start.
   Future<void> handleBackgroundAccept(CallKitParams params) async {
-    await _onAccept(params);
+    final callId = params.id;
+    if (callId.isEmpty) return;
+    try {
+      await ChatCallRepository.instance.acceptCall(callId);
+    } catch (e, st) {
+      AppLogger.d(
+        'Background accept notify failed (foreground join will retry)',
+        name: 'callkit',
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   Future<void> _onAccept(CallKitParams params) async {
@@ -291,8 +315,12 @@ class IncomingCallService {
         endWhenLeave: true,
       );
       await FlutterCallkitIncoming.endCall(callId);
-    } catch (e) {
-      AppLogger.e('Accept call: join failed', name: 'callkit', error: e);
+    } catch (e, st) {
+      AppLogger.e('Accept call: join failed', name: 'callkit', error: e, stackTrace: st);
+      // Нефатально: чтобы подтвердить в проде, действительно ли ушла
+      // причина «нет Activity в headless-движке» (см. handleBackgroundAccept)
+      // или остались другие сбои входа в звонок.
+      CrashReportingService.recordNonFatal(e, st, reason: 'callkit_accept_join_failed');
       await FlutterCallkitIncoming.endCall(callId);
       if (callId.isNotEmpty) {
         unawaited(ChatCallRepository.instance.endCall(callId));

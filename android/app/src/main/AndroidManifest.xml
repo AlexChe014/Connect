@@ -21,6 +21,10 @@
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Исключение из оптимизации батареи: на MIUI/EMUI и т.п. без этого
+         система может не поднять headless-движок для входящего звонка,
+         когда приложение полностью выгружено (см. CallPermissions). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <application
         android:label="Connect"
         android:name="${applicationName}"

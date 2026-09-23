@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:flutter/foundation.dart';
@@ -241,9 +242,14 @@ class JitsiMeetingService {
               : 'Не удалось открыть видеоконференцию',
         );
       }
-    } catch (e) {
+    } catch (e, st) {
       _releaseHomeSuppress?.call();
       _releaseHomeSuppress = null;
+      // Нефатально: следим в проде за сбоями входа в конференцию — в
+      // частности, чтобы подтвердить, что на Android больше не всплывает
+      // NPE из WrapperJitsiMeetActivity.launch(activity!!, ...) при Accept
+      // из полностью убитого приложения (см. IncomingCallService).
+      CrashReportingService.recordNonFatal(e, st, reason: 'jitsi_join_failed');
       rethrow;
     } finally {
       _joining = false;
