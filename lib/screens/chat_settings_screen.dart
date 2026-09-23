@@ -7,6 +7,7 @@ import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_avatar.dart';
@@ -456,7 +457,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       final uri = Uri.tryParse(url);
       if (uri == null) return;
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'chat_settings_file_open');
       if (!mounted) return;
       _showSnack('Не удалось открыть файл');
     }
@@ -556,8 +558,9 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 16),
           padding: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: CupertinoColors.secondarySystemGroupedBackground
-                .resolveFrom(context),
+            color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+              context,
+            ),
             borderRadius: BorderRadius.circular(14),
           ),
           child: ClipRRect(
@@ -575,21 +578,29 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
               itemBuilder: (context, index) {
                 final m = _media[index];
                 final localPath = m.localMediaPath;
+                final isVideo = m.attachmentKind == ChatAttachmentKind.video;
                 return GestureDetector(
                   onTap: () => _openViewer(index),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      localPath != null && localPath.isNotEmpty
-                          ? Image.file(File(localPath), fit: BoxFit.cover)
-                          : AppNetworkImage(
-                              url: m.remoteMediaUrl,
-                              fit: BoxFit.cover,
-                              httpHeaders: ChatFileShare.imageHeaders(
-                                m.remoteMediaUrl,
+                      // Превью видео не декодируем — файла-кадра нет (в
+                      // приложении нет video_player), поэтому вместо
+                      // попытки отрисовать видео как картинку (даёт
+                      // "битую" плитку) показываем нейтральную подложку.
+                      if (isVideo)
+                        Container(color: CupertinoColors.darkBackgroundGray)
+                      else
+                        localPath != null && localPath.isNotEmpty
+                            ? Image.file(File(localPath), fit: BoxFit.cover)
+                            : AppNetworkImage(
+                                url: m.remoteMediaUrl,
+                                fit: BoxFit.cover,
+                                httpHeaders: ChatFileShare.imageHeaders(
+                                  m.remoteMediaUrl,
+                                ),
                               ),
-                            ),
-                      if (m.attachmentKind == ChatAttachmentKind.video)
+                      if (isVideo)
                         Container(
                           alignment: Alignment.bottomLeft,
                           padding: const EdgeInsets.all(6),
@@ -714,7 +725,10 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                   style: const TextStyle(color: CupertinoColors.activeBlue),
                 ),
                 trailing: Text(
-                  DateFormat('HH:mm', 'ru_RU').format(entry.createdAt.toLocal()),
+                  DateFormat(
+                    'HH:mm',
+                    'ru_RU',
+                  ).format(entry.createdAt.toLocal()),
                   style: TextStyle(
                     fontSize: 13,
                     color: CupertinoColors.tertiaryLabel.resolveFrom(context),
@@ -938,7 +952,9 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                             ),
                             title: const Text(
                               'Удалить чат',
-                              style: TextStyle(color: CupertinoColors.systemRed),
+                              style: TextStyle(
+                                color: CupertinoColors.systemRed,
+                              ),
                             ),
                             onTap: _deleteChat,
                           ),

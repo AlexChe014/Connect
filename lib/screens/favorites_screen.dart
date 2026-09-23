@@ -6,11 +6,13 @@ import '../models/bookings/bookable_object.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
 import '../services/app_navigation_service.dart';
+import '../utils/booking_time_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/menu_button.dart';
+import 'create_booking_screen.dart';
 import 'employee_detail_screen.dart';
 
 /// Избранное: сотрудники и объекты бронирования (переговорки, парковки и
@@ -127,6 +129,32 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
     );
   }
 
+  void _openObject(BookableObject object) {
+    final typeId = object.favoriteTypeId;
+    if (typeId == null) return;
+
+    final now = DateTime.now();
+    final slots = BookingTimeUtils.slotsForDate(now);
+    final lastIndex = slots.length - 1;
+    final startIndex = BookingTimeUtils.nearestSlotIndex(
+      slots,
+      now,
+      floorToPrevious: false,
+    ).clamp(0, (lastIndex - 1).clamp(0, lastIndex));
+
+    Navigator.of(context).push<bool>(
+      CupertinoPageRoute<bool>(
+        builder: (context) => CreateBookingScreen(
+          object: object,
+          modelType: typeId,
+          modelId: object.id,
+          initialStart: slots[startIndex],
+          initialEnd: slots[startIndex + 1],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSegmentedControl() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -201,6 +229,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
           final object = _objects[index];
           return _FavoriteObjectTile(
             object: object,
+            onTap: () => _openObject(object),
             onRemove: () => _removeObject(object),
           );
         },
@@ -309,9 +338,14 @@ class _FavoriteUserTile extends StatelessWidget {
 }
 
 class _FavoriteObjectTile extends StatelessWidget {
-  const _FavoriteObjectTile({required this.object, required this.onRemove});
+  const _FavoriteObjectTile({
+    required this.object,
+    required this.onTap,
+    required this.onRemove,
+  });
 
   final BookableObject object;
+  final VoidCallback onTap;
   final VoidCallback onRemove;
 
   @override
@@ -327,77 +361,81 @@ class _FavoriteObjectTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            imageUrl == null
-                ? Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              imageUrl == null
+                  ? Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        CupertinoIcons.location_solid,
+                        color: AppColors.primary,
+                        size: 24,
+                      ),
+                    )
+                  : AppNetworkImage(
+                      url: imageUrl,
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
                     ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      CupertinoIcons.location_solid,
-                      color: AppColors.primary,
-                      size: 24,
-                    ),
-                  )
-                : AppNetworkImage(
-                    url: imageUrl,
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                  ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    object.name,
-                    style: TextStyle(
-                      fontFamily: '.SF Pro Text',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (description.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      description,
+                      object.name,
                       style: TextStyle(
-                        fontSize: 13,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
-                          context,
-                        ),
+                        fontFamily: '.SF Pro Text',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              onPressed: onRemove,
-              child: const Icon(
-                CupertinoIcons.star_fill,
-                size: 22,
-                color: CupertinoColors.systemYellow,
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: onRemove,
+                child: const Icon(
+                  CupertinoIcons.star_fill,
+                  size: 22,
+                  color: CupertinoColors.systemYellow,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

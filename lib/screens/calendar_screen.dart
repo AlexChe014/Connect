@@ -5,11 +5,13 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_icons.dart';
+import '../models/bookings/create_booking_request.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/connector_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../utils/booking_time_utils.dart';
 import '../utils/connector_launch.dart';
 import '../utils/connector_url_utils.dart';
 import '../widgets/app_empty_state.dart';
@@ -18,6 +20,7 @@ import '../widgets/app_network_image.dart';
 import '../widgets/menu_button.dart';
 import 'booking_detail_sheet.dart';
 import 'bookings_screen.dart';
+import 'create_booking_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -106,17 +109,64 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _dayKey(DateTime d) => DateTime(d.year, d.month, d.day);
 
   Future<void> _quickBook() async {
-    await Navigator.of(context).push<bool>(
-      CupertinoPageRoute(
-        builder: (context) => BookingsScreen(
-          showAppBar: true,
-          initialDate: _selectedDay ?? DateTime.now(),
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Новое событие'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'meeting'),
+            child: const Text('Создать встречу'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'object'),
+            child: const Text('Забронировать объект'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
         ),
       ),
     );
-    // Бронь могла быть создана на предыдущем экране — обновляем месяц
-    // в любом случае, чтобы не тащить через несколько экранов bool-флаг.
+    if (choice == null || !mounted) return;
+
+    if (choice == 'meeting') {
+      await _createMeeting();
+    } else {
+      await Navigator.of(context).push<bool>(
+        CupertinoPageRoute(
+          builder: (context) => BookingsScreen(
+            showAppBar: true,
+            initialDate: _selectedDay ?? DateTime.now(),
+          ),
+        ),
+      );
+    }
+    // Бронь/встреча могла быть создана на предыдущем экране — обновляем
+    // месяц в любом случае, чтобы не тащить через несколько экранов bool-флаг.
     if (mounted) await _loadMonth(_focusedDay);
+  }
+
+  Future<void> _createMeeting() async {
+    final now = DateTime.now();
+    final day = _selectedDay ?? now;
+    final start = BookingTimeUtils.isSameDay(day, now)
+        ? now
+        : DateTime(day.year, day.month, day.day, 9);
+
+    await Navigator.of(context).push<bool>(
+      CupertinoPageRoute(
+        builder: (context) => CreateBookingScreen(
+          modelType: CreateBookingRequest.meetingModelType,
+          modelId: CreateBookingRequest.meetingModelId,
+          initialStart: start,
+          initialEnd: start.add(
+            const Duration(minutes: BookingTimeUtils.slotMinutes),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadMonth(DateTime focusedDay) async {

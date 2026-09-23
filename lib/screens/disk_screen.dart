@@ -582,11 +582,13 @@ class _DiskFormatBadge extends StatelessWidget {
         const ['zip', 'rar', '7z'].contains(ext)) {
       return CupertinoColors.systemBrown;
     }
-    if (const ['xls', 'xlsx', 'csv'].contains(ext))
+    if (const ['xls', 'xlsx', 'csv'].contains(ext)) {
       return CupertinoColors.systemGreen;
+    }
     if (const ['doc', 'docx'].contains(ext)) return CupertinoColors.systemBlue;
-    if (const ['ppt', 'pptx'].contains(ext))
+    if (const ['ppt', 'pptx'].contains(ext)) {
       return CupertinoColors.systemOrange;
+    }
     return CupertinoColors.systemGrey;
   }
 

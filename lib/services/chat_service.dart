@@ -14,6 +14,7 @@ import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/users_repository.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_draft_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/chat_realtime_payload.dart';
@@ -140,16 +141,19 @@ class ChatService extends ChangeNotifier {
     _error = null;
     notifyListeners();
     await ChatPreferencesService.instance.ensureLoaded();
+    await ChatDraftService.instance.ensureLoaded();
     await _refreshSelfProfile();
     await refreshChats();
   }
 
   Chat _applyLocalFlags(Chat c) {
     final prefs = ChatPreferencesService.instance;
-    return c.copyWithFlags(
-      isMuted: prefs.isMuted(c.id),
-      isFavorite: prefs.isFavorite(c.id),
-    );
+    return c
+        .copyWithFlags(
+          isMuted: prefs.isMuted(c.id),
+          isFavorite: prefs.isFavorite(c.id),
+        )
+        .copyWithDraft(ChatDraftService.instance.draftFor(c.id));
   }
 
   void setActiveChat(String chatId) {
@@ -177,6 +181,7 @@ class ChatService extends ChangeNotifier {
 
     try {
       await ChatPreferencesService.instance.ensureLoaded();
+      await ChatDraftService.instance.ensureLoaded();
       final loaded = await ChatRepository.instance.getChats(
         currentUserId: userId,
       );
@@ -794,6 +799,7 @@ class ChatService extends ChangeNotifier {
       isMuted: c.isMuted,
       isFavorite: c.isFavorite,
       isPinned: c.isPinned,
+      draftText: c.draftText,
     );
     notifyListeners();
   }
@@ -817,6 +823,19 @@ class ChatService extends ChangeNotifier {
     _chats[idx] = _chats[idx].copyWithFlags(isFavorite: next);
     notifyListeners();
     await ChatPreferencesService.instance.setFavorite(chatId, next);
+  }
+
+  /// Недописанный текст в композере чата — обновляется по мере ввода в
+  /// [ChatConversationScreen], чтобы список чатов сразу показывал
+  /// "Черновик: …" (см. [ChatDraftService]).
+  Future<void> setDraftText(String chatId, String text) async {
+    final idx = _chats.indexWhere((c) => c.id == chatId);
+    final next = text.trim().isEmpty ? null : text;
+    if (idx >= 0 && _chats[idx].draftText != next) {
+      _chats[idx] = _chats[idx].copyWithDraft(next);
+      notifyListeners();
+    }
+    await ChatDraftService.instance.setDraft(chatId, text);
   }
 
   Future<bool> togglePin(String chatId) async {
@@ -932,6 +951,25 @@ class ChatService extends ChangeNotifier {
 
     final repliedId = replyTo != null ? int.tryParse(replyTo.messageId) : null;
 
+    // Показываем сообщение в ленте сразу, не дожидаясь ответа сервера —
+    // иначе при заметной задержке пользователь решает, что тап мимо кнопки
+    // не сработал, и отправляет то же самое повторно (дублирование).
+    final tempId = 'local_${DateTime.now().microsecondsSinceEpoch}';
+    _appendMessage(
+      chatId,
+      ChatMessage(
+        id: tempId,
+        chatId: chatId,
+        authorName: '',
+        isOutgoing: true,
+        createdAt: DateTime.now(),
+        text: t,
+        replyTo: replyTo,
+        isRead: true,
+        isSending: true,
+      ),
+    );
+
     try {
       final sent = await ChatRepository.instance.sendTextMessage(
         chatIntId,
@@ -940,6 +978,7 @@ class ChatService extends ChangeNotifier {
         repliedMessageId: repliedId,
       );
 
+      _removeLocalMessage(chatId, tempId);
       _appendMessage(
         chatId,
         sent.copyWith(
@@ -949,8 +988,19 @@ class ChatService extends ChangeNotifier {
         ),
       );
     } catch (e) {
+      _removeLocalMessage(chatId, tempId);
       rethrow;
     }
+  }
+
+  /// Убирает локальное оптимистичное сообщение (по временному id), не трогая
+  /// уже подтверждённые сервером сообщения.
+  void _removeLocalMessage(String chatId, String tempId) {
+    final list = _messages[chatId];
+    if (list == null) return;
+    final removed = list.any((m) => m.id == tempId);
+    list.removeWhere((m) => m.id == tempId);
+    if (removed) notifyListeners();
   }
 
   Future<void> sendMedia(
@@ -1052,9 +1102,9 @@ class ChatService extends ChangeNotifier {
     final last = list.last;
     final idx = _chats.indexWhere((c) => c.id == chatId);
     if (idx < 0) return;
-    _chats[idx] = _chats[idx].withPreview(
+    _chats[idx] = _chats[idx].withPreviewFromMessage(
+      last,
       _messagePreview(last),
-      last.createdAt,
     );
     _sortChats();
   }
@@ -1220,6 +1270,14 @@ class ChatService extends ChangeNotifier {
         changed = true;
       }
     }
+    if (changed && list.isNotEmpty && list.last.isOutgoing) {
+      final chatIdx = _chats.indexWhere((c) => c.id == chatId);
+      if (chatIdx >= 0 && !_chats[chatIdx].lastMessageReadByRecipients) {
+        _chats[chatIdx] = _chats[chatIdx].copyWithPreview(
+          lastMessageReadByRecipients: true,
+        );
+      }
+    }
     if (changed) notifyListeners();
   }
 
@@ -1282,9 +1340,9 @@ class ChatService extends ChangeNotifier {
     if (replaced) {
       _upsertLastMessage(chatId);
     } else {
-      _chats[chatIdx] = _chats[chatIdx].withPreview(
+      _chats[chatIdx] = _chats[chatIdx].withPreviewFromMessage(
+        incoming,
         _messagePreview(incoming),
-        incoming.createdAt,
       );
       _sortChats();
     }
@@ -1319,10 +1377,12 @@ class ChatService extends ChangeNotifier {
 }
 
 extension on Chat {
-  Chat withPreview(String? preview, DateTime? at) {
+  Chat withPreviewFromMessage(ChatMessage m, String? preview) {
     return copyWithPreview(
       lastMessagePreview: preview,
-      lastMessageAt: at,
+      lastMessageAt: m.createdAt,
+      lastMessageIsOutgoing: m.isOutgoing,
+      lastMessageReadByRecipients: m.readByRecipients,
     );
   }
 }

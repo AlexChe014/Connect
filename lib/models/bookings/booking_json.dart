@@ -30,6 +30,16 @@ class BookingJson {
     return null;
   }
 
+  static bool parseBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final v = value.trim().toLowerCase();
+      return v == '1' || v == 'true';
+    }
+    return false;
+  }
+
   static List<int> parseIntList(dynamic value) {
     if (value is! List) return const [];
     return value.map(parseInt).whereType<int>().toList();

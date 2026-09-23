@@ -52,6 +52,8 @@ class ChatMapper {
       peerAvatarUrl: peer?.avatarUrl,
       lastMessagePreview: previewMessage?.preview,
       lastMessageAt: previewMessage?.createdAt,
+      lastMessageIsOutgoing: previewMessage?.isOutgoing ?? false,
+      lastMessageReadByRecipients: previewMessage?.readByRecipients ?? false,
       unreadCount: fromServer != null && fromServer > fromMessages
           ? fromServer
           : fromMessages,
@@ -347,9 +349,19 @@ class ChatMapper {
 
     if (latest == null) return null;
     if (latest.isSystem) {
-      return _PreviewMessage(latest.text, latest.createdAt);
+      return _PreviewMessage(
+        latest.text,
+        latest.createdAt,
+        isOutgoing: latest.isOutgoing,
+        readByRecipients: latest.readByRecipients,
+      );
     }
-    return _PreviewMessage(snippet(latest), latest.createdAt);
+    return _PreviewMessage(
+      snippet(latest),
+      latest.createdAt,
+      isOutgoing: latest.isOutgoing,
+      readByRecipients: latest.readByRecipients,
+    );
   }
 
   /// Сколько входящих среди последних сообщений непрочитаны текущим пользователем
@@ -550,10 +562,17 @@ class ChatMapper {
 }
 
 class _PreviewMessage {
-  const _PreviewMessage(this.preview, this.createdAt);
+  const _PreviewMessage(
+    this.preview,
+    this.createdAt, {
+    required this.isOutgoing,
+    required this.readByRecipients,
+  });
 
   final String? preview;
   final DateTime createdAt;
+  final bool isOutgoing;
+  final bool readByRecipients;
 }
 
 class _ResolvedMessageContent {

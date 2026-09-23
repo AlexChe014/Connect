@@ -17,10 +17,16 @@ class _PendingAttachment {
 }
 
 class ComposeMailScreen extends StatefulWidget {
-  const ComposeMailScreen({super.key, required this.connection, this.replyTo});
+  const ComposeMailScreen({
+    super.key,
+    required this.connection,
+    this.replyTo,
+    this.forwardOf,
+  });
 
   final MailConnection connection;
   final MailMessage? replyTo;
+  final MailMessage? forwardOf;
 
   @override
   State<ComposeMailScreen> createState() => _ComposeMailScreenState();
@@ -39,6 +45,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   void initState() {
     super.initState();
     final replyTo = widget.replyTo;
+    final forwardOf = widget.forwardOf;
     if (replyTo != null) {
       _toController.text = replyTo.from;
       _subjectController.text = replyTo.subject.startsWith('Re:')
@@ -48,6 +55,16 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       if (quote.isNotEmpty) {
         _bodyController.text = '\n\n---\n$quote';
       }
+    } else if (forwardOf != null) {
+      _subjectController.text = forwardOf.subject.startsWith('Fwd:')
+          ? forwardOf.subject
+          : 'Fwd: ${forwardOf.subject}';
+      final quote = forwardOf.previewBody;
+      _bodyController.text =
+          '\n\n---------- Пересланное сообщение ----------\n'
+          'От: ${forwardOf.from}\n'
+          'Тема: ${forwardOf.subject}\n'
+          '\n$quote';
     }
   }
 
@@ -102,15 +119,26 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     setState(() => _isSending = true);
     try {
       final replyTo = widget.replyTo;
-      // /mail/smtp/reply/{email} умеет отправить письмо именно с того ящика,
-      // которому принадлежит исходное сообщение (и корректно связать его как
-      // ответ) — но, в отличие от /mail/smtp/send, не поддерживает вложения.
-      // Поэтому им пользуемся только пока вложений нет; если пользователь
-      // что-то прикрепил — как и раньше, уходим через общий multipart-отправитель.
+      final forwardOf = widget.forwardOf;
+      // /mail/smtp/reply/{email} и /mail/smtp/forward/{email} умеют отправить
+      // письмо именно с того ящика, которому принадлежит исходное сообщение
+      // (и корректно связать его как ответ/пересылку) — но, в отличие от
+      // /mail/smtp/send, не поддерживают вложения. Поэтому ими пользуемся
+      // только пока вложений нет; если пользователь что-то прикрепил — как и
+      // раньше, уходим через общий multipart-отправитель.
       if (replyTo != null && _attachments.isEmpty) {
         await MailRepository.instance.replyMail(
           ReplyMailRequest(
             messageId: replyTo.id,
+            to: _toController.text.trim(),
+            subject: _subjectController.text.trim(),
+            body: _bodyController.text,
+          ),
+        );
+      } else if (forwardOf != null && _attachments.isEmpty) {
+        await MailRepository.instance.forwardMail(
+          ForwardMailRequest(
+            messageId: forwardOf.id,
             to: _toController.text.trim(),
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
@@ -162,7 +190,13 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       body: CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         navigationBar: CupertinoNavigationBar(
-          middle: const Text('Новое письмо'),
+          middle: Text(
+            widget.replyTo != null
+                ? 'Ответ'
+                : widget.forwardOf != null
+                ? 'Переслать'
+                : 'Новое письмо',
+          ),
           backgroundColor: CupertinoColors.systemGroupedBackground,
           border: null,
           leading: CupertinoButton(
@@ -191,116 +225,124 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             fontSize: 16,
           ),
           child: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              children: [
-                Text(
-                  'От: ${widget.connection.email}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                CupertinoFormSection.insetGrouped(
-                  margin: EdgeInsets.zero,
-                  children: [
-                    CupertinoTextFormFieldRow(
-                      controller: _toController,
-                      prefix: const Text('Кому'),
-                      placeholder: 'email@example.com',
-                      keyboardType: TextInputType.emailAddress,
-                      textAlign: TextAlign.end,
-                      enabled: !_isSending,
-                      onChanged: (_) {
-                        if (_toError != null) setState(() => _toError = null);
-                      },
-                    ),
-                    CupertinoTextFormFieldRow(
-                      controller: _subjectController,
-                      prefix: const Text('Тема'),
-                      textAlign: TextAlign.end,
-                      enabled: !_isSending,
-                      onChanged: (_) {
-                        if (_subjectError != null) {
-                          setState(() => _subjectError = null);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-                if (_toError != null || _subjectError != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                    child: Text(
-                      _toError ?? _subjectError!,
-                      style: const TextStyle(
-                        color: CupertinoColors.systemRed,
-                        fontSize: 13,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                children: [
+                  Text(
+                    'От: ${widget.connection.email}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
                       ),
                     ),
                   ),
-                const SizedBox(height: 20),
-                Container(
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.secondarySystemGroupedBackground
-                        .resolveFrom(context),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.all(12),
-                  child: CupertinoTextField(
-                    controller: _bodyController,
-                    minLines: 8,
-                    maxLines: null,
-                    enabled: !_isSending,
-                    placeholder: 'Текст письма',
-                    decoration: const BoxDecoration(),
-                    padding: EdgeInsets.zero,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: _isSending ? null : _pickAttachments,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(CupertinoIcons.paperclip, size: 18),
-                      SizedBox(width: 6),
-                      Text('Прикрепить файлы'),
+                  const SizedBox(height: 12),
+                  CupertinoFormSection.insetGrouped(
+                    margin: EdgeInsets.zero,
+                    children: [
+                      CupertinoTextFormFieldRow(
+                        controller: _toController,
+                        prefix: const Text('Кому'),
+                        placeholder: 'email@example.com',
+                        keyboardType: TextInputType.emailAddress,
+                        textAlign: TextAlign.end,
+                        enabled: !_isSending,
+                        onChanged: (_) {
+                          if (_toError != null) setState(() => _toError = null);
+                        },
+                      ),
+                      CupertinoTextFormFieldRow(
+                        controller: _subjectController,
+                        prefix: const Text('Тема'),
+                        textAlign: TextAlign.end,
+                        enabled: !_isSending,
+                        onChanged: (_) {
+                          if (_subjectError != null) {
+                            setState(() => _subjectError = null);
+                          }
+                        },
+                      ),
                     ],
                   ),
-                ),
-                if (_attachments.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  CupertinoListSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    children: List.generate(_attachments.length, (index) {
-                      final attachment = _attachments[index];
-                      return CupertinoListTile(
-                        leading: const Icon(CupertinoIcons.doc),
-                        title: Text(
-                          attachment.filename,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                  if (_toError != null || _subjectError != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      child: Text(
+                        _toError ?? _subjectError!,
+                        style: const TextStyle(
+                          color: CupertinoColors.systemRed,
+                          fontSize: 13,
                         ),
-                        trailing: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          onPressed: _isSending
-                              ? null
-                              : () => _removeAttachment(index),
-                          child: const Icon(
-                            CupertinoIcons.xmark_circle_fill,
-                            size: 20,
-                            color: CupertinoColors.systemGrey,
-                          ),
-                        ),
-                      );
-                    }),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.secondarySystemGroupedBackground
+                          .resolveFrom(context),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: CupertinoTextField(
+                      controller: _bodyController,
+                      minLines: 8,
+                      maxLines: null,
+                      enabled: !_isSending,
+                      placeholder: 'Текст письма',
+                      decoration: const BoxDecoration(),
+                      padding: EdgeInsets.zero,
+                    ),
                   ),
+                  const SizedBox(height: 20),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: _isSending ? null : _pickAttachments,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(CupertinoIcons.paperclip, size: 18),
+                        SizedBox(width: 6),
+                        Text('Прикрепить файлы'),
+                      ],
+                    ),
+                  ),
+                  if (_attachments.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    CupertinoListSection.insetGrouped(
+                      margin: EdgeInsets.zero,
+                      children: List.generate(_attachments.length, (index) {
+                        final attachment = _attachments[index];
+                        return CupertinoListTile(
+                          leading: const Icon(CupertinoIcons.doc),
+                          title: Text(
+                            attachment.filename,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            onPressed: _isSending
+                                ? null
+                                : () => _removeAttachment(index),
+                            child: const Icon(
+                              CupertinoIcons.xmark_circle_fill,
+                              size: 20,
+                              color: CupertinoColors.systemGrey,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

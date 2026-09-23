@@ -45,6 +45,7 @@ class ChatMessage {
     this.isDeleted = false,
     this.isPinned = false,
     this.files = const [],
+    this.isSending = false,
   });
 
   /// Сообщение можно редактировать в течение 15 минут после отправки.
@@ -80,6 +81,8 @@ class ChatMessage {
   final bool isPinned;
   /// Файлы из `chat__files`, прикреплённые к сообщению.
   final List<ChatFile> files;
+  /// Оптимистично добавлено локально и ещё ожидает подтверждения от сервера.
+  final bool isSending;
 
   bool get hasMedia =>
       files.isNotEmpty ||
@@ -110,6 +113,7 @@ class ChatMessage {
     bool? isDeleted,
     bool? isPinned,
     List<ChatFile>? files,
+    bool? isSending,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -134,6 +138,7 @@ class ChatMessage {
       isDeleted: isDeleted ?? this.isDeleted,
       isPinned: isPinned ?? this.isPinned,
       files: files ?? this.files,
+      isSending: isSending ?? this.isSending,
     );
   }
 

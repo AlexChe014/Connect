@@ -18,14 +18,33 @@ class MailFolder {
     this.depth = 0,
   });
 
+  /// Синтетический id для псевдо-папки [allInbox] — не приходит от сервера,
+  /// поэтому вместо реального id папки взят заведомо невозможный (сервер
+  /// отдаёт положительные id).
+  static const int allInboxId = -1;
+
+  /// Единая папка «Все входящие»: показывает письма со всех папок ящика
+  /// разом (`MailRepository.getMessagesByService`) вместо того, чтобы
+  /// заставлять пользователя переключаться между Входящими и их
+  /// вложенными подпапками по отдельности. [unreadCount]/[totalCount] —
+  /// сумма по всем реальным папкам, посчитанная на клиенте при загрузке
+  /// списка папок.
+  const MailFolder.allInbox({this.unreadCount, this.totalCount})
+    : id = allInboxId,
+      name = 'Все входящие',
+      originalName = null,
+      depth = 0;
+
+  bool get isAllInbox => id == allInboxId;
+
   MailFolder copyWithDepth(int depth) => MailFolder(
-        id: id,
-        name: name,
-        originalName: originalName,
-        unreadCount: unreadCount,
-        totalCount: totalCount,
-        depth: depth,
-      );
+    id: id,
+    name: name,
+    originalName: originalName,
+    unreadCount: unreadCount,
+    totalCount: totalCount,
+    depth: depth,
+  );
 
   bool get isInbox {
     final original = originalName?.trim().toLowerCase();
@@ -104,18 +123,35 @@ class MailFolder {
     'задачи',
     'notes',
     'заметки',
+    // "запланирован" — общий корень для "запланировано"/"запланированные"/
+    // "запланированный", чтобы не зависеть от точной словоформы с сервера.
+    'запланирован',
     'scheduled',
-    'запланировано',
     'archive',
     'архив',
     'calendar',
     'календарь',
+    'deleted events',
+    'удаленные события',
+    'удалённые события',
+    'удаленные events',
+    'удалённые events',
   ];
+
+  /// Совпадение ищут без учёта регистра и с нормализацией разделителей —
+  /// серверы отдают одну и ту же папку то через пробел ("RSS каналы"), то
+  /// через дефис ("RSS-каналы") или двоеточие, а `contains` со словом на
+  /// пробелах эти варианты не ловит.
+  static String _normalize(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[-_:./\\]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 
   bool get isHiddenSystemFolder {
     if (isInbox || isSent || isDrafts || isTrash || isSpam) return false;
-    final original = (originalName ?? '').trim().toLowerCase();
-    final n = name.trim().toLowerCase();
+    final original = _normalize(originalName ?? '');
+    final n = _normalize(name);
     for (final keyword in _hiddenSystemFolderKeywords) {
       if (original.contains(keyword) || n.contains(keyword)) return true;
     }
@@ -144,11 +180,16 @@ class MailFolder {
       'full_name',
     ]);
     return MailFolder(
-      id: _parseInt(
-            json['id'] ?? json['folder_id'] ?? json['uid'] ?? json['mailbox_id'],
+      id:
+          _parseInt(
+            json['id'] ??
+                json['folder_id'] ??
+                json['uid'] ??
+                json['mailbox_id'],
           ) ??
           0,
-      name: _optionalString(json, [
+      name:
+          _optionalString(json, [
             'custom_name',
             'name',
             'title',

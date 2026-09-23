@@ -129,7 +129,7 @@ class PushNotificationService {
   }
 
   Future<void> _initAndroidNotifications() async {
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('@drawable/ic_stat_notify');
     await _localNotifications.initialize(
       settings: const InitializationSettings(android: androidInit),
       onDidReceiveNotificationResponse: (response) {

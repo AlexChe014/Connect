@@ -91,15 +91,20 @@ class BookingsRepository {
 
     );
 
-    final data = ApiEnvelope.unwrapDataMap(
-
+    // Бэкенд для этого эндпоинта по факту не всегда возвращает обновлённый
+    // объект брони в `data` (несмотря на схему в api-docs.json) — иногда
+    // приходит просто `true`/пусто при успехе. Поэтому при успешном ответе
+    // без объекта — подгружаем актуальную карточку брони отдельным запросом.
+    final rawData = ApiEnvelope.unwrapData(
       decoded,
-
       defaultErrorMessage: 'Не удалось обновить бронирование',
-
     );
 
-    return BookingDetail.fromJson(data);
+    if (rawData is Map && rawData.isNotEmpty) {
+      return BookingDetail.fromJson(rawData.cast<String, dynamic>());
+    }
+
+    return getBookingById(bookingId);
 
   }
 

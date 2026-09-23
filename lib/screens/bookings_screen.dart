@@ -253,9 +253,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _results = items
-            .map((o) => o.withFavoriteTypeId(type.typeId))
-            .toList();
+        _results = items.map((o) => o.withFavoriteTypeId(type.typeId)).toList();
         _isResultsLoading = false;
       });
     } catch (e) {
@@ -282,6 +280,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         builder: (context) => CreateBookingScreen(
           object: object,
           modelType: type.typeId,
+          modelId: object.id,
           initialStart: _startDateTime(),
           initialEnd: _endDateTime(),
         ),
@@ -313,10 +312,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   List<Widget> _buildContentSlivers(BuildContext context) {
     if (_isBootLoading) {
       return const [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: AppPageLoader(),
-        ),
+        SliverFillRemaining(hasScrollBody: false, child: AppPageLoader()),
       ];
     }
 

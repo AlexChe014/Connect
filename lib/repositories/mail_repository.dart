@@ -377,7 +377,11 @@ class MailRepository {
       }
     }
 
-    return MailSearchPage(results: results, hasMore: hasMore, nextPage: nextPage);
+    return MailSearchPage(
+      results: results,
+      hasMore: hasMore,
+      nextPage: nextPage,
+    );
   }
 
   Future<List<MailMessage>> fetchMessages(int connectionId) async {
@@ -579,10 +583,52 @@ class MailRepository {
       for (final item in data) {
         _collectMailFolders(item, folders);
       }
-      final visible = _hideSystemFolders(folders);
+      final visible = _dedupeSentFolders(_hideSystemFolders(folders));
       return visible.where((f) => f.id > 0 || f.name.isNotEmpty).toList();
     }
-    return _hideSystemFolders(_parseFolderList(decoded, errorMessage));
+    return _dedupeSentFolders(
+      _hideSystemFolders(_parseFolderList(decoded, errorMessage)),
+    );
+  }
+
+  /// Некоторые серверы отдают папку «Отправленные» дважды — под родным
+  /// IMAP-именем и под локализованным алиасом того же ящика — и в списке
+  /// папок пользователь видит два одинаковых на вид пункта. Оставляем один:
+  /// тот, что ближе к корню (депth меньше), а при равенстве — с большим
+  /// числом писем (она и есть реально используемая), остальные и их
+  /// вложенные подпапки убираем — как и для скрытых служебных папок.
+  List<MailFolder> _dedupeSentFolders(List<MailFolder> folders) {
+    final sentIndexes = <int>[
+      for (var i = 0; i < folders.length; i++)
+        if (folders[i].isSent) i,
+    ];
+    if (sentIndexes.length <= 1) return folders;
+
+    var best = sentIndexes.first;
+    for (final i in sentIndexes.skip(1)) {
+      final candidate = folders[i];
+      final current = folders[best];
+      final better = candidate.depth != current.depth
+          ? candidate.depth < current.depth
+          : (candidate.totalCount ?? 0) > (current.totalCount ?? 0);
+      if (better) best = i;
+    }
+
+    final result = <MailFolder>[];
+    int? skipDepth;
+    for (var i = 0; i < folders.length; i++) {
+      final folder = folders[i];
+      if (skipDepth != null) {
+        if (folder.depth > skipDepth) continue;
+        skipDepth = null;
+      }
+      if (sentIndexes.contains(i) && i != best) {
+        skipDepth = folder.depth;
+        continue;
+      }
+      result.add(folder);
+    }
+    return result;
   }
 
   /// Убирает служебные папки групповых серверов (контакты, календарь,
@@ -607,7 +653,11 @@ class MailRepository {
     return result;
   }
 
-  void _collectMailFolders(Object? item, List<MailFolder> out, {int depth = 0}) {
+  void _collectMailFolders(
+    Object? item,
+    List<MailFolder> out, {
+    int depth = 0,
+  }) {
     if (item is String) {
       final name = item.trim();
       if (name.isNotEmpty) out.add(MailFolder(id: 0, name: name, depth: depth));

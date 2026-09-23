@@ -42,6 +42,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   Timer? _timeoutTimer;
   String? _statusOverride;
   bool _resolved = false;
+  VoidCallback? _releaseHomeSuppress;
 
   @override
   void initState() {
@@ -52,7 +53,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     )..repeat(reverse: true);
 
     unawaited(_playRingback());
-    HomeShortcutButton.suppressed.value = true;
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
 
     final callId = widget.callId;
     if (callId != null) {
@@ -79,7 +80,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   @override
   void dispose() {
-    HomeShortcutButton.suppressed.value = false;
+    _releaseHomeSuppress?.call();
     _timeoutTimer?.cancel();
     ChatCallService.instance.removeListener(_onCallServiceChanged);
     _pulseController.dispose();

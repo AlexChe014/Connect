@@ -34,6 +34,7 @@ import 'services/auth_service.dart';
 import 'services/branding_service.dart';
 import 'services/chat_service.dart';
 import 'services/chat_realtime_service.dart';
+import 'services/crash_reporting_service.dart';
 import 'services/incoming_call_service.dart';
 import 'services/mail_unread_service.dart';
 import 'services/notification_preferences_service.dart';
@@ -47,18 +48,22 @@ import 'widgets/chat_avatar.dart';
 import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiOverlay);
-  await initializeDateFormatting('ru_RU', null);
-  await ApiConfig.init();
-  await AuthService.instance.init();
-  await BrandingService.instance.init();
-  await PushNotificationService.instance.init();
-  await IncomingCallService.instance.init();
-  VpnDetectorService.instance.start();
-  runApp(const ConnectApp());
+Future<void> main() async {
+  await runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiOverlay);
+    await initializeDateFormatting('ru_RU', null);
+    await ApiConfig.init();
+    await AuthService.instance.init();
+    await BrandingService.instance.init();
+    // Инициализирует Firebase (нужен для CrashReportingService ниже).
+    await PushNotificationService.instance.init();
+    await IncomingCallService.instance.init();
+    VpnDetectorService.instance.start();
+    await CrashReportingService.init();
+    runApp(const ConnectApp());
+  }, CrashReportingService.recordError);
 }
 
 class ConnectApp extends StatefulWidget {
@@ -394,15 +399,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     onTap: () {
                       Navigator.pop(context);
                       setState(() => _currentIndex = 4);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.person_crop_circle,
-                    label: 'Профиль',
-                    selected: _isProfileOpen,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _openProfile();
                     },
                   ),
                 ],
@@ -748,8 +744,8 @@ class _DrawerItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final tint = selected ? AppColors.primary : AppColors.onSurface;
     final text = badgeLabel ?? (badgeCount > 99 ? '99+' : '$badgeCount');
-    final showBadge = (badgeLabel != null && badgeLabel!.isNotEmpty) ||
-        badgeCount > 0;
+    final showBadge =
+        (badgeLabel != null && badgeLabel!.isNotEmpty) || badgeCount > 0;
     return Material(
       color: selected
           ? AppColors.primary.withValues(alpha: 0.1)

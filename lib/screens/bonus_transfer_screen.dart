@@ -26,6 +26,7 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
   StaffUser? _recipient;
   PointBalance? _balance;
   bool _isLoadingBalance = true;
+  String? _balanceError;
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -58,6 +59,10 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
   );
 
   Future<void> _loadBalance() async {
+    setState(() {
+      _isLoadingBalance = true;
+      _balanceError = null;
+    });
     try {
       final balance = await BonusProgramRepository.instance.getBalance();
       if (!mounted) return;
@@ -67,7 +72,10 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _isLoadingBalance = false);
+      setState(() {
+        _isLoadingBalance = false;
+        _balanceError = 'Не удалось загрузить баланс';
+      });
     }
   }
 
@@ -220,14 +228,16 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             children: [
-              _BalanceChip(balance: _balance, isLoading: _isLoadingBalance),
+              _BalanceChip(
+                balance: _balance,
+                isLoading: _isLoadingBalance,
+                error: _balanceError,
+                onRetry: _loadBalance,
+              ),
               const SizedBox(height: 16),
               CupertinoListSection.insetGrouped(
                 margin: EdgeInsets.zero,
-                header: Text(
-                  'ПОЛУЧАТЕЛЬ',
-                  style: _sectionHeaderStyle(context),
-                ),
+                header: Text('ПОЛУЧАТЕЛЬ', style: _sectionHeaderStyle(context)),
                 children: [
                   CupertinoListTile(
                     leading: _recipient != null
@@ -249,8 +259,9 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
                             child: Icon(
                               CupertinoIcons.person_fill,
                               size: 18,
-                              color: CupertinoColors.secondaryLabel
-                                  .resolveFrom(context),
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
                           ),
                     title: Text(_recipient?.fullName ?? 'Выбрать сотрудника'),
@@ -350,15 +361,57 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
 /// Компактная плашка текущего баланса — контекст, сколько баллов доступно
 /// перевести, прямо на экране перевода.
 class _BalanceChip extends StatelessWidget {
-  const _BalanceChip({required this.balance, required this.isLoading});
+  const _BalanceChip({
+    required this.balance,
+    required this.isLoading,
+    this.error,
+    this.onRetry,
+  });
 
   final PointBalance? balance;
   final bool isLoading;
+  final String? error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
       return const AppSkeletonBox(height: 48, borderRadius: 12);
+    }
+    if (error != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemRed.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              CupertinoIcons.exclamationmark_triangle,
+              color: CupertinoColors.systemRed,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                error!,
+                style: const TextStyle(
+                  color: CupertinoColors.systemRed,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: onRetry,
+              child: const Text('Повторить'),
+            ),
+          ],
+        ),
+      );
     }
     if (balance == null) return const SizedBox.shrink();
 
@@ -399,4 +452,3 @@ class _BalanceChip extends StatelessWidget {
     );
   }
 }
-

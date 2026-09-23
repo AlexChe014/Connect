@@ -2,9 +2,16 @@ import 'booking_recurring.dart';
 
 /// Тело запроса `POST /booking/create` (form-data).
 class CreateBookingRequest {
+  /// `model_type`/`model_id` для встречи без бронирования объекта —
+  /// бэкенд ожидает именно эту пару значений вместо id реального объекта.
+  static const int meetingModelType = 6;
+  static const int meetingModelId = 1;
+
   final String theme;
+
   /// Для онлайн-встреч Коннектора может быть не задан.
   final int? modelType;
+
   /// Для онлайн-встреч Коннектора может быть не задан.
   final int? modelId;
   final int datetimeStartSeconds;

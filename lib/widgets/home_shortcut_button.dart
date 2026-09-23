@@ -13,21 +13,41 @@ class HomeShortcutButton extends StatelessWidget {
   /// На первом уровне ("назад" и так один тап до дома) кнопка не нужна.
   static const int _visibleFromDepth = 3;
 
-  /// Принудительно скрывает кнопку поверх экранов, где переход на главный
-  /// экран молча отменил бы текущее действие без возможности вернуться
-  /// (например, экран «Звоним…» — `popUntil` до корня сбрасывает звонок).
-  static final ValueNotifier<bool> suppressed = ValueNotifier<bool>(false);
+  /// Сколько активных причин скрыть кнопку сейчас есть (экран звонка, сама
+  /// видеоконференция, список/экран чата и т.п.). Счётчик, а не простой
+  /// bool: несколько источников могут просить скрыть кнопку одновременно
+  /// (например, звонок, начатый из чата, — суппрессит и сам чат, и звонок),
+  /// и снятие запроса одним из них не должно преждевременно показать
+  /// кнопку, пока другой ещё активен.
+  static final ValueNotifier<int> _suppressCount = ValueNotifier<int>(0);
+
+  /// Скрывает кнопку, пока не будет вызван возвращённый колбэк (обычно из
+  /// `dispose`/`finally`). Экраны, где переход на главный экран молча
+  /// отменил бы текущее действие без возможности вернуться (например,
+  /// «Звоним…» — `popUntil` до корня сбросил бы звонок), а также разделы,
+  /// где этой кнопке вообще не место (чаты — см. ChatsListScreen,
+  /// ChatConversationScreen), держат её скрытой всё время, пока они
+  /// смонтированы. Безопасно вызывать вложенно и звать колбэк повторно.
+  static VoidCallback suppress() {
+    _suppressCount.value++;
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      _suppressCount.value--;
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: Listenable.merge([
         RootStackObserver.instance.depth,
-        suppressed,
+        _suppressCount,
       ]),
       builder: (context, child) {
         final depth = RootStackObserver.instance.depth.value;
-        if (depth < _visibleFromDepth || suppressed.value) {
+        if (depth < _visibleFromDepth || _suppressCount.value > 0) {
           return const SizedBox.shrink();
         }
         return child!;

@@ -10,6 +10,7 @@ import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
@@ -18,6 +19,8 @@ import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
+import 'package:connect/widgets/home_shortcut_button.dart';
+import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -77,11 +80,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   Timer? _liveRefresh;
+  Timer? _draftSaveTimer;
+  VoidCallback? _releaseHomeSuppress;
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
   final Map<String, GlobalKey> _messageKeys = {};
   bool _sendingAttachment = false;
+  bool _sendingText = false;
 
   void _toggleReaction(ChatMessage m, String emoji) {
     setState(() {
@@ -98,6 +104,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void initState() {
     super.initState();
+    // Кнопке «на главный экран» тут не место: попытка ей воспользоваться
+    // молча оставила бы активный звонок/навигацию из чата, поэтому она
+    // скрыта весь срок жизни этого экрана — не только на время самого звонка.
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
     WidgetsBinding.instance.addObserver(this);
     _service.addListener(_onMsg);
     _callService.addListener(_onCallState);
@@ -116,16 +126,37 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         ),
       );
     });
+    final draft = widget.chat.draftText;
+    if (draft != null && draft.isNotEmpty) {
+      _textCtrl.text = draft;
+      _textCtrl.selection = TextSelection.collapsed(offset: draft.length);
+    }
+    _textCtrl.addListener(_onDraftTextChanged);
+  }
+
+  void _onDraftTextChanged() {
+    if (_editingMessage != null) return;
+    _draftSaveTimer?.cancel();
+    final text = _textCtrl.text;
+    _draftSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_service.setDraftText(widget.chat.id, text));
+    });
   }
 
   @override
   void dispose() {
+    _releaseHomeSuppress?.call();
     WidgetsBinding.instance.removeObserver(this);
     _liveRefresh?.cancel();
     _service.removeListener(_onMsg);
     _callService.removeListener(_onCallState);
     _callService.unwatchChat(widget.chat.id);
     _service.clearActiveChat(widget.chat.id);
+    _draftSaveTimer?.cancel();
+    if (_editingMessage == null) {
+      unawaited(_service.setDraftText(widget.chat.id, _textCtrl.text));
+    }
+    _textCtrl.removeListener(_onDraftTextChanged);
     _textCtrl.dispose();
     _searchCtrl.dispose();
     _focus.dispose();
@@ -654,19 +685,26 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 
   Future<void> _send() async {
-    final t = _textCtrl.text;
-    if (t.trim().isEmpty) return;
     if (_editingMessage != null) {
       await _saveEdit();
       return;
     }
+    if (_sendingText) return;
+    final t = _textCtrl.text;
+    if (t.trim().isEmpty) return;
+    final replyTo = _replyingTo;
+    _sendingText = true;
+    _textCtrl.clear();
+    if (mounted) setState(() => _replyingTo = null);
     try {
-      await _service.sendText(widget.chat.id, t, replyTo: _replyingTo);
-      _textCtrl.clear();
-      if (mounted) setState(() => _replyingTo = null);
+      await _service.sendText(widget.chat.id, t, replyTo: replyTo);
     } catch (e) {
-      if (!mounted) return;
-      _showSnack('Не удалось отправить: $e');
+      if (mounted) {
+        _textCtrl.text = t;
+        _showSnack('Не удалось отправить: $e');
+      }
+    } finally {
+      _sendingText = false;
     }
   }
 
@@ -932,7 +970,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Future<void> _openChatFile(ChatFile file) async {
     try {
       await ChatFileShare.share(file);
-    } catch (e) {
+    } catch (e, st) {
+      CrashReportingService.recordNonFatal(e, st, reason: 'chat_file_download');
       if (!mounted) return;
       _showSnack('Не удалось скачать файл');
     }
@@ -1505,6 +1544,7 @@ class _MessageTile extends StatelessWidget {
   }
 
   Future<void> _showActions(BuildContext context) async {
+    if (m.isSending) return;
     final canEdit =
         m.isOutgoing &&
         m.attachmentKind == ChatAttachmentKind.none &&
@@ -1699,7 +1739,10 @@ class _MessageTile extends StatelessWidget {
                 clipBehavior: Clip.none,
                 children: [
                   _SwipeToReply(
-                    onReply: () => onLongMenu(_MsgAction.reply),
+                    onReply: () {
+                      if (m.isSending) return;
+                      onLongMenu(_MsgAction.reply);
+                    },
                     child: GestureDetector(
                       onLongPress: () => _showActions(context),
                       child: Container(
@@ -1851,7 +1894,15 @@ class _MessageTile extends StatelessWidget {
                     ),
                     if (m.isOutgoing) ...[
                       const SizedBox(width: 3),
-                      _ReadReceipt(read: m.readByRecipients),
+                      m.isSending
+                          ? Icon(
+                              CupertinoIcons.clock,
+                              size: 12,
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(
+                                context,
+                              ),
+                            )
+                          : ReadReceipt(read: m.readByRecipients),
                     ],
                   ],
                 ),
@@ -1966,40 +2017,6 @@ class _SwipeToReplyState extends State<_SwipeToReply>
   }
 }
 
-/// Индикатор доставки/прочтения исходящего сообщения:
-/// одна галочка — доставлено, две синие — прочитано получателем.
-class _ReadReceipt extends StatelessWidget {
-  const _ReadReceipt({required this.read});
-
-  final bool read;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = read
-        ? CupertinoColors.activeBlue
-        : CupertinoColors.tertiaryLabel.resolveFrom(context);
-
-    if (!read) {
-      return Icon(CupertinoIcons.checkmark, size: 12, color: color);
-    }
-
-    // В Cupertino-наборе иконок нет готовой "двойной галочки" —
-    // рисуем её как две перекрывающиеся одинарные (как в WhatsApp/Telegram).
-    return SizedBox(
-      width: 16,
-      height: 12,
-      child: Stack(
-        children: [
-          Icon(CupertinoIcons.checkmark, size: 12, color: color),
-          Positioned(
-            left: 4,
-            child: Icon(CupertinoIcons.checkmark, size: 12, color: color),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ForwardBlock extends StatelessWidget {
   const _ForwardBlock({required this.ref, required this.onBubble});

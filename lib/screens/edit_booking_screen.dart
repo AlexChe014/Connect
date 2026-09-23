@@ -258,8 +258,7 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
                       style: disabledStyle,
                     ),
                   ),
-                  if (detail.isRecurring &&
-                      detail.recurring!.daysOfWeek.isNotEmpty)
+                  if (detail.recurring?.daysOfWeek.isNotEmpty ?? false)
                     CupertinoListTile(
                       title: const Text('Дни недели'),
                       additionalInfo: Text(
