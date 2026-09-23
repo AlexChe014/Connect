@@ -40,6 +40,13 @@ class IncomingCallService {
   final Set<String> _acceptedLocally = {};
   bool _acceptInFlight = false;
 
+  /// callId звонков, которые сами же инициировали (см.
+  /// [ChatCallService.isOwnOutgoingCallId]) — бэкенд иногда репортит их
+  /// нам обратно как "входящие". Копим сюда, чтобы отфильтровать все
+  /// последующие CallKit-события по такому id и не погасить этим настоящий
+  /// разговор.
+  final Set<String> _selfEchoCallIds = {};
+
   bool get isSupported {
     if (kIsWeb) return false;
     return Platform.isIOS || Platform.isAndroid;
@@ -204,14 +211,28 @@ class IncomingCallService {
     AppLogger.d('CallKit event: ${event.eventName}', name: 'callkit');
 
     switch (event) {
+      case CallEventActionCallIncoming(:final callKitParams):
+        final callId = callKitParams.id;
+        if (callId.isNotEmpty &&
+            ChatCallService.instance.isOwnOutgoingCallId(callId)) {
+          // Бэкенд прислал ring-пуш нам самим — это не настоящий входящий,
+          // а эхо нашего же исходящего звонка. Гасим фантомный CallKit-экран
+          // сразу, не давая ему затронуть реальный разговор.
+          _selfEchoCallIds.add(callId);
+          unawaited(FlutterCallkitIncoming.endCall(callId));
+        }
       case CallEventActionCallAccept(:final callKitParams):
+        if (_selfEchoCallIds.contains(callKitParams.id)) break;
         await _onAccept(callKitParams);
       case CallEventActionCallDecline(:final callKitParams):
+        if (_selfEchoCallIds.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallEnded(:final callKitParams):
+        if (_selfEchoCallIds.remove(callKitParams.id)) break;
         if (_acceptedLocally.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallTimeout(:final id):
+        if (_selfEchoCallIds.remove(id)) break;
         await _declineByCallId(id);
       case CallEventActionDidUpdateDevicePushTokenVoip():
         await refreshVoipRegistration(force: true);

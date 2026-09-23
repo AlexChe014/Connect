@@ -56,6 +56,17 @@ class ChatCallService extends ChangeNotifier {
 
   bool isAccepted(String callId) => _acceptedCalls.contains(callId);
 
+  /// true, если callId — это звонок, который инициировали мы сами
+  /// (см. [IncomingCallService] — бэкенд иногда шлёт ring VoIP-пуш с тем же
+  /// call_id ещё и звонящему, и CallKit на его телефоне репортит его как
+  /// "новый входящий"; такой эхо-звонок нельзя путать с реальным входящим).
+  bool isOwnOutgoingCallId(String callId) {
+    for (final call in _activeByChat.values) {
+      if (call.callId == callId && !call.isIncoming) return true;
+    }
+    return _liveDirectCallId == callId;
+  }
+
   void notifyCallEnded(String callId, String status) {
     _endedCalls[callId] = status;
     _appendCallEndedMessage(callId);
@@ -142,6 +153,10 @@ class ChatCallService extends ChangeNotifier {
           chatId: chat.id,
           room: session.room,
           topic: topic,
+        );
+        AppLogger.d(
+          'Outgoing direct call: chatId=${chat.id} room=${session.room} callId=$callId',
+          name: 'chat.call',
         );
 
         _setActiveCall(
