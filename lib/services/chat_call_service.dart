@@ -56,6 +56,12 @@ class ChatCallService extends ChangeNotifier {
 
   bool isAccepted(String callId) => _acceptedCalls.contains(callId);
 
+  /// true, если callId — это звонок, который уже реально подключён в Jitsi
+  /// в этом процессе (см. [IncomingCallService.recoverPendingAcceptedCalls] —
+  /// он перезапускается на каждый resume приложения и не должен второй раз
+  /// гонять весь accept/join-флоу для звонка, который уже идёт).
+  bool isCallAlreadyLive(String callId) => _liveDirectCallId == callId;
+
   /// true, если callId — это звонок, который инициировали мы сами
   /// (см. [IncomingCallService] — бэкенд иногда шлёт ring VoIP-пуш с тем же
   /// call_id ещё и звонящему, и CallKit на его телефоне репортит его как

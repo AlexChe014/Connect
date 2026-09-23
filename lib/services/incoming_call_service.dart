@@ -247,10 +247,25 @@ class IncomingCallService {
 
   Future<void> _onAccept(CallKitParams params) async {
     if (_acceptInFlight) return;
+
+    final callId = params.id;
+    if (callId.isNotEmpty && ChatCallService.instance.isCallAlreadyLive(callId)) {
+      // recoverPendingAcceptedCalls() перезапускается на каждый возврат
+      // приложения на передний план и видит этот звонок как "принят, но не
+      // обработан локально", если предыдущий заход не дошёл до endCall
+      // (например, процесс убила система в фоне сразу после accept, ещё до
+      // входа в Jitsi). Повторный join в ту же комнату — не no-op, а
+      // дублирующее подключение под тем же участником, которое роняет уже
+      // идущий звонок у собеседника. Звонок и так уже живой — просто гасим
+      // лишнюю запись в CallKit.
+      _acceptedLocally.add(callId);
+      unawaited(FlutterCallkitIncoming.endCall(callId));
+      return;
+    }
+
     _acceptInFlight = true;
 
     final extra = params.extra ?? const {};
-    final callId = params.id;
     final room = extra['room']?.toString();
     final chatId = extra['chat_id']?.toString();
     final topic = extra['topic']?.toString();
