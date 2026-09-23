@@ -12,6 +12,7 @@ import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
 import 'package:flutter_callkit_incoming/entities/call_event.dart';
 import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
@@ -39,6 +40,13 @@ class IncomingCallService {
   String? _pendingVoipToken;
   final Set<String> _acceptedLocally = {};
   bool _acceptInFlight = false;
+  AppLifecycleListener? _lifecycleListener;
+
+  /// iOS: звонок принят через CallKit, пока приложение было в фоне / на
+  /// lock screen. CallKit сам не выводит приложение на передний план, а Jitsi
+  /// (present поверх FlutterViewController) в фоне не показывается — ждём
+  /// resumed и только тогда входим в конференцию.
+  _AcceptedCall? _pendingJoin;
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -50,6 +58,9 @@ class IncomingCallService {
     _initialized = true;
 
     _eventSub = FlutterCallkitIncoming.onEvent.listen(_onCallEvent);
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () => unawaited(_joinPendingIfForeground()),
+    );
 
     if (Platform.isAndroid) {
       await FlutterCallkitIncoming.onBackgroundMessage(
@@ -79,6 +90,8 @@ class IncomingCallService {
   Future<void> dispose() async {
     await _eventSub?.cancel();
     _eventSub = null;
+    _lifecycleListener?.dispose();
+    _lifecycleListener = null;
     _initialized = false;
   }
 
@@ -177,6 +190,7 @@ class IncomingCallService {
   /// Если пользователь ответил на CallKit до готовности Flutter (убитое приложение).
   Future<void> recoverPendingAcceptedCalls() async {
     if (!isSupported) return;
+    await _joinPendingIfForeground();
     try {
       final calls = await FlutterCallkitIncoming.activeCalls();
       for (final call in calls) {
@@ -209,6 +223,13 @@ class IncomingCallService {
       case CallEventActionCallDecline(:final callKitParams):
         await _onDecline(callKitParams);
       case CallEventActionCallEnded(:final callKitParams):
+        if (_pendingJoin?.callId == callKitParams.id) {
+          // Положили трубку в системном UI, так и не открыв приложение.
+          _pendingJoin = null;
+          _acceptedLocally.remove(callKitParams.id);
+          unawaited(ChatCallRepository.instance.endCall(callKitParams.id));
+          break;
+        }
         if (_acceptedLocally.remove(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallTimeout(:final id):
@@ -225,14 +246,17 @@ class IncomingCallService {
   }
 
   Future<void> _onAccept(CallKitParams params) async {
-    if (_acceptInFlight) return;
+    if (_acceptInFlight || _pendingJoin?.callId == params.id) return;
     _acceptInFlight = true;
 
     final extra = params.extra ?? const {};
-    final callId = params.id;
-    final room = extra['room']?.toString();
-    final chatId = extra['chat_id']?.toString();
-    final topic = extra['topic']?.toString();
+    final call = _AcceptedCall(
+      callId: params.id,
+      room: extra['room']?.toString(),
+      chatId: extra['chat_id']?.toString(),
+      topic: extra['topic']?.toString(),
+    );
+    final callId = call.callId;
 
     try {
       if (!AuthService.instance.isAuthenticated) {
@@ -246,6 +270,59 @@ class IncomingCallService {
 
       await FlutterCallkitIncoming.setCallConnected(callId);
 
+      if (_mustWaitForForeground) {
+        // CallKit-звонок оставляем активным: в системном UI есть кнопка
+        // приложения, по ней iOS откроет Connect → onResume → вход в Jitsi.
+        AppLogger.d(
+          'Accept call $callId: app not in foreground, join deferred',
+          name: 'callkit',
+        );
+        _pendingJoin = call;
+        // Cold start: первый resumed может прийти до подписки на lifecycle.
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => unawaited(_joinPendingIfForeground()),
+        );
+        return;
+      }
+
+      await _joinAcceptedCall(call);
+    } catch (e) {
+      AppLogger.e('Accept call failed', name: 'callkit', error: e);
+      await FlutterCallkitIncoming.endCall(callId);
+      if (callId.isNotEmpty) {
+        unawaited(ChatCallRepository.instance.endCall(callId));
+      }
+    } finally {
+      _acceptInFlight = false;
+    }
+  }
+
+  /// iOS не в foreground: present Jitsi-контроллера молча не срабатывает
+  /// (view не в иерархии окна), а запрос разрешений не покажет диалог.
+  /// Android: Accept сам поднимает Activity, а background-изолят не получит
+  /// resumed — там не откладываем.
+  bool get _mustWaitForForeground =>
+      Platform.isIOS &&
+      WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed;
+
+  Future<void> _joinPendingIfForeground() async {
+    final call = _pendingJoin;
+    if (call == null || _mustWaitForForeground || _acceptInFlight) return;
+    _pendingJoin = null;
+    _acceptInFlight = true;
+    try {
+      await _joinAcceptedCall(call);
+    } finally {
+      _acceptInFlight = false;
+    }
+  }
+
+  Future<void> _joinAcceptedCall(_AcceptedCall call) async {
+    final callId = call.callId;
+    final room = call.room;
+    final chatId = call.chatId;
+
+    try {
       if (room == null || room.isEmpty) {
         AppLogger.e('Accept call: room missing', name: 'callkit');
         await FlutterCallkitIncoming.endCall(callId);
@@ -267,7 +344,7 @@ class IncomingCallService {
           chatId: chatId,
           room: room,
           callId: callId,
-          topic: topic,
+          topic: call.topic,
         );
       }
 
@@ -297,8 +374,6 @@ class IncomingCallService {
       if (callId.isNotEmpty) {
         unawaited(ChatCallRepository.instance.endCall(callId));
       }
-    } finally {
-      _acceptInFlight = false;
     }
   }
 
@@ -384,4 +459,18 @@ class IncomingCallService {
       );
     }
   }
+}
+
+class _AcceptedCall {
+  const _AcceptedCall({
+    required this.callId,
+    this.room,
+    this.chatId,
+    this.topic,
+  });
+
+  final String callId;
+  final String? room;
+  final String? chatId;
+  final String? topic;
 }
