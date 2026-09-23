@@ -91,4 +91,7 @@ dependencies {
 
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
+    // Грузит mapping-файл R8/ProGuard при релизной сборке, чтобы стектрейсы
+    // в Crashlytics были деобфусцированы.
+    apply(plugin = "com.google.firebase.crashlytics")
 }

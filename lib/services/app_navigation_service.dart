@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:connect/config/notification_topics.dart';
 import 'package:connect/models/documents/document_service.dart';
 import 'package:connect/models/mail/mail_connection.dart';
 import 'package:connect/repositories/chat_repository.dart';

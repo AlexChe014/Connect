@@ -61,8 +61,14 @@ class ApiConfig {
     }
   }
 
-  static bool isBackendHostValid(String? value) =>
-      _sanitizeBackendHost(value) != null;
+  static bool isBackendHostValid(String? value) {
+    if (value == null) return false;
+    final lower = value.trim().toLowerCase();
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      return false;
+    }
+    return _sanitizeBackendHost(value) != null;
+  }
 
   /// Нормализованный хост для отображения в поле ввода (с `https://`).
   static String? normalizeBackendHost(String? value) =>
@@ -82,6 +88,14 @@ class ApiConfig {
       trimmed = trimmed.replaceAll(RegExp(r'/+$'), '');
     }
     if (trimmed.isEmpty) return null;
+
+    final schemeMatch = RegExp(
+      r'^([a-zA-Z][a-zA-Z0-9+.-]*)://',
+    ).firstMatch(trimmed);
+    if (schemeMatch != null) {
+      final scheme = schemeMatch.group(1)!.toLowerCase();
+      if (scheme != 'http' && scheme != 'https') return null;
+    }
 
     final lower = trimmed.toLowerCase();
     if (!lower.startsWith('https://')) {
