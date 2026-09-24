@@ -421,7 +421,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                   child: Text(
                     'Укажите ссылку, если встреча планируется во внешнем '
                     'сервисе. Если поле пустое, будет создана новая '
-                    'конференция Jitsi, ссылка появится в карточке брони.',
+                    'онлайн-конференция, ссылка появится в карточке брони.',
                     style: TextStyle(
                       fontSize: 13,
                       color: CupertinoColors.secondaryLabel.resolveFrom(
