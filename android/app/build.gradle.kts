@@ -34,11 +34,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // ConnectApplication регистрирует нативный колбэк на Accept входящего
-        // звонка (см. ConnectApplication.kt) — нужен для запуска приложения,
-        // когда процесс полностью убит и headless-движок звонка не может
-        // сам поднять экран на передний план.
-        manifestPlaceholders["applicationName"] = "com.ikson.connect.ConnectApplication"
     }
 
     signingConfigs {
@@ -92,12 +87,6 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-splashscreen:1.0.1")
-    // Нужен напрямую в app-модуле для ConnectApplication.kt (диагностика
-    // Accept входящего звонка) — firebase_crashlytics подключает его только
-    // как implementation в своём собственном модуле, что не даёт его
-    // транзитивно app-модулю. Версия — та же, что уже разрешается через
-    // Firebase BoM у плагина firebase_crashlytics.
-    implementation("com.google.firebase:firebase-crashlytics:20.1.1")
 }
 
 if (file("google-services.json").exists()) {
