@@ -11,6 +11,7 @@ import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/app_logger.dart';
+import 'package:connect/utils/call_accept_trace.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
@@ -23,9 +24,17 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 /// Обработка CallKit-событий, когда приложение было в фоне/убито (Android).
 @pragma('vm:entry-point')
 Future<void> incomingCallBackgroundHandler(CallEvent event) async {
+  // Отдельный headless-изолят — своя, независимая от основного движка
+  // трасса. Показывает, сколько времени уходит на подъём headless-движка
+  // и отправку "принято" на бэкенд, пока основной движок с реальной
+  // Activity ещё только поднимается через ConnectApplication.kt.
+  CallAcceptTrace.mark('headless.dispatched');
   if (event case CallEventActionCallAccept(:final callKitParams)) {
     await AuthService.instance.init();
+    CallAcceptTrace.mark('headless.auth_init');
     await IncomingCallService.instance.handleBackgroundAccept(callKitParams);
+    CallAcceptTrace.mark('headless.accept_notified');
+    CallAcceptTrace.flush(reason: 'callkit_headless_accept');
   }
 }
 
@@ -187,6 +196,7 @@ class IncomingCallService {
           'Recovering accepted CallKit call ${call.id}',
           name: 'callkit',
         );
+        CallAcceptTrace.mark('recover.found_accepted_call');
         await _onAccept(call);
       }
     } catch (e, st) {
@@ -251,6 +261,7 @@ class IncomingCallService {
   Future<void> _onAccept(CallKitParams params) async {
     if (_acceptInFlight) return;
     _acceptInFlight = true;
+    CallAcceptTrace.mark('accept.start');
 
     final extra = params.extra ?? const {};
     final callId = params.id;
@@ -261,6 +272,7 @@ class IncomingCallService {
     try {
       if (!AuthService.instance.isAuthenticated) {
         await AuthService.instance.init();
+        CallAcceptTrace.mark('accept.auth_init');
       }
 
       if (callId.isNotEmpty) {
@@ -272,13 +284,17 @@ class IncomingCallService {
 
       if (room == null || room.isEmpty) {
         AppLogger.e('Accept call: room missing', name: 'callkit');
+        CallAcceptTrace.mark('accept.room_missing');
+        CallAcceptTrace.flush(reason: 'callkit_accept_room_missing');
         await FlutterCallkitIncoming.endCall(callId);
         return;
       }
 
       final mediaOk = await CallPermissions.ensureMediaOnly();
+      CallAcceptTrace.mark('accept.media_permissions');
       if (!mediaOk) {
         AppLogger.e('Accept call: media permissions denied', name: 'callkit');
+        CallAcceptTrace.flush(reason: 'callkit_accept_media_denied');
         await FlutterCallkitIncoming.endCall(callId);
         if (callId.isNotEmpty) {
           unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
@@ -307,6 +323,7 @@ class IncomingCallService {
       );
 
       final session = await ConnectorRepository.instance.join(room);
+      CallAcceptTrace.mark('accept.connector_joined');
       // Не закрываем CallKit до входа в Jitsi — иначе на lock screen
       // приложение может не подняться на передний план.
       await openConnectorSession(
@@ -314,13 +331,18 @@ class IncomingCallService {
         callId: callId,
         endWhenLeave: true,
       );
+      CallAcceptTrace.mark('accept.jitsi_joined');
+      CallAcceptTrace.flush(reason: 'callkit_accept_success');
       await FlutterCallkitIncoming.endCall(callId);
     } catch (e, st) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e, stackTrace: st);
+      CallAcceptTrace.mark('accept.exception');
       // Нефатально: чтобы подтвердить в проде, действительно ли ушла
       // причина «нет Activity в headless-движке» (см. handleBackgroundAccept)
-      // или остались другие сбои входа в звонок.
+      // или остались другие сбои входа в звонок. Трасса тут же прикладывает
+      // тайминги всех предыдущих шагов cold start — видно, где именно "тупит".
       CrashReportingService.recordNonFatal(e, st, reason: 'callkit_accept_join_failed');
+      CallAcceptTrace.flush(reason: 'callkit_accept_join_failed');
       await FlutterCallkitIncoming.endCall(callId);
       if (callId.isNotEmpty) {
         unawaited(ChatCallRepository.instance.endCall(callId));

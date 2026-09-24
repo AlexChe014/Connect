@@ -12,6 +12,7 @@ import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/services/incoming_call_service.dart';
 import 'package:connect/services/push_background_handler.dart';
 import 'package:connect/utils/app_logger.dart';
+import 'package:connect/utils/call_accept_trace.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -47,6 +48,7 @@ class PushNotificationService {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      CallAcceptTrace.mark('push.firebase_initialized');
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       if (Platform.isAndroid) {
@@ -55,6 +57,7 @@ class PushNotificationService {
             _localNotifications.resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>();
         await androidPlugin?.requestNotificationsPermission();
+        CallAcceptTrace.mark('push.android_notifications');
       }
 
       final messaging = FirebaseMessaging.instance;
@@ -65,6 +68,7 @@ class PushNotificationService {
       );
 
       await requestPermissions();
+      CallAcceptTrace.mark('push.permissions_requested');
 
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageNavigation);
@@ -79,6 +83,7 @@ class PushNotificationService {
 
       if (AuthService.instance.isAuthenticated) {
         await registerCurrentDevice();
+        CallAcceptTrace.mark('push.device_registered');
       }
     } catch (e, st) {
       AppLogger.e(
@@ -215,11 +220,15 @@ class PushNotificationService {
     if (Platform.isIOS) {
       await _waitForApnsToken();
     }
+    CallAcceptTrace.mark('push.apns_wait_1');
 
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         final token = await FirebaseMessaging.instance.getToken();
-        if (token != null && token.isNotEmpty) return token;
+        if (token != null && token.isNotEmpty) {
+          CallAcceptTrace.mark('push.fcm_token_attempt_${attempt + 1}_ok');
+          return token;
+        }
       } catch (e) {
         AppLogger.d(
           'FCM getToken attempt ${attempt + 1} failed: $e',
@@ -230,6 +239,7 @@ class PushNotificationService {
       if (Platform.isIOS) {
         await _waitForApnsToken();
       }
+      CallAcceptTrace.mark('push.fcm_token_attempt_${attempt + 1}_failed');
     }
     return null;
   }

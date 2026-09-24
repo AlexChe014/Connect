@@ -4,6 +4,7 @@ import UserNotifications
 import PushKit
 import CallKit
 import AVFoundation
+import FirebaseCrashlytics
 import flutter_callkit_incoming
 
 @main
@@ -146,8 +147,15 @@ import flutter_callkit_incoming
         let existingSession = UIApplication.shared.connectedScenes
           .first(where: { $0 is UIWindowScene })?.session
         NSLog("[callkit] onAccept: activating scene, existingSession=%@", existingSession == nil ? "nil (new)" : "existing")
+        // Breadcrumb: если Dart-сторона потом залогирует свою трассу
+        // (CallAcceptTrace) через Crashlytics, будет видно, дошли ли мы
+        // вообще до попытки активации сцены на нативной стороне.
+        Crashlytics.crashlytics().log("callkit_accept: requestSceneSessionActivation attempt existingSession=\(existingSession == nil ? "nil" : "existing")")
         UIApplication.shared.requestSceneSessionActivation(existingSession, userActivity: nil, options: nil) { error in
           NSLog("[callkit] requestSceneSessionActivation failed: %@", error.localizedDescription)
+          // Нефатально, но отдельным событием — иначе эта ошибка нигде не
+          // всплывёт: Dart-сторона в этом случае может вообще не запуститься.
+          Crashlytics.crashlytics().record(error: error)
         }
       }
     }

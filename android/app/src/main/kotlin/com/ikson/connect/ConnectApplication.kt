@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.hiennv.flutter_callkit_incoming.CallkitConstants
 import com.hiennv.flutter_callkit_incoming.CallkitEventCallback
 import com.hiennv.flutter_callkit_incoming.FlutterCallkitIncomingPlugin
@@ -32,14 +33,22 @@ class ConnectApplication : Application() {
 
             val callId = callData.getString(CallkitConstants.EXTRA_CALLKIT_ID, "")
             Log.d(TAG, "CallKit ACCEPT (id=$callId): bringing MainActivity to front")
+            // Breadcrumb: если Dart-сторона потом залогирует свою трассу
+            // (CallAcceptTrace) через Crashlytics, будет видно, дошли ли мы
+            // вообще до попытки startActivity на нативной стороне.
+            FirebaseCrashlytics.getInstance().log("callkit_accept: startActivity attempt id=$callId")
 
             val intent = Intent(this@ConnectApplication, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
             }
             try {
                 startActivity(intent)
+                FirebaseCrashlytics.getInstance().log("callkit_accept: startActivity ok id=$callId")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to bring MainActivity to front on call accept", e)
+                // Нефатально, но отдельным событием — иначе эта ошибка нигде
+                // не всплывёт: Dart-сторона в этом случае вообще не запустится.
+                FirebaseCrashlytics.getInstance().recordException(e)
             }
         }
     }

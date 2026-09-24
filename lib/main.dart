@@ -43,6 +43,7 @@ import 'services/push_notification_service.dart';
 import 'services/root_stack_observer.dart';
 import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
+import 'utils/call_accept_trace.dart';
 import 'utils/media_url_utils.dart';
 import 'utils/user_display_name.dart';
 import 'widgets/chat_avatar.dart';
@@ -52,15 +53,22 @@ import 'widgets/vpn_banner.dart';
 Future<void> main() async {
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    CallAcceptTrace.mark('binding_ready');
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiOverlay);
     await initializeDateFormatting('ru_RU', null);
+    CallAcceptTrace.mark('date_formatting');
     await ApiConfig.init();
+    CallAcceptTrace.mark('api_config');
     await AuthService.instance.init();
+    CallAcceptTrace.mark('auth');
     await BrandingService.instance.init();
+    CallAcceptTrace.mark('branding');
     // Инициализирует Firebase (нужен для CrashReportingService ниже).
     await PushNotificationService.instance.init();
+    CallAcceptTrace.mark('push_init');
     await IncomingCallService.instance.init();
+    CallAcceptTrace.mark('incoming_call_init');
     VpnDetectorService.instance.start();
     await CrashReportingService.init();
     runApp(const ConnectApp());
