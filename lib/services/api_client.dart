@@ -225,13 +225,24 @@ class ApiClient {
     final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
       final response = await http
-          .get(uri, headers: _headers)
+          .get(uri, headers: authHeaders)
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       if (response.statusCode >= 200 && response.statusCode < 300) {
         AuthService.instance.noteRequestSucceeded(
           sessionGeneration: sessionGeneration,
         );
-        return response.bodyBytes;
+        final bytes = response.bodyBytes;
+        final preview = bytes
+            .take(16)
+            .map((b) => b.toRadixString(16).padLeft(2, '0'))
+            .join(' ');
+        AppLogger.d(
+          'download OK: $uri content-type=${response.headers['content-type']} '
+          'content-encoding=${response.headers['content-encoding']} '
+          'len=${bytes.length} first-bytes=$preview',
+          name: 'network.http.download',
+        );
+        return bytes;
       }
       _noteResponseAuthOutcome(
         statusCode: response.statusCode,

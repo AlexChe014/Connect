@@ -152,7 +152,8 @@ class MailMessage {
             json['msgno'],
       ) ??
           0,
-      subject: _optionalString(json, ['subject', 'title', 'theme']) ?? '(без темы)',
+      subject: _subjectOrFallback(
+          _optionalString(json, ['subject', 'title', 'theme'])),
       from: _parseAddress(json['from'] ?? json['sender']) ??
           _optionalString(json, ['from_email', 'from_name', 'from_address']) ??
           '',
@@ -198,6 +199,13 @@ class MailMessage {
     return null;
   }
 
+  static String _subjectOrFallback(String? rawSubject) {
+    if (rawSubject == null || _isMimeParserErrorArtifact(rawSubject)) {
+      return '(без темы)';
+    }
+    return rawSubject;
+  }
+
   static String? _readScalarString(Object? value) {
     if (value == null) return null;
     if (value is String) {
@@ -214,10 +222,25 @@ class MailMessage {
     if (value == null) return null;
     var text = value.trim();
     if (text.isEmpty) return null;
+    if (_isMimeParserErrorArtifact(text)) return null;
     if (text.contains('&lt;') && text.contains('&gt;')) {
       text = _decodeHtmlEntities(text);
     }
     return text;
+  }
+
+  /// Некоторые письма приходят с сервера с текстом исключения парсера MIME
+  /// (например, ошибка webklex/php-imap) вместо реального содержимого —
+  /// такое значение нужно трактовать как отсутствие темы/тела, а не как
+  /// настоящий текст письма. Постоянный фикс — на бэкенде (см.
+  /// docs/BACKEND_MAIL_FIXES.md, п.3), здесь — защитная фильтрация на клиенте.
+  static bool _isMimeParserErrorArtifact(String text) {
+    final normalized = text.trim().toLowerCase();
+    const knownArtifacts = {
+      'no headers found',
+      'no header found',
+    };
+    return knownArtifacts.contains(normalized);
   }
 
   static String? _extractBodyFromUnknownFields(

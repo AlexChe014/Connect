@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
@@ -76,40 +77,20 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
             )
           : message;
 
-      // Открытие письма — это фактическое прочтение: getMessage() сам по себе
-      // ничего не помечает на сервере, поэтому раньше письмо оставалось
-      // непрочитанным (и точка-индикатор в списке не пропадала), пока
-      // пользователь вручную не свайпал «прочитано».
-      if (!resolved.isRead) {
-        try {
-          await MailRepository.instance.markRead(
-            connectionId: widget.connection.id,
-            messageId: widget.messageId,
-          );
-          resolved = MailMessage(
-            id: resolved.id,
-            subject: resolved.subject,
-            from: resolved.from,
-            to: resolved.to,
-            body: resolved.body,
-            bodyHtml: resolved.bodyHtml,
-            date: resolved.date,
-            isRead: true,
-            hasAttachments: resolved.hasAttachments,
-            attachments: resolved.attachments,
-          );
-          MailUnreadService.instance.refresh();
-        } catch (_) {
-          // Не удалось отметить прочитанным — письмо всё равно откроется,
-          // просто точка-индикатор в списке останется до следующей попытки.
-        }
-      }
-
       if (!mounted) return;
       setState(() {
         _message = resolved;
         _isLoading = false;
       });
+
+      // Открытие письма — это фактическое прочтение: getMessage() сам по себе
+      // ничего не помечает на сервере, поэтому раньше письмо оставалось
+      // непрочитанным (и точка-индикатор в списке не пропадала), пока
+      // пользователь вручную не свайпал «прочитано». Помечаем в фоне, не
+      // задерживая открытие письма вторым round-trip'ом.
+      if (!resolved.isRead) {
+        unawaited(_markReadInBackground(resolved));
+      }
     } catch (_) {
       if (!mounted) return;
       final fallback = widget.initialMessage;
@@ -126,6 +107,34 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
           const SnackBar(content: Text('Не удалось загрузить текст письма')),
         );
       }
+    }
+  }
+
+  Future<void> _markReadInBackground(MailMessage current) async {
+    try {
+      await MailRepository.instance.markRead(
+        connectionId: widget.connection.id,
+        messageId: widget.messageId,
+      );
+      MailUnreadService.instance.refresh();
+      if (!mounted || _message == null || _message!.isRead) return;
+      setState(() {
+        _message = MailMessage(
+          id: current.id,
+          subject: current.subject,
+          from: current.from,
+          to: current.to,
+          body: current.body,
+          bodyHtml: current.bodyHtml,
+          date: current.date,
+          isRead: true,
+          hasAttachments: current.hasAttachments,
+          attachments: current.attachments,
+        );
+      });
+    } catch (_) {
+      // Не удалось отметить прочитанным — письмо всё равно открыто,
+      // просто точка-индикатор в списке останется до следующей попытки.
     }
   }
 
