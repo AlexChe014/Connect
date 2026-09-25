@@ -20,10 +20,20 @@ class DiskRepository {
   DiskRepository._();
   static final DiskRepository instance = DiskRepository._();
 
+  static final _davPrefix = RegExp(r'^/*remote\.php/dav/files/[^/]+(/|$)');
+
+  /// `files/list` отдаёт полные WebDAV-пути (`/remote.php/dav/files/user_1/a.jpg`),
+  /// а остальные эндпоинты ждут путь относительно корня пользователя (`a.jpg`):
+  /// с полным путём бэкенд отвечает 200 и телом в 1 байт вместо файла, а
+  /// путь с ведущим `/` вообще режет WAF (403). Поэтому приводим любой путь
+  /// к относительному без ведущего слеша.
+  static String toApiPath(String path) =>
+      path.replaceFirst(_davPrefix, '').replaceFirst(RegExp(r'^/+'), '');
+
   Future<DiskListing> listFolder(String folder) async {
     final decoded = await ApiClient.instance.get(
       DiskRoutes.filesListUrl,
-      queryParameters: {'folder': folder},
+      queryParameters: {'folder': toApiPath(folder)},
     );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
@@ -39,7 +49,7 @@ class DiskRepository {
   }) async {
     final decoded = await ApiClient.instance.postMultipart(
       DiskRoutes.uploadUrl,
-      fields: {'folder': folder},
+      fields: {'folder': toApiPath(folder)},
       files: [http.MultipartFile.fromBytes('file', bytes, filename: filename)],
     );
     ApiEnvelope.unwrapData(
@@ -51,7 +61,7 @@ class DiskRepository {
   Future<void> deleteFile(String path) async {
     final decoded = await ApiClient.instance.get(
       DiskRoutes.deleteFileUrl,
-      queryParameters: {'path': path},
+      queryParameters: {'path': toApiPath(path)},
     );
     ApiEnvelope.unwrapData(
       decoded,
@@ -62,7 +72,7 @@ class DiskRepository {
   Future<void> createFolder(String path, {bool recursive = false}) async {
     final decoded = await ApiClient.instance.post(
       DiskRoutes.createFolderUrl,
-      body: {'path': path, 'recursive': recursive},
+      body: {'path': toApiPath(path), 'recursive': recursive},
     );
     ApiEnvelope.unwrapData(
       decoded,
@@ -77,7 +87,7 @@ class DiskRepository {
   Future<void> deleteFolder(String path) async {
     final decoded = await ApiClient.instance.get(
       DiskRoutes.deleteFolderUrl,
-      queryParameters: {'path': path},
+      queryParameters: {'path': toApiPath(path)},
     );
     ApiEnvelope.unwrapData(
       decoded,
@@ -92,19 +102,22 @@ class DiskRepository {
     final bytes = await ApiClient.instance.downloadBytes(
       Uri.parse(
         DiskRoutes.downloadUrl,
-      ).replace(queryParameters: {'path': path}).toString(),
+      ).replace(queryParameters: {'path': toApiPath(path)}).toString(),
     );
 
+    Object? decoded;
     try {
-      final decoded = jsonDecode(utf8.decode(bytes));
-      if (decoded is Map<String, dynamic> && decoded['success'] == false) {
-        ApiEnvelope.unwrapData(
-          decoded,
-          defaultErrorMessage: 'Не удалось скачать файл',
-        );
-      }
+      decoded = jsonDecode(utf8.decode(bytes));
     } catch (_) {
       // Бинарные данные не декодируются как UTF-8 JSON — это и есть файл.
+    }
+    // Вне try: иначе ApiException из unwrapData глотается и JSON ошибки
+    // сохраняется пользователю как «файл».
+    if (decoded is Map<String, dynamic> && decoded['success'] == false) {
+      ApiEnvelope.unwrapData(
+        decoded,
+        defaultErrorMessage: 'Не удалось скачать файл',
+      );
     }
 
     return Uint8List.fromList(bytes);
@@ -119,7 +132,7 @@ class DiskRepository {
     final decoded = await ApiClient.instance.post(
       DiskRoutes.createPublicShareUrl,
       body: {
-        'path': path,
+        'path': toApiPath(path),
         if (password != null && password.isNotEmpty) 'password': password,
         if (expireDate != null && expireDate.isNotEmpty)
           'expire_date': expireDate,
@@ -135,7 +148,7 @@ class DiskRepository {
   Future<void> shareWithUser(String path, int userId) async {
     final decoded = await ApiClient.instance.post(
       DiskRoutes.shareWithUserUrl,
-      body: {'path': path, 'share_with': userId},
+      body: {'path': toApiPath(path), 'share_with': userId},
     );
     ApiEnvelope.unwrapData(
       decoded,
@@ -146,7 +159,7 @@ class DiskRepository {
   Future<List<DiskShare>> listShares(String path) async {
     final decoded = await ApiClient.instance.get(
       DiskRoutes.listSharesUrl,
-      queryParameters: {'path': path},
+      queryParameters: {'path': toApiPath(path)},
     );
     final list = ApiEnvelope.unwrapDataList(
       decoded,
