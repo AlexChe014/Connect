@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:connect/models/documents/document_service.dart';
@@ -173,16 +174,20 @@ class AppNavigationService {
       return;
     }
 
-    await navigator.pushNamedAndRemoveUntil(
-      '/home',
-      (route) => false,
-      arguments: {'initialIndex': 0},
+    // Не await: `push*` завершается только когда route закроют, а `/home` —
+    // корневой, так что дальше код бы не пошёл и раздел не открылся.
+    unawaited(
+      navigator.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+        arguments: {'initialIndex': 0},
+      ),
     );
-
-    if (!navigator.mounted) return;
-    await navigator.push<void>(
-      CupertinoPageRoute<void>(
-        builder: (context) => const DocumentsSigningScreen(),
+    unawaited(
+      navigator.push<void>(
+        CupertinoPageRoute<void>(
+          builder: (context) => const DocumentsSigningScreen(),
+        ),
       ),
     );
 
@@ -198,9 +203,11 @@ class AppNavigationService {
         }
       }
       if (service == null || !navigator.mounted) return;
-      await navigator.push<void>(
-        CupertinoPageRoute<void>(
-          builder: (context) => DocumentsListScreen(service: service!),
+      unawaited(
+        navigator.push<void>(
+          CupertinoPageRoute<void>(
+            builder: (context) => DocumentsListScreen(service: service!),
+          ),
         ),
       );
     } catch (e, st) {
