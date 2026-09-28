@@ -11,6 +11,7 @@ import '../repositories/bookings_repository.dart';
 import '../repositories/connector_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
+import '../services/api_client.dart';
 import '../utils/booking_time_utils.dart';
 import '../utils/connector_launch.dart';
 import '../utils/connector_url_utils.dart';
@@ -622,15 +623,22 @@ class _JoinMeetingChip extends StatelessWidget {
   final String url;
   final bool isPassed;
 
-  Future<void> _open() async {
+  Future<void> _open(BuildContext context) async {
     final room = connectorRoomFromUrl(url);
     if (room != null) {
       try {
         final session = await ConnectorRepository.instance.join(room);
         await openConnectorSession(session);
         return;
-      } catch (_) {
-        // Фоллбэк на браузер ниже.
+      } catch (e) {
+        if (!context.mounted) return;
+        final message = e is ApiException
+            ? e.message
+            : 'Не удалось подключиться к конференции';
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(SnackBar(content: Text(message)));
+        return;
       }
     }
 
@@ -646,7 +654,7 @@ class _JoinMeetingChip extends StatelessWidget {
         : CupertinoColors.activeBlue;
 
     return GestureDetector(
-      onTap: isPassed ? null : _open,
+      onTap: isPassed ? null : () => _open(context),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
