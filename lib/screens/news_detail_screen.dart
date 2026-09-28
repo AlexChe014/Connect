@@ -20,6 +20,7 @@ import '../widgets/chat_avatar.dart';
 import '../widgets/chat_message_text.dart';
 import '../widgets/news_people_sheet.dart';
 import '../widgets/news_reaction_button.dart';
+import 'news_image_viewer_screen.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key, required this.news});
@@ -391,8 +392,9 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(AppSpacing.lg),
                           decoration: BoxDecoration(
-                            color: CupertinoColors.systemBackground
-                                .resolveFrom(context),
+                            color: CupertinoColors.systemBackground.resolveFrom(
+                              context,
+                            ),
                             borderRadius: BorderRadius.circular(18),
                             boxShadow: AppColors.cardPhotoShadow,
                           ),
@@ -425,40 +427,57 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                               ),
                               const SizedBox(height: 14),
                               if (hasImage) ...[
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: AspectRatio(
-                                    aspectRatio: 16 / 9,
-                                    // Фото целиком (contain) + блюр-копия того же
-                                    // снимка по краям — портретные фото не
-                                    // обрезаются, но карточка остаётся 16:9.
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        ImageFiltered(
-                                          imageFilter: ImageFilter.blur(
-                                            sigmaX: 24,
-                                            sigmaY: 24,
-                                          ),
-                                          child: AppNetworkImage(
-                                            url: _news.imageUrl,
-                                            width: double.infinity,
-                                            height: double.infinity,
-                                            fit: BoxFit.cover,
+                                Semantics(
+                                  button: true,
+                                  label: 'Открыть изображение',
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      FocusManager.instance.primaryFocus
+                                          ?.unfocus();
+                                      Navigator.of(context).push<void>(
+                                        CupertinoPageRoute<void>(
+                                          builder: (_) => NewsImageViewerScreen(
+                                            imageUrl: _news.imageUrl!,
                                           ),
                                         ),
-                                        ColoredBox(
-                                          color: Colors.black.withValues(
-                                            alpha: 0.18,
-                                          ),
+                                      );
+                                    },
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: AspectRatio(
+                                        aspectRatio: 16 / 9,
+                                        // Фото целиком (contain) + блюр-копия того же
+                                        // снимка по краям — портретные фото не
+                                        // обрезаются, но карточка остаётся 16:9.
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            ImageFiltered(
+                                              imageFilter: ImageFilter.blur(
+                                                sigmaX: 24,
+                                                sigmaY: 24,
+                                              ),
+                                              child: AppNetworkImage(
+                                                url: _news.imageUrl,
+                                                width: double.infinity,
+                                                height: double.infinity,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                            ColoredBox(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.18,
+                                              ),
+                                            ),
+                                            AppNetworkImage(
+                                              url: _news.imageUrl,
+                                              width: double.infinity,
+                                              height: double.infinity,
+                                              fit: BoxFit.contain,
+                                            ),
+                                          ],
                                         ),
-                                        AppNetworkImage(
-                                          url: _news.imageUrl,
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -471,8 +490,9 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                                       ? _news.contentHtml
                                       : _news.content,
                                   fontSize: 16,
-                                  color:
-                                      CupertinoColors.label.resolveFrom(context),
+                                  color: CupertinoColors.label.resolveFrom(
+                                    context,
+                                  ),
                                 ),
                               const SizedBox(height: 20),
                               Row(
@@ -521,7 +541,9 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                       else if (_comments.isEmpty)
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),
-                          child: AppEmptyState(message: 'Пока нет комментариев'),
+                          child: AppEmptyState(
+                            message: 'Пока нет комментариев',
+                          ),
                         )
                       else
                         ..._comments.map(
@@ -615,10 +637,7 @@ class _CommentInputBar extends StatelessWidget {
                       height: 26,
                       child: CupertinoActivityIndicator(),
                     )
-                  : const Icon(
-                      CupertinoIcons.arrow_up_circle_fill,
-                      size: 30,
-                    ),
+                  : const Icon(CupertinoIcons.arrow_up_circle_fill, size: 30),
             ),
           ],
         ),
@@ -709,8 +728,9 @@ class _CommentTile extends StatelessWidget {
                           dateLabel,
                           style: TextStyle(
                             fontSize: 11,
-                            color: CupertinoColors.secondaryLabel
-                                .resolveFrom(context),
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
                         ),
                         if (canDelete) ...[
@@ -721,8 +741,9 @@ class _CommentTile extends StatelessWidget {
                             child: Icon(
                               CupertinoIcons.ellipsis,
                               size: 16,
-                              color: CupertinoColors.secondaryLabel
-                                  .resolveFrom(context),
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
                             ),
                           ),
                         ],
