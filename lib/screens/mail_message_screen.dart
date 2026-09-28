@@ -116,7 +116,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         connectionId: widget.connection.id,
         messageId: widget.messageId,
       );
-      MailUnreadService.instance.refresh();
+      MailUnreadService.instance.invalidate();
       if (!mounted || _message == null || _message!.isRead) return;
       setState(() {
         _message = MailMessage(
@@ -235,7 +235,11 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       await File(path).writeAsBytes(bytes, flush: true);
       await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
     } catch (e, st) {
-      CrashReportingService.recordNonFatal(e, st, reason: 'mail_attachment_download');
+      CrashReportingService.recordNonFatal(
+        e,
+        st,
+        reason: 'mail_attachment_download',
+      );
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось скачать вложение')),

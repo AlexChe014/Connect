@@ -8,6 +8,8 @@ import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/mail_unread_service.dart';
+import 'package:connect/services/document_pending_service.dart';
 import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/services/incoming_call_service.dart';
 import 'package:connect/services/push_background_handler.dart';
@@ -51,9 +53,10 @@ class PushNotificationService {
 
       if (Platform.isAndroid) {
         await _initAndroidNotifications();
-        final androidPlugin =
-            _localNotifications.resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>();
+        final androidPlugin = _localNotifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         await androidPlugin?.requestNotificationsPermission();
       }
 
@@ -73,6 +76,16 @@ class PushNotificationService {
       final initialMessage = await messaging.getInitialMessage();
       if (initialMessage != null) {
         _storeNavigationFromMessage(initialMessage);
+      }
+      if (Platform.isAndroid) {
+        final launch = await _localNotifications
+            .getNotificationAppLaunchDetails();
+        final payload = launch?.notificationResponse?.payload;
+        if (launch?.didNotificationLaunchApp == true && payload != null) {
+          _storeNavigationFromMessage(
+            RemoteMessage(data: _decodePayload(payload)),
+          );
+        }
       }
 
       _initialized = true;
@@ -97,9 +110,10 @@ class PushNotificationService {
 
     try {
       if (Platform.isAndroid) {
-        final androidPlugin =
-            _localNotifications.resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin>();
+        final androidPlugin = _localNotifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         await androidPlugin?.requestNotificationsPermission();
       }
 
@@ -129,7 +143,9 @@ class PushNotificationService {
   }
 
   Future<void> _initAndroidNotifications() async {
-    const androidInit = AndroidInitializationSettings('@drawable/ic_stat_notify');
+    const androidInit = AndroidInitializationSettings(
+      '@drawable/ic_stat_notify',
+    );
     await _localNotifications.initialize(
       settings: const InitializationSettings(android: androidInit),
       onDidReceiveNotificationResponse: (response) {
@@ -139,9 +155,10 @@ class PushNotificationService {
       },
     );
 
-    final androidPlugin =
-        _localNotifications.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     await androidPlugin?.createNotificationChannel(
       const AndroidNotificationChannel(
         _androidChannelId,
@@ -282,6 +299,12 @@ class PushNotificationService {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
+    if (message.data['type'] == 'mail') {
+      MailUnreadService.instance.invalidate();
+    }
+    if (message.data['type'] == 'new_documents') {
+      unawaited(DocumentPendingService.instance.refreshKnownServices());
+    }
     if (IncomingCallPayload.isChatCall(message.data)) {
       await IncomingCallService.instance.handlePushData(message.data);
       return;
@@ -321,15 +344,22 @@ class PushNotificationService {
     }
 
     final notification = message.notification;
-    if (notification == null) return;
+    final isMail = message.data['type'] == 'mail';
+    if (notification == null && !isMail) return;
     if (!Platform.isAndroid) return;
     if (isMutedChat) return;
 
     final payload = _encodePayload(message.data);
     _localNotifications.show(
-      id: notification.hashCode,
-      title: notification.title,
-      body: notification.body,
+      id: message.messageId.hashCode ^ message.data.hashCode,
+      title:
+          notification?.title ??
+          message.data['title']?.toString() ??
+          (isMail ? 'Новое письмо' : null),
+      body:
+          notification?.body ??
+          message.data['body']?.toString() ??
+          message.data['subject']?.toString(),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _androidChannelId,
@@ -339,6 +369,36 @@ class PushNotificationService {
         ),
       ),
       payload: payload,
+    );
+  }
+
+  /// Notification payloads are displayed by the OS in the background.
+  /// Android data-only mail pushes require an explicit local notification.
+  Future<void> showBackgroundMail(RemoteMessage message) async {
+    if (!Platform.isAndroid ||
+        message.notification != null ||
+        message.data['type'] != 'mail') {
+      return;
+    }
+    await _initAndroidNotifications();
+    await _localNotifications.show(
+      id:
+          (message.messageId ??
+                  '${message.data['connection_id']}:${message.data['message_id']}')
+              .hashCode,
+      title: message.data['title']?.toString() ?? 'Новое письмо',
+      body:
+          message.data['body']?.toString() ??
+          message.data['subject']?.toString(),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _androidChannelId,
+          _androidChannelName,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      payload: _encodePayload(message.data),
     );
   }
 

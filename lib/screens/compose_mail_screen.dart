@@ -113,6 +113,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   }
 
   Future<void> _send() async {
+    if (_isSending) return;
     if (!_validate()) return;
     FocusManager.instance.primaryFocus?.unfocus();
 
@@ -157,6 +158,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
         await MailRepository.instance.sendMail(
           SendMailRequest(
+            connectionId: widget.connection.id,
             to: _toController.text.trim(),
             subject: _subjectController.text.trim(),
             body: _bodyController.text,

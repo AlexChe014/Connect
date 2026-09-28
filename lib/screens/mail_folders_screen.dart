@@ -86,7 +86,9 @@ class MailFoldersScreen extends StatelessWidget {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if ((folder.unreadCount ?? 0) > 0)
+                            if (!folder.isSent &&
+                                !folder.isDrafts &&
+                                (folder.unreadCount ?? 0) > 0)
                               Padding(
                                 padding: const EdgeInsets.only(right: 6),
                                 child: Text(

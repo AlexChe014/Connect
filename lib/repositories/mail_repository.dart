@@ -141,12 +141,14 @@ class UpdateMailConnectionRequest {
 }
 
 class SendMailRequest {
+  final int connectionId;
   final String to;
   final String subject;
   final String? body;
   final List<http.MultipartFile> attachments;
 
   const SendMailRequest({
+    required this.connectionId,
     required this.to,
     required this.subject,
     this.body,
@@ -393,7 +395,7 @@ class MailRepository {
 
   // --- Mark read/unread ---
 
-  Future<MailMessage> markRead({
+  Future<void> markRead({
     required int connectionId,
     required int messageId,
   }) async {
@@ -401,14 +403,10 @@ class MailRepository {
       MailRoutes.markReadUrl(connectionId, messageId),
       body: {'is_read': true},
     );
-    final data = _unwrapMailDataMap(
-      decoded,
-      defaultErrorMessage: 'Не удалось отметить письмо прочитанным',
-    );
-    return MailMessage.fromJson(data);
+    _unwrapMailData(decoded, 'Не удалось отметить письмо прочитанным');
   }
 
-  Future<MailMessage> markUnread({
+  Future<void> markUnread({
     required int connectionId,
     required int messageId,
   }) async {
@@ -416,21 +414,18 @@ class MailRepository {
       MailRoutes.markUnreadUrl(connectionId, messageId),
       body: {'is_read': false},
     );
-    final data = _unwrapMailDataMap(
-      decoded,
-      defaultErrorMessage: 'Не удалось отметить письмо непрочитанным',
-    );
-    return MailMessage.fromJson(data);
+    _unwrapMailData(decoded, 'Не удалось отметить письмо непрочитанным');
   }
 
   Future<void> markFewRead({
     required int connectionId,
     required List<int> ids,
   }) async {
-    await ApiClient.instance.post(
+    final decoded = await ApiClient.instance.post(
       MailRoutes.markFewReadUrl(connectionId),
       body: {'ids': ids},
     );
+    _unwrapMailData(decoded, 'Не удалось изменить статус писем');
   }
 
   // --- Delete ---
@@ -513,6 +508,9 @@ class MailRepository {
   }
 
   Future<void> sendMail(SendMailRequest request) async {
+    // The current API sends from the user's default SMTP connection.
+    // Select it explicitly; an atomic per-message sender needs backend support.
+    await setDefaultConnection(request.connectionId);
     final fields = <String, String>{
       'to': request.to,
       'subject': request.subject,
@@ -531,7 +529,7 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось отправить письмо');
   }
 
-  Future<MailMessage> replyMail(ReplyMailRequest request) async {
+  Future<void> replyMail(ReplyMailRequest request) async {
     final body = <String, dynamic>{
       'to': request.to,
       'subject': request.subject,
@@ -543,14 +541,10 @@ class MailRepository {
       MailRoutes.smtpReplyUrl(request.messageId),
       body: body,
     );
-    final data = _unwrapMailDataMap(
-      decoded,
-      defaultErrorMessage: 'Не удалось ответить на письмо',
-    );
-    return MailMessage.fromJson(data);
+    _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
 
-  Future<MailMessage> forwardMail(ForwardMailRequest request) async {
+  Future<void> forwardMail(ForwardMailRequest request) async {
     final body = <String, dynamic>{
       'to': request.to,
       'subject': request.subject,
@@ -562,11 +556,7 @@ class MailRepository {
       MailRoutes.smtpForwardUrl(request.messageId),
       body: body,
     );
-    final data = _unwrapMailDataMap(
-      decoded,
-      defaultErrorMessage: 'Не удалось переслать письмо',
-    );
-    return MailMessage.fromJson(data);
+    _unwrapMailData(decoded, 'Не удалось переслать письмо');
   }
 
   // --- Internal helpers ---
@@ -576,59 +566,16 @@ class MailRepository {
     String errorMessage,
   ) {
     final data = _unwrapMailData(decoded, errorMessage);
-    // Live API: array of EmailFolder objects (id, original_name, custom_name, children).
-    // Spec/docs may still describe plain strings — support both.
-    if (data is List) {
-      final folders = <MailFolder>[];
-      for (final item in data) {
-        _collectMailFolders(item, folders);
-      }
-      final visible = _dedupeSentFolders(_hideSystemFolders(folders));
-      return visible.where((f) => f.id > 0 || f.name.isNotEmpty).toList();
+    final folders = <MailFolder>[];
+    final items = data is List ? data : _extractJsonMaps(data);
+    for (final item in items) {
+      _collectMailFolders(item, folders);
     }
-    return _dedupeSentFolders(
-      _hideSystemFolders(_parseFolderList(decoded, errorMessage)),
-    );
-  }
-
-  /// Некоторые серверы отдают папку «Отправленные» дважды — под родным
-  /// IMAP-именем и под локализованным алиасом того же ящика — и в списке
-  /// папок пользователь видит два одинаковых на вид пункта. Оставляем один:
-  /// тот, что ближе к корню (депth меньше), а при равенстве — с большим
-  /// числом писем (она и есть реально используемая), остальные и их
-  /// вложенные подпапки убираем — как и для скрытых служебных папок.
-  List<MailFolder> _dedupeSentFolders(List<MailFolder> folders) {
-    final sentIndexes = <int>[
-      for (var i = 0; i < folders.length; i++)
-        if (folders[i].isSent) i,
-    ];
-    if (sentIndexes.length <= 1) return folders;
-
-    var best = sentIndexes.first;
-    for (final i in sentIndexes.skip(1)) {
-      final candidate = folders[i];
-      final current = folders[best];
-      final better = candidate.depth != current.depth
-          ? candidate.depth < current.depth
-          : (candidate.totalCount ?? 0) > (current.totalCount ?? 0);
-      if (better) best = i;
-    }
-
-    final result = <MailFolder>[];
-    int? skipDepth;
-    for (var i = 0; i < folders.length; i++) {
-      final folder = folders[i];
-      if (skipDepth != null) {
-        if (folder.depth > skipDepth) continue;
-        skipDepth = null;
-      }
-      if (sentIndexes.contains(i) && i != best) {
-        skipDepth = folder.depth;
-        continue;
-      }
-      result.add(folder);
-    }
-    return result;
+    // Equal names do not mean equal folders: retain different server IDs.
+    final seen = <int>{};
+    return _hideSystemFolders(
+      folders,
+    ).where((f) => f.id <= 0 || seen.add(f.id)).toList();
   }
 
   /// Убирает служебные папки групповых серверов (контакты, календарь,
@@ -675,14 +622,6 @@ class MailRepository {
         _collectMailFolders(child, out, depth: depth + 1);
       }
     }
-  }
-
-  List<MailFolder> _parseFolderList(
-    Map<String, dynamic> decoded,
-    String errorMessage,
-  ) {
-    final data = _unwrapMailData(decoded, errorMessage);
-    return _mapJsonList(data, MailFolder.fromJson);
   }
 
   List<MailMessage> _parseMessageList(
@@ -851,27 +790,6 @@ class MailRepository {
     if (raw is num) return raw.toInt();
     if (raw is String) return int.tryParse(raw.trim());
     return null;
-  }
-
-  List<T> _mapJsonList<T>(
-    Object? data,
-    T Function(Map<String, dynamic>) mapItem, {
-    bool isConnection = false,
-  }) {
-    final rawItems = _extractJsonMaps(data);
-    return rawItems
-        .map(mapItem)
-        .where((item) => _isValidMailItem(item, isConnection: isConnection))
-        .toList();
-  }
-
-  bool _isValidMailItem<T>(T item, {bool isConnection = false}) {
-    if (item is MailConnection) {
-      return item.id > 0 || (isConnection && item.email.isNotEmpty);
-    }
-    if (item is MailFolder) return item.id > 0 || item.name.isNotEmpty;
-    if (item is MailMessage) return item.id > 0 || item.subject.isNotEmpty;
-    return true;
   }
 
   List<Map<String, dynamic>> _extractJsonMaps(Object? data) {
