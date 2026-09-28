@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show RefreshIndicator, ScaffoldMessenger, SnackBar;
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart'
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
+import '../services/document_pending_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
@@ -19,7 +21,10 @@ class DocumentsSigningScreen extends StatefulWidget {
   State<DocumentsSigningScreen> createState() => _DocumentsSigningScreenState();
 }
 
-class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
+class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
+    with WidgetsBindingObserver {
+  final _pending = DocumentPendingService.instance;
+  Timer? _timer;
   List<DocumentService> _services = [];
   bool _isLoading = true;
   bool _isAuthenticating = false;
@@ -28,7 +33,41 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pending.addListener(_onCountsChanged);
+    _timer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _refreshCounts(),
+    );
     _loadServices();
+  }
+
+  void _onCountsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _refreshCounts() {
+    if (!mounted ||
+        _isLoading ||
+        _pending.loading.isNotEmpty ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    unawaited(_pending.refresh(_services));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshCounts();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _pending.removeListener(_onCountsChanged);
+    super.dispose();
   }
 
   Future<void> _loadServices({bool promptAccessCodeIfEmpty = true}) async {
@@ -40,6 +79,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         _services = items;
         _isLoading = false;
       });
+      unawaited(_pending.refresh(items));
       if (items.isEmpty && promptAccessCodeIfEmpty && !_accessCodePromptShown) {
         _accessCodePromptShown = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -79,6 +119,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
         _services = services;
         _isAuthenticating = false;
       });
+      unawaited(_pending.refresh(services));
       if (services.isEmpty) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('По этому коду нет доступных сервисов')),
@@ -172,12 +213,13 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
     }
   }
 
-  void _openDocuments(DocumentService service) {
-    Navigator.of(context).push<void>(
+  Future<void> _openDocuments(DocumentService service) async {
+    await Navigator.of(context).push<void>(
       CupertinoPageRoute<void>(
         builder: (context) => DocumentsListScreen(service: service),
       ),
     );
+    if (mounted) await _pending.refresh(_services);
   }
 
   Widget _iconBadge(IconData icon, Color color) {
@@ -232,6 +274,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
             final service = _services[index];
             return _ServiceTile(
               service: service,
+              pendingCount: _pending.counts[service.id],
+              countError: _pending.errors.contains(service.id),
+              countLoading: _pending.loading.contains(service.id),
               icon: _iconBadge(
                 service.isSigningService
                     ? CupertinoIcons.pencil_outline
@@ -266,6 +311,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen> {
           child: RefreshIndicator(
             onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
             child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 const CupertinoSliverNavigationBar(
                   largeTitle: Text('Согласование'),
@@ -288,9 +334,15 @@ class _ServiceTile extends StatelessWidget {
     required this.icon,
     required this.onTap,
     required this.onMore,
+    required this.pendingCount,
+    required this.countError,
+    required this.countLoading,
   });
 
   final DocumentService service;
+  final int? pendingCount;
+  final bool countError;
+  final bool countLoading;
   final Widget icon;
   final VoidCallback onTap;
   final VoidCallback onMore;
@@ -326,6 +378,44 @@ class _ServiceTile extends StatelessWidget {
                   ),
                 ),
               ),
+              if (countLoading)
+                const CupertinoActivityIndicator(radius: 8)
+              else if (countError)
+                Semantics(
+                  label: 'Не удалось проверить документы',
+                  child: const Icon(
+                    CupertinoIcons.exclamationmark_circle,
+                    color: CupertinoColors.systemOrange,
+                    size: 20,
+                  ),
+                )
+              else if (pendingCount != null)
+                Semantics(
+                  label: 'Документов на согласование: $pendingCount',
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pendingCount! > 0
+                          ? CupertinoColors.systemRed
+                          : CupertinoColors.systemGrey5,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$pendingCount',
+                      style: TextStyle(
+                        color: pendingCount! > 0
+                            ? CupertinoColors.white
+                            : CupertinoColors.secondaryLabel,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 6),
               GestureDetector(
                 onTap: onMore,
                 child: Padding(

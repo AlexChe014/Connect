@@ -37,6 +37,7 @@ import 'services/chat_realtime_service.dart';
 import 'services/crash_reporting_service.dart';
 import 'services/incoming_call_service.dart';
 import 'services/mail_unread_service.dart';
+import 'services/document_pending_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/root_stack_observer.dart';
@@ -217,6 +218,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   bool _isDrawerOpen = false;
   bool _isProfileOpen = false;
   Map<String, dynamic>? _profile;
+  Timer? _mailRefreshTimer;
 
   @override
   void initState() {
@@ -232,6 +234,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     unawaited(ChatRealtimeService.instance.start());
     MailUnreadService.instance.addListener(_onMailUnreadChanged);
     MailUnreadService.instance.refresh();
+    _mailRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        MailUnreadService.instance.refresh();
+      }
+    });
   }
 
   @override
@@ -239,6 +246,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     WidgetsBinding.instance.removeObserver(this);
     ChatService.instance.removeListener(_onChatsChanged);
     MailUnreadService.instance.removeListener(_onMailUnreadChanged);
+    _mailRefreshTimer?.cancel();
+    MailUnreadService.instance.reset();
+    DocumentPendingService.instance.reset();
     unawaited(ChatRealtimeService.instance.stop());
     super.dispose();
   }

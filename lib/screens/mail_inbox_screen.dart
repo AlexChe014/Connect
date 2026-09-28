@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show Colors, RefreshIndicator, Scaffold, ScaffoldMessenger, SnackBar;
@@ -34,7 +35,8 @@ class MailInboxScreen extends StatefulWidget {
   State<MailInboxScreen> createState() => _MailInboxScreenState();
 }
 
-class _MailInboxScreenState extends State<MailInboxScreen> {
+class _MailInboxScreenState extends State<MailInboxScreen>
+    with WidgetsBindingObserver {
   late MailConnection _connection = widget.connection;
   late List<MailConnection> _connections = widget.connections.isEmpty
       ? [widget.connection]
@@ -49,13 +51,8 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   int _nextPage = 1;
   bool _usingServiceFallback = false;
 
-  /// Кэш id писем в папке(ах) «Спам» — используется, чтобы вычесть их из
-  /// сводной ленты «Все входящие» (см. [_filterSpamIfNeeded]): бэкенд в
-  /// `/mail/get/service` отдаёт вообще все письма ящика без привязки к
-  /// папке в ответе, поэтому единственный способ исключить спам на клиенте —
-  /// заранее узнать id спам-писем и отфильтровать по ним.
-  Set<int>? _spamMessageIds;
-  Future<Set<int>>? _spamMessageIdsFuture;
+  Timer? _refreshTimer;
+  int _requestVersion = 0;
 
   String _searchQuery = '';
   final _searchController = TextEditingController();
@@ -76,221 +73,122 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    MailUnreadService.instance.mailChanges.addListener(_refreshVisible);
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _refreshVisible(),
+    );
     _loadFolders();
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    MailUnreadService.instance.mailChanges.removeListener(_refreshVisible);
     _searchController.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshVisible();
+  }
+
+  void _refreshVisible() {
+    if (!mounted ||
+        _isLoadingFolders ||
+        _isLoadingMessages ||
+        _isLoadingMore ||
+        _isEditing ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    unawaited(_loadMessages());
+  }
+
   Future<void> _loadFolders() async {
+    final connectionId = _connection.id;
     setState(() => _isLoadingFolders = true);
     try {
-      final folders = await MailRepository.instance.getMailboxes(
-        _connection.id,
-      );
-      if (!mounted) return;
+      final folders = await MailRepository.instance.getMailboxes(connectionId);
+      if (!mounted || connectionId != _connection.id) return;
       setState(() {
         _folders = folders;
-        _selectedFolder = _buildAllInboxFolder(folders);
+        _selectedFolder =
+            folders.where((f) => f.isInbox).firstOrNull ??
+            folders.where((f) => f.id > 0).firstOrNull;
         _isLoadingFolders = false;
       });
-      // Папки (и их id) могли смениться — кэш id спам-писем не годится.
-      _spamMessageIds = null;
-      _spamMessageIdsFuture = null;
       await _loadMessages();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || connectionId != _connection.id) return;
       setState(() => _isLoadingFolders = false);
-      await _loadMessages(fallbackToService: true);
+      await _loadMessages();
     }
   }
 
-  /// «Все входящие» — единая точка входа вместо того, чтобы заставлять
-  /// переключаться между Входящими и их вложенными подпапками по отдельности
-  /// (см. `_browsableFolders`); счётчики — сумма по всем папкам ящика,
-  /// посчитанная на клиенте, т.к. сервер такую сводную папку не отдаёт.
-  MailFolder _buildAllInboxFolder(List<MailFolder> folders) {
-    int? unread;
-    int? total;
-    for (final folder in folders) {
-      if (folder.unreadCount != null) {
-        unread = (unread ?? 0) + folder.unreadCount!;
-      }
-      if (folder.totalCount != null) {
-        total = (total ?? 0) + folder.totalCount!;
-      }
-    }
-    return MailFolder.allInbox(unreadCount: unread, totalCount: total);
-  }
+  List<MailFolder> get _browsableFolders =>
+      _folders.where((folder) => folder.id > 0).toList();
 
-  /// Папки для экрана-переключателя: вместо плоского дерева, где Входящие и
-  /// все их вложенные подпапки перечислены по отдельности (при глубокой
-  /// вложенности список становится нечитаемо длинным), показываем единую
-  /// «Все входящие» + остальные папки верхнего уровня (Черновики,
-  /// Отправленные, Спам, Корзина, кастомные) — их вложенные подпапки тоже
-  /// не дублируем отдельными пунктами, письма из них доступны через
-  /// «Все входящие».
-  List<MailFolder> get _browsableFolders => [
-    _buildAllInboxFolder(_folders),
-    for (final folder in _folders)
-      if (folder.depth == 0 && !folder.isInbox) folder,
-  ];
-
-  /// Забирает id всех писем из папки(ок) «Спам» — по одной странице
-  /// `getMessagesByFolder` за раз, пока сервер не скажет `hasMore == false`.
-  /// Результат кэшируется в [_spamMessageIds]; при параллельных вызовах
-  /// (загрузка + подгрузка следующей страницы) все ждут один и тот же Future.
-  /// [_maxSpamPagesPerFolder] — защита от зависания, если сервер вдруг
-  /// вечно возвращает `hasMore: true`.
-  static const int _maxSpamPagesPerFolder = 50;
-
-  Future<Set<int>> _ensureSpamMessageIds() {
-    if (_spamMessageIds != null) return Future.value(_spamMessageIds);
-    return _spamMessageIdsFuture ??= _fetchSpamMessageIds().then((ids) {
-      _spamMessageIds = ids;
-      return ids;
-    }).whenComplete(() => _spamMessageIdsFuture = null);
-  }
-
-  Future<Set<int>> _fetchSpamMessageIds() async {
-    final spamFolders = _folders.where((f) => f.isSpam);
-    final ids = <int>{};
-    for (final folder in spamFolders) {
-      var page = 1;
-      for (var i = 0; i < _maxSpamPagesPerFolder; i++) {
-        final MailMessagePage result;
-        try {
-          result = await MailRepository.instance.getMessagesByFolder(
-            connectionId: _connection.id,
-            folderId: folder.id,
-            page: page,
-          );
-        } catch (_) {
-          // Папка «Спам» не прочиталась — лучше показать письма как есть,
-          // чем вовсе не показать «Все входящие» из-за побочного запроса.
-          break;
-        }
-        ids.addAll(result.messages.map((m) => m.id));
-        if (!result.hasMore) break;
-        page = result.nextPage;
-      }
-    }
-    return ids;
-  }
-
-  /// «Все входящие» построено поверх `getMessagesByService`, который
-  /// отдаёт вообще все письма ящика (в т.ч. спам) одним списком без пометки
-  /// папки — поэтому спам вычитается на клиенте по id, полученным из
-  /// [_ensureSpamMessageIds]. К письмам, загруженным напрямую по папке
-  /// (`getMessagesByFolder`), фильтр не применяется — там пользователь и
-  /// так открыл конкретную папку явно, включая саму папку «Спам».
-  Future<List<MailMessage>> _filterSpamIfNeeded(
-    List<MailMessage> messages, {
-    required bool usingService,
-  }) async {
-    if (!usingService) return messages;
+  Future<void> _loadMessages({bool forceSync = false}) async {
+    if (!mounted) return;
+    final version = ++_requestVersion;
+    final connectionId = _connection.id;
+    final folder = _selectedFolder;
+    setState(() {
+      _isLoadingMessages = true;
+      _isLoadingMore = false;
+    });
     try {
-      final spamIds = await _ensureSpamMessageIds();
-      if (spamIds.isEmpty) return messages;
-      return messages.where((m) => !spamIds.contains(m.id)).toList();
-    } catch (_) {
-      return messages;
-    }
-  }
-
-  Future<void> _loadMessages({
-    bool fallbackToService = false,
-    bool forceSync = false,
-  }) async {
-    setState(() => _isLoadingMessages = true);
-    if (forceSync) {
-      // Спам за это время мог пополниться/опустеть — не показываем письма
-      // по устаревшему списку id.
-      _spamMessageIds = null;
-      _spamMessageIdsFuture = null;
+      if (forceSync) {
+        await MailRepository.instance.fetchMessages(connectionId);
+      }
+      final usingService = folder == null;
+      final page = usingService
+          ? await MailRepository.instance.getMessagesByService(connectionId)
+          : await MailRepository.instance.getMessagesByFolder(
+              connectionId: connectionId,
+              folderId: folder.id,
+            );
+      var folders = _folders;
       try {
-        // getMessagesByFolder/getMessagesByService читают локальное зеркало
-        // почты, которое обновляет фоновая синхронизация бэкенда — потянуть
-        // вниз для обновления недостаточно, чтобы увидеть письма, удалённые
-        // из веб-версии почты. /mail/fetch форсирует опрос IMAP прямо сейчас.
-        await MailRepository.instance.fetchMessages(_connection.id);
+        folders = await MailRepository.instance.getMailboxes(connectionId);
       } catch (_) {
-        // Не удалось форсировать синхронизацию — покажем то, что есть локально.
+        // A counter failure must not discard successfully loaded messages.
       }
-    }
-    try {
-      final MailMessagePage page;
-      final folder = _selectedFolder;
-      final usingService =
-          fallbackToService || folder == null || folder.id <= 0;
-      if (!usingService) {
-        page = await MailRepository.instance.getMessagesByFolder(
-          connectionId: _connection.id,
-          folderId: folder.id,
-        );
-      } else {
-        page = await MailRepository.instance.getMessagesByService(
-          _connection.id,
-        );
-      }
-      final filteredMessages = await _filterSpamIfNeeded(
-        page.messages,
-        usingService: usingService,
-      );
-      if (!mounted) return;
+      if (!mounted || version != _requestVersion) return;
       setState(() {
-        _messages = filteredMessages;
+        _folders = folders;
+        _selectedFolder =
+            folders.where((f) => f.id == folder?.id).firstOrNull ?? folder;
+        _messages = page.messages;
         _hasMoreMessages = page.hasMore;
         _nextPage = page.nextPage;
         _usingServiceFallback = usingService;
         _isLoadingMessages = false;
       });
+      unawaited(MailUnreadService.instance.refresh());
     } catch (_) {
-      if (!fallbackToService && _selectedFolder != null) {
-        try {
-          final page = await MailRepository.instance.getMessagesByService(
-            _connection.id,
-          );
-          final filteredMessages = await _filterSpamIfNeeded(
-            page.messages,
-            usingService: true,
-          );
-          if (!mounted) return;
-          final failedFolder = _selectedFolder;
-          setState(() {
-            _messages = filteredMessages;
-            _hasMoreMessages = page.hasMore;
-            _nextPage = page.nextPage;
-            _usingServiceFallback = true;
-            _isLoadingMessages = false;
-          });
-          // Бэкенд не отдал письма этой конкретной папки (например, «Черновики»
-          // с письмом без части заголовков падает на разборе на сервере) — без
-          // этого уведомления подмена молча выглядела как переход во «Входящие».
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(
-              content: Text(
-                'Не удалось загрузить папку «${failedFolder?.displayName}» — '
-                'показан общий список писем',
-              ),
-            ),
-          );
-          return;
-        } catch (_) {}
-      }
-      if (!mounted) return;
+      if (!mounted || version != _requestVersion) return;
       setState(() => _isLoadingMessages = false);
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Не удалось загрузить письма')),
+        SnackBar(
+          content: Text(
+            forceSync
+                ? 'Не удалось синхронизировать почту. Повторите обновление.'
+                : 'Не удалось загрузить письма. Повторите обновление.',
+          ),
+        ),
       );
     }
   }
 
   Future<void> _loadMoreMessages() async {
     if (_isLoadingMore || !_hasMoreMessages || _isLoadingMessages) return;
+    final version = _requestVersion;
     setState(() => _isLoadingMore = true);
     try {
       final MailMessagePage page;
@@ -309,11 +207,8 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
           page: _nextPage,
         );
       }
-      final newMessages = await _filterSpamIfNeeded(
-        page.messages,
-        usingService: usingService,
-      );
-      if (!mounted) return;
+      final newMessages = page.messages;
+      if (!mounted || version != _requestVersion) return;
       final existingIds = _messages.map((m) => m.id).toSet();
       setState(() {
         _messages = [
@@ -337,7 +232,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
             ComposeMailScreen(connection: _connection, replyTo: replyTo),
       ),
     );
-    if (sent == true) await _loadMessages();
+    if (sent == true && mounted) await _loadMessages(forceSync: true);
   }
 
   Future<void> _openMessage(MailMessage message) async {
@@ -357,7 +252,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
     // (удалил/переместил/ответил) — обычный возврат назад приходит с `null`.
     // Перезагружаем список и в этом случае, иначе точка-индикатор
     // «непрочитано» не исчезнет сама по себе.
-    if (changed == true || wasUnread) await _loadMessages();
+    if (mounted && (changed == true || wasUnread)) await _loadMessages();
   }
 
   Future<void> _showFolderPicker() async {
@@ -370,26 +265,37 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
         ),
       ),
     );
-    if (picked == null) return;
-    setState(() => _selectedFolder = picked);
+    if (picked == null || !mounted) return;
+    setState(() {
+      _selectedFolder = picked;
+      _messages = [];
+      _isLoadingMore = false;
+    });
     _loadMessages();
   }
 
   Future<void> _toggleRead(MailMessage message) async {
     final index = _messages.indexWhere((m) => m.id == message.id);
     try {
-      final updated = message.isRead
-          ? await MailRepository.instance.markUnread(
+      final connectionId = _connection.id;
+      await (message.isRead
+          ? MailRepository.instance.markUnread(
               connectionId: _connection.id,
               messageId: message.id,
             )
-          : await MailRepository.instance.markRead(
+          : MailRepository.instance.markRead(
               connectionId: _connection.id,
               messageId: message.id,
-            );
-      if (!mounted || index == -1) return;
-      setState(() => _messages[index] = updated);
-      MailUnreadService.instance.refresh();
+            ));
+      MailUnreadService.instance.invalidate();
+      if (!mounted || connectionId != _connection.id || index == -1) return;
+      final currentIndex = _messages.indexWhere((m) => m.id == message.id);
+      if (currentIndex < 0) return;
+      setState(
+        () => _messages[currentIndex] = _messages[currentIndex].withRead(
+          !message.isRead,
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -496,6 +402,8 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
   void _selectConnection(MailConnection connection) {
     if (connection.id == _connection.id) return;
     setState(() {
+      _requestVersion++;
+      _isLoadingMore = false;
       _connection = connection;
       _folders = [];
       _messages = [];
@@ -720,12 +628,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                   return false;
                                 },
                                 child: ListView(
-                                  padding: EdgeInsets.fromLTRB(
-                                    0,
-                                    8,
-                                    0,
-                                    88,
-                                  ),
+                                  padding: EdgeInsets.fromLTRB(0, 8, 0, 88),
                                   children: [
                                     if (!_connection.isActive ||
                                         (_connection.lastError ?? '')
@@ -793,6 +696,11 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
                                       )
                                         _MessageTile(
                                           message: _visibleMessages[i],
+                                          showUnread:
+                                              !(_selectedFolder?.isSent ??
+                                                  false) &&
+                                              !(_selectedFolder?.isDrafts ??
+                                                  false),
                                           dateFormat: dateFormat,
                                           isLast:
                                               i == _visibleMessages.length - 1,
@@ -861,6 +769,7 @@ class _MailInboxScreenState extends State<MailInboxScreen> {
 class _MessageTile extends StatelessWidget {
   const _MessageTile({
     required this.message,
+    this.showUnread = true,
     required this.dateFormat,
     required this.isLast,
     required this.isEditing,
@@ -871,6 +780,7 @@ class _MessageTile extends StatelessWidget {
   });
 
   final MailMessage message;
+  final bool showUnread;
   final DateFormat dateFormat;
   final bool isLast;
   final bool isEditing;
@@ -881,7 +791,7 @@ class _MessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isUnread = !message.isRead;
+    final isUnread = showUnread && !message.isRead;
 
     final row = Container(
       decoration: BoxDecoration(

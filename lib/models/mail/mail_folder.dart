@@ -87,8 +87,15 @@ class MailFolder {
   }
 
   bool _matches(List<String> candidates) {
-    final original = originalName?.trim().toLowerCase();
-    final n = name.trim().toLowerCase();
+    String leaf(String value) => value
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'[./\\]'))
+        .last
+        .replaceFirst(RegExp(r'^\\'), '')
+        .trim();
+    final original = leaf(originalName ?? '');
+    final n = leaf(name);
     for (final candidate in candidates) {
       if (original == candidate || n == candidate) return true;
     }
@@ -149,7 +156,9 @@ class MailFolder {
       .trim();
 
   bool get isHiddenSystemFolder {
-    if (isInbox || isSent || isDrafts || isTrash || isSpam) return false;
+    if (isInbox || isSent || isDrafts || isTrash || isSpam || isArchive) {
+      return false;
+    }
     final original = _normalize(originalName ?? '');
     final n = _normalize(name);
     for (final keyword in _hiddenSystemFolderKeywords) {

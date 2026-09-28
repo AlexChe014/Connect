@@ -16,7 +16,8 @@ class MailAttachment {
   factory MailAttachment.fromJson(Map<String, dynamic> json) {
     return MailAttachment(
       id: _parseInt(json['id'] ?? json['attachment_id'] ?? json['uid']) ?? 0,
-      filename: _optionalString(json, ['filename', 'name', 'file_name']) ?? 'file',
+      filename:
+          _optionalString(json, ['filename', 'name', 'file_name']) ?? 'file',
       mimeType: _optionalString(json, ['mime', 'mime_type', 'content_type']),
       size: _parseInt(json['size'] ?? json['file_size']),
     );
@@ -71,6 +72,19 @@ class MailMessage {
     return '';
   }
 
+  MailMessage withRead(bool value) => MailMessage(
+    id: id,
+    subject: subject,
+    from: from,
+    to: to,
+    body: body,
+    bodyHtml: bodyHtml,
+    date: date,
+    isRead: value,
+    hasAttachments: hasAttachments,
+    attachments: attachments,
+  );
+
   bool get hasBody => htmlContent != null || plainBody.isNotEmpty;
 
   /// HTML-версия письма для полноэкранного просмотра.
@@ -124,7 +138,8 @@ class MailMessage {
       }
     }
 
-    final hasAttachments = attachments.isNotEmpty ||
+    final hasAttachments =
+        attachments.isNotEmpty ||
         json['has_attachments'] == true ||
         json['hasAttachments'] == true;
 
@@ -140,24 +155,32 @@ class MailMessage {
         }
       }
     }
-    bodyHtml ??= _normalizeBodyString(_extractBodyFromUnknownFields(json, preferHtml: true));
-    body ??= _normalizeBodyString(_extractBodyFromUnknownFields(json, preferHtml: false));
+    bodyHtml ??= _normalizeBodyString(
+      _extractBodyFromUnknownFields(json, preferHtml: true),
+    );
+    body ??= _normalizeBodyString(
+      _extractBodyFromUnknownFields(json, preferHtml: false),
+    );
 
     return MailMessage(
-      id: _parseInt(
-        json['id'] ??
-            json['message_id'] ??
-            json['uid'] ??
-            json['msg_id'] ??
-            json['msgno'],
-      ) ??
+      id:
+          _parseInt(
+            json['id'] ??
+                json['message_id'] ??
+                json['uid'] ??
+                json['msg_id'] ??
+                json['msgno'],
+          ) ??
           0,
       subject: _subjectOrFallback(
-          _optionalString(json, ['subject', 'title', 'theme'])),
-      from: _parseAddress(json['from'] ?? json['sender']) ??
+        _optionalString(json, ['subject', 'title', 'theme']),
+      ),
+      from:
+          _parseAddress(json['from'] ?? json['sender']) ??
           _optionalString(json, ['from_email', 'from_name', 'from_address']) ??
           '',
-      to: _parseAddress(json['to']) ??
+      to:
+          _parseAddress(json['to']) ??
           _optionalString(json, ['to_email', 'recipient', 'to_address']),
       body: body,
       bodyHtml: bodyHtml,
@@ -170,7 +193,7 @@ class MailMessage {
             json['time'],
       ),
       isRead: _parseBool(
-        json['seen'] ?? json['is_read'] ?? json['read'] ?? json['is_seen'],
+        json['is_read'] ?? json['seen'] ?? json['read'] ?? json['is_seen'],
         defaultValue: true,
       ),
       hasAttachments: hasAttachments,
@@ -236,10 +259,7 @@ class MailMessage {
   /// docs/BACKEND_MAIL_FIXES.md, п.3), здесь — защитная фильтрация на клиенте.
   static bool _isMimeParserErrorArtifact(String text) {
     final normalized = text.trim().toLowerCase();
-    const knownArtifacts = {
-      'no headers found',
-      'no header found',
-    };
+    const knownArtifacts = {'no headers found', 'no header found'};
     return knownArtifacts.contains(normalized);
   }
 
@@ -265,7 +285,9 @@ class MailMessage {
 
       final isHtml = _looksLikeHtml(value);
       if (preferHtml) {
-        if (isHtml || key.contains('html') || key.contains('rich')) return value;
+        if (isHtml || key.contains('html') || key.contains('rich')) {
+          return value;
+        }
       } else if (!isHtml &&
           (key.contains('text') ||
               key.contains('plain') ||
@@ -304,8 +326,17 @@ class MailMessage {
       if (value != null && !_looksLikeHtml(value)) return value;
     }
 
-    for (final containerKey in ['body', 'content', 'message_body', 'bodies', 'payload']) {
-      final extracted = _extractTextFromContainer(json[containerKey], preferHtml: false);
+    for (final containerKey in [
+      'body',
+      'content',
+      'message_body',
+      'bodies',
+      'payload',
+    ]) {
+      final extracted = _extractTextFromContainer(
+        json[containerKey],
+        preferHtml: false,
+      );
       if (extracted != null) return extracted;
     }
 
@@ -325,8 +356,17 @@ class MailMessage {
       if (value != null) return value;
     }
 
-    for (final containerKey in ['body', 'content', 'message_body', 'bodies', 'payload']) {
-      final extracted = _extractTextFromContainer(json[containerKey], preferHtml: true);
+    for (final containerKey in [
+      'body',
+      'content',
+      'message_body',
+      'bodies',
+      'payload',
+    ]) {
+      final extracted = _extractTextFromContainer(
+        json[containerKey],
+        preferHtml: true,
+      );
       if (extracted != null) return extracted;
     }
 
@@ -358,7 +398,13 @@ class MailMessage {
     final map = container.cast<String, dynamic>();
 
     if (preferHtml) {
-      for (final key in ['html', 'html_body', 'body_html', 'content_html', 'rich']) {
+      for (final key in [
+        'html',
+        'html_body',
+        'body_html',
+        'content_html',
+        'rich',
+      ]) {
         final value = _readScalarString(map[key]);
         if (value != null) return value;
       }
@@ -367,7 +413,13 @@ class MailMessage {
       return null;
     }
 
-    for (final key in ['text', 'plain', 'text_plain', 'text_body', 'body_text']) {
+    for (final key in [
+      'text',
+      'plain',
+      'text_plain',
+      'text_body',
+      'body_text',
+    ]) {
       final value = _readScalarString(map[key]);
       if (value != null && !_looksLikeHtml(value)) return value;
     }
@@ -476,7 +528,10 @@ class MailMessage {
     if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype')) {
       return true;
     }
-    return RegExp(r'<\s*\/?[a-zA-Z][^>]*>', caseSensitive: false).hasMatch(value);
+    return RegExp(
+      r'<\s*\/?[a-zA-Z][^>]*>',
+      caseSensitive: false,
+    ).hasMatch(value);
   }
 
   static String _htmlToPlainText(String html) {
