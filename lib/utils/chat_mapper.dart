@@ -118,6 +118,9 @@ class ChatMapper {
     return out;
   }
 
+  /// Текст, которым чат-бэкенд заменяет содержимое удалённого сообщения.
+  static const deletedMessageMarker = 'Сообщение удалено';
+
   static ChatMessage mapMessage(
     Map<String, dynamic> json, {
     required String chatId,
@@ -142,6 +145,16 @@ class ChatMapper {
       files: files,
     );
 
+    // Чат-бэкенд на Node (им пользуется портал) удаляет сообщение, заменяя
+    // текст на "Сообщение удалено" — портал распознаёт удалённые именно так.
+    // `is_deleted` / `deleted_at` — на случай явного флага мягкого удаления.
+    final isDeleted = json['is_deleted'] == true ||
+        json['is_deleted'] == 1 ||
+        json['deleted_at'] != null ||
+        (type != 'SYSTEM' &&
+            HtmlTextUtils.toPlainText(rawMessage ?? '').trim() ==
+                deletedMessageMarker);
+
     final forwardedMessageId = _parseInt(json['forwarded_message_id']);
     MessageReference? forwardOf;
     if (forwardedMessageId != null) {
@@ -157,7 +170,7 @@ class ChatMapper {
       );
     }
 
-    return ChatMessage(
+    final message = ChatMessage(
       id: id,
       chatId: chatId,
       authorName: authorName,
@@ -176,6 +189,7 @@ class ChatMapper {
       authorAvatarUrl: authorAvatarUrl,
       readByRecipients: _isReadByRecipients(json, currentUserId, senderId),
     );
+    return isDeleted ? message.copyWithDeleted() : message;
   }
 
   static Paginated<ChatMessage> unwrapMessagesPage(

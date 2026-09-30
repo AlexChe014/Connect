@@ -225,6 +225,12 @@ class ChatService extends ChangeNotifier {
         return;
       }
 
+      // Сообщения, которые уже были на экране до запроса: если какое-то из
+      // них сервер больше не отдаёт, значит его удалили (бэкенд удаляет
+      // физически), а не что оно пришло по сокету, пока шёл запрос.
+      final knownBeforeFetch = {
+        for (final m in _messages[chatId] ?? const <ChatMessage>[]) m.id,
+      };
       final page = await ChatRepository.instance.getMessages(
         int.parse(chatId),
         currentUserId: userId,
@@ -232,6 +238,7 @@ class ChatService extends ChangeNotifier {
       _messages[chatId] = _mergeMessages(
         page.messages.data,
         _messages[chatId],
+        knownBeforeFetch: knownBeforeFetch,
       );
       if (page.members.isNotEmpty) {
         final idx = _chats.indexWhere((c) => c.id == chatId);
@@ -1238,6 +1245,9 @@ class ChatService extends ChangeNotifier {
       list![idx] = list[idx].copyWithDeleted();
       _upsertLastMessage(chatId);
       notifyListeners();
+    } else {
+      // История чата не загружена — обновляем хотя бы превью в списке чатов.
+      unawaited(refreshChats(showLoading: false));
     }
   }
 
@@ -1349,20 +1359,40 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// [fromServer] — последняя страница истории (самые новые сообщения).
+  /// Серверное сообщение из [previous], которого нет в ответе, но которое по
+  /// id попадает в диапазон этой страницы, было удалено на сервере — у
+  /// собеседника оно превращается в "Сообщение удалено", а не висит со старым
+  /// текстом. Более старые (подгруженные пагинацией) и локальные сообщения
+  /// (`local_…`, `call_…`) остаются как есть.
   List<ChatMessage> _mergeMessages(
     List<ChatMessage> fromServer,
-    List<ChatMessage>? previous,
-  ) {
+    List<ChatMessage>? previous, {
+    Set<String> knownBeforeFetch = const {},
+  }) {
     if (previous == null || previous.isEmpty) {
       final sorted = List<ChatMessage>.from(fromServer)
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return ChatMapper.attachReplyReferences(sorted).toList();
     }
+    int? oldestServerId;
+    for (final m in fromServer) {
+      final id = int.tryParse(m.id);
+      if (id != null && (oldestServerId == null || id < oldestServerId)) {
+        oldestServerId = id;
+      }
+    }
     final merged = List<ChatMessage>.from(fromServer);
     final ids = {for (final m in merged) m.id};
     for (final m in previous) {
       if (m.id.isEmpty || !ids.add(m.id)) continue;
-      merged.add(m);
+      final serverId = int.tryParse(m.id);
+      final vanishedOnServer = serverId != null &&
+          !m.isDeleted &&
+          !m.isSending &&
+          knownBeforeFetch.contains(m.id) &&
+          (oldestServerId == null || serverId >= oldestServerId);
+      merged.add(vanishedOnServer ? m.copyWithDeleted() : m);
     }
     merged.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return ChatMapper.attachReplyReferences(merged).toList();
