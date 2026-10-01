@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
+import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
@@ -15,7 +17,6 @@ import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
-import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
@@ -538,6 +539,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                               highlighted: m.id == _highlightedMessageId,
                               onReact: (emoji) => _toggleReaction(m, emoji),
                               onOpenFile: _openChatFile,
+                              onOpenImages: (images, index) =>
+                                  _openChatImages(m, images, index),
                               onLongMenu: (action) {
                                 if (action == _MsgAction.reply) {
                                   setState(() {
@@ -977,6 +980,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
+  void _openChatImages(ChatMessage m, List<ChatFile> images, int index) {
+    if (images.isEmpty) return;
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => MediaViewer(
+          items: [
+            for (final file in images)
+              m.copyWith(
+                attachmentKind: ChatAttachmentKind.image,
+                remoteMediaUrl: ChatRoutes.fileUrl(file.id),
+                fileName: file.originalName,
+                files: [file],
+              ),
+          ],
+          initialIndex: index < 0 ? 0 : index,
+        ),
+      ),
+    );
+  }
+
   void _jumpToMessage(String messageId) {
     final ctx = _messageKeys[messageId]?.currentContext;
     if (ctx == null) {
@@ -1401,6 +1425,7 @@ class _MessageTile extends StatelessWidget {
     required this.onLongMenu,
     required this.onReact,
     required this.onOpenFile,
+    required this.onOpenImages,
     this.showAuthorHeader = false,
     this.showAvatarInHeader = false,
     this.showTime = true,
@@ -1410,18 +1435,44 @@ class _MessageTile extends StatelessWidget {
   final ChatMessage m;
   final void Function(_MsgAction) onLongMenu;
   final void Function(String emoji) onReact;
-  final void Function(ChatFile file) onOpenFile;
+  final Future<void> Function(ChatFile file) onOpenFile;
+  final void Function(List<ChatFile> images, int index) onOpenImages;
   final bool showAuthorHeader;
   final bool showAvatarInHeader;
   final bool showTime;
   final bool highlighted;
 
+  /// Только картинки, без текста/цитаты/пересылки — такой пузырь рисуется
+  /// почти без отступов, чтобы фото заполняло его целиком.
+  bool get _isMediaOnly {
+    if (m.forwardOf != null || m.replyTo != null || m.isPinned) return false;
+    if (m.text != null && m.text!.trim().isNotEmpty) return false;
+    if (m.files.isNotEmpty) return m.files.every((f) => f.isImage);
+    return m.attachmentKind == ChatAttachmentKind.image &&
+        ((m.localMediaPath != null && !kIsWeb) || m.remoteMediaUrl != null);
+  }
+
   List<Widget> _buildAttachments(BuildContext context, Color onBubble) {
+    final radius = _isMediaOnly ? 15.0 : 10.0;
     if (m.files.isNotEmpty) {
+      final images = m.files.where((f) => f.isImage).toList();
       return [
-        for (final file in m.files) ...[
-          _buildChatFile(context, file, onBubble),
-          const SizedBox(height: 6),
+        for (var i = 0; i < m.files.length; i++) ...[
+          if (i > 0) const SizedBox(height: 4),
+          if (m.files[i].isImage)
+            _ChatImage(
+              url: ChatRoutes.fileUrl(m.files[i].id),
+              radius: radius,
+              onTap: () => onOpenImages(images, images.indexOf(m.files[i])),
+            )
+          else
+            _ChatFileCard(
+              name: m.files[i].originalName,
+              subtitle: m.files[i].sizeLabel,
+              isVideo: m.files[i].isVideo,
+              onBubble: onBubble,
+              onTap: () => onOpenFile(m.files[i]),
+            ),
         ],
       ];
     }
@@ -1430,27 +1481,13 @@ class _MessageTile extends StatelessWidget {
         m.localMediaPath != null &&
         !kIsWeb) {
       return [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(m.localMediaPath!),
-            width: 220,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(CupertinoIcons.exclamationmark_triangle),
-          ),
-        ),
+        _ChatImage(localPath: m.localMediaPath, radius: radius),
       ];
     }
     if (m.attachmentKind == ChatAttachmentKind.image &&
         m.remoteMediaUrl != null) {
       return [
-        AppNetworkImage(
-          url: m.remoteMediaUrl,
-          width: 220,
-          borderRadius: 8,
-          httpHeaders: ChatFileShare.imageHeaders(m.remoteMediaUrl),
-        ),
+        _ChatImage(url: m.remoteMediaUrl, radius: radius),
       ];
     }
     if (m.attachmentKind == ChatAttachmentKind.image && kIsWeb) {
@@ -1461,76 +1498,18 @@ class _MessageTile extends StatelessWidget {
         ),
       ];
     }
-    if (m.attachmentKind == ChatAttachmentKind.video) {
+    if (m.attachmentKind == ChatAttachmentKind.video ||
+        m.attachmentKind == ChatAttachmentKind.file) {
+      final isVideo = m.attachmentKind == ChatAttachmentKind.video;
       return [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.play_circle, size: 28),
-            const SizedBox(width: 8),
-            Flexible(child: Text(m.fileName ?? 'Видео', maxLines: 2)),
-          ],
-        ),
-      ];
-    }
-    if (m.attachmentKind == ChatAttachmentKind.file) {
-      return [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.doc, size: 24),
-            const SizedBox(width: 8),
-            Flexible(child: Text(m.fileName ?? 'Файл', maxLines: 2)),
-          ],
+        _ChatFileCard(
+          name: m.fileName ?? (isVideo ? 'Видео' : 'Файл'),
+          isVideo: isVideo,
+          onBubble: onBubble,
         ),
       ];
     }
     return const [];
-  }
-
-  Widget _buildChatFile(BuildContext context, ChatFile file, Color onBubble) {
-    final url = ChatRoutes.fileUrl(file.id);
-    if (file.isImage) {
-      return GestureDetector(
-        onTap: () => onOpenFile(file),
-        child: AppNetworkImage(
-          url: url,
-          width: 220,
-          borderRadius: 8,
-          httpHeaders: ChatFileShare.imageHeaders(url),
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: () => onOpenFile(file),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            file.isVideo ? CupertinoIcons.play_circle : CupertinoIcons.doc,
-            size: file.isVideo ? 28 : 24,
-            color: onBubble,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(file.originalName, maxLines: 2),
-                Text(
-                  file.sizeLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: onBubble.withValues(alpha: 0.75),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _wrapHighlight(BuildContext context, Widget child) {
@@ -1746,10 +1725,12 @@ class _MessageTile extends StatelessWidget {
                     child: GestureDetector(
                       onLongPress: () => _showActions(context),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
+                        padding: _isMediaOnly
+                            ? const EdgeInsets.all(3)
+                            : const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                         decoration: BoxDecoration(
                           color: bubble,
                           borderRadius: BorderRadius.only(
@@ -2112,6 +2093,206 @@ class _ReplyBlock extends StatelessWidget {
                 fontSize: 12,
                 color: textColor.withValues(alpha: isOutgoing ? 0.95 : 0.9),
                 fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Фото в пузыре: держит размер, пока грузится (а не полоску в 16 px),
+/// и не растягивается выше [_maxHeight] у вертикальных снимков.
+class _ChatImage extends StatelessWidget {
+  const _ChatImage({this.url, this.localPath, required this.radius, this.onTap})
+    : assert(url != null || localPath != null);
+
+  final String? url;
+  final String? localPath;
+  final double radius;
+  final VoidCallback? onTap;
+
+  static const double _width = 240;
+  static const double _maxHeight = 320;
+  static const double _placeholderHeight = 180;
+
+  Widget _box(BuildContext context, Widget child) {
+    return Container(
+      width: _width,
+      height: _placeholderHeight,
+      color: CupertinoColors.systemFill.resolveFrom(context),
+      alignment: Alignment.center,
+      child: child,
+    );
+  }
+
+  Widget _error(BuildContext context) {
+    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return _box(
+      context,
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(CupertinoIcons.photo, size: 28, color: color),
+          const SizedBox(height: 6),
+          Text(
+            'Не удалось загрузить фото',
+            style: TextStyle(fontSize: 12, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget image;
+    if (localPath != null && !kIsWeb) {
+      image = Image.file(
+        File(localPath!),
+        width: _width,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _error(context),
+      );
+    } else {
+      image = CachedNetworkImage(
+        imageUrl: url!.trim(),
+        httpHeaders: ChatFileShare.imageHeaders(url),
+        width: _width,
+        fit: BoxFit.cover,
+        fadeInDuration: const Duration(milliseconds: 150),
+        placeholder: (context, _) =>
+            _box(context, const CupertinoActivityIndicator()),
+        errorWidget: (context, _, _) => _error(context),
+      );
+    }
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: _width,
+            maxHeight: _maxHeight,
+          ),
+          child: image,
+        ),
+      ),
+    );
+  }
+}
+
+/// Документ/видео в пузыре: плашка с иконкой-расширением, именем и размером.
+/// Пока файл скачивается для шаринга — вместо иконки крутится индикатор.
+class _ChatFileCard extends StatefulWidget {
+  const _ChatFileCard({
+    required this.name,
+    required this.isVideo,
+    required this.onBubble,
+    this.subtitle,
+    this.onTap,
+  });
+
+  final String name;
+  final String? subtitle;
+  final bool isVideo;
+  final Color onBubble;
+  final Future<void> Function()? onTap;
+
+  @override
+  State<_ChatFileCard> createState() => _ChatFileCardState();
+}
+
+class _ChatFileCardState extends State<_ChatFileCard> {
+  bool _busy = false;
+
+  String get _extension {
+    final dot = widget.name.lastIndexOf('.');
+    if (dot < 0 || dot == widget.name.length - 1) return '';
+    final ext = widget.name.substring(dot + 1).toUpperCase();
+    return ext.length > 5 ? '' : ext;
+  }
+
+  Future<void> _handleTap() async {
+    final onTap = widget.onTap;
+    if (onTap == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await onTap();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onBubble = widget.onBubble;
+    final ext = _extension;
+    final details = [
+      if (ext.isNotEmpty) ext,
+      if (widget.subtitle != null && widget.subtitle!.isNotEmpty)
+        widget.subtitle!,
+    ].join(' · ');
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap == null ? null : _handleTap,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 200),
+        padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: onBubble.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: onBubble.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: _busy
+                  ? CupertinoActivityIndicator(color: onBubble, radius: 9)
+                  : Icon(
+                      widget.isVideo
+                          ? CupertinoIcons.play_fill
+                          : CupertinoIcons.doc_text_fill,
+                      size: 20,
+                      color: onBubble,
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: onBubble,
+                    ),
+                  ),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      details,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: onBubble.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
