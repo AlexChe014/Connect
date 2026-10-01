@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_file.dart';
+import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/screens/chat_media_gallery_screen.dart';
@@ -647,6 +648,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 focus: _focus,
                 onSend: _send,
                 onAttach: _openAttachMenu,
+                onStickers: _editingMessage != null ? null : _openStickerPicker,
                 isEditing: _editingMessage != null,
                 isSendingAttachment: _sendingAttachment,
               ),
@@ -767,6 +769,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       }
     } finally {
       _sendingText = false;
+    }
+  }
+
+  Future<void> _openStickerPicker() async {
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.5,
+        child: SafeArea(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+            ),
+            itemCount: ChatStickers.ids.length,
+            itemBuilder: (context, i) {
+              final id = ChatStickers.ids[i];
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.pop(context, id),
+                child: _ChatSticker(id: id),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (id == null || !mounted) return;
+    final replyTo = _replyingTo;
+    setState(() => _replyingTo = null);
+    try {
+      await _service.sendSticker(widget.chat.id, id, replyTo: replyTo);
+    } catch (e) {
+      if (mounted) _showSnack('Не удалось отправить стикер: $e');
     }
   }
 
@@ -1391,6 +1434,7 @@ class _Composer extends StatelessWidget {
     required this.focus,
     required this.onSend,
     required this.onAttach,
+    this.onStickers,
     this.isEditing = false,
     this.isSendingAttachment = false,
   });
@@ -1399,6 +1443,9 @@ class _Composer extends StatelessWidget {
   final FocusNode focus;
   final VoidCallback onSend;
   final VoidCallback onAttach;
+
+  /// Открывает панель стикеров; `null` — кнопка скрыта (например, при правке).
+  final VoidCallback? onStickers;
   final bool isEditing;
   final bool isSendingAttachment;
 
@@ -1454,6 +1501,20 @@ class _Composer extends StatelessWidget {
                       vertical: 8,
                     ),
                     onSubmitted: (_) => onSend(),
+                    suffix: onStickers == null
+                        ? null
+                        : CupertinoButton(
+                            padding: const EdgeInsets.fromLTRB(4, 6, 10, 6),
+                            minimumSize: Size.zero,
+                            onPressed: onStickers,
+                            child: Icon(
+                              CupertinoIcons.smiley,
+                              size: 22,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -1520,6 +1581,9 @@ class _MessageTile extends StatelessWidget {
   }
 
   List<Widget> _buildAttachments(BuildContext context, Color onBubble) {
+    if (m.isSticker) {
+      return [_ChatSticker(id: m.stickerId!)];
+    }
     final radius = _isMediaOnly ? 15.0 : 10.0;
     if (m.files.isNotEmpty) {
       final images = m.files.where((f) => f.isImage).toList();
@@ -1741,7 +1805,8 @@ class _MessageTile extends StatelessWidget {
     final bubble = m.isOutgoing
         ? CupertinoColors.activeBlue
         : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
-    final onBubble = m.isOutgoing
+    // Стикер рисуется без пузыря — цитата и подписи над ним на фоне чата.
+    final onBubble = m.isOutgoing && !m.isSticker
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
 
@@ -1792,30 +1857,39 @@ class _MessageTile extends StatelessWidget {
                     child: GestureDetector(
                       onLongPress: () => _showActions(context),
                       child: Container(
-                        padding: _isMediaOnly
+                        width: m.isSticker ? _ChatSticker.bubbleSize : null,
+                        padding: m.isSticker
+                            ? EdgeInsets.zero
+                            : _isMediaOnly
                             ? const EdgeInsets.all(3)
                             : const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
-                        decoration: BoxDecoration(
-                          color: bubble,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: Radius.circular(m.isOutgoing ? 18 : 6),
-                            bottomRight: Radius.circular(m.isOutgoing ? 6 : 18),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: CupertinoColors.black.withValues(
-                                alpha: 0.04,
+                        decoration: m.isSticker
+                            ? null
+                            : BoxDecoration(
+                                color: bubble,
+                                borderRadius: BorderRadius.only(
+                                  topLeft: const Radius.circular(18),
+                                  topRight: const Radius.circular(18),
+                                  bottomLeft: Radius.circular(
+                                    m.isOutgoing ? 18 : 6,
+                                  ),
+                                  bottomRight: Radius.circular(
+                                    m.isOutgoing ? 6 : 18,
+                                  ),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: CupertinoColors.black.withValues(
+                                      alpha: 0.04,
+                                    ),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
                         child: DefaultTextStyle.merge(
                           style: TextStyle(color: onBubble),
                           child: Column(
@@ -1829,7 +1903,7 @@ class _MessageTile extends StatelessWidget {
                               if (m.replyTo != null)
                                 _ReplyBlock(
                                   ref: m.replyTo!,
-                                  isOutgoing: m.isOutgoing,
+                                  isOutgoing: m.isOutgoing && !m.isSticker,
                                 ),
                               if (m.isPinned)
                                 Padding(
@@ -2166,6 +2240,35 @@ class _ReplyBlock extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Стикер из набора портала. Квадрат фиксированного размера, чтобы лента
+/// не прыгала, пока картинка грузится.
+class _ChatSticker extends StatelessWidget {
+  const _ChatSticker({required this.id});
+
+  final String id;
+
+  static const double bubbleSize = 150;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = CachedNetworkImage(
+      imageUrl: ChatStickers.url(id),
+      fit: BoxFit.contain,
+      fadeInDuration: const Duration(milliseconds: 150),
+      placeholder: (context, _) =>
+          const Center(child: CupertinoActivityIndicator()),
+      errorWidget: (context, _, _) => Center(
+        child: Icon(
+          CupertinoIcons.smiley,
+          size: 32,
+          color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+    return AspectRatio(aspectRatio: 1, child: image);
   }
 }
 

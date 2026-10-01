@@ -2,6 +2,7 @@ import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/chat_record.dart';
+import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/api_client.dart';
@@ -138,6 +139,7 @@ class ChatMapper {
     final rawMessage = _readMessageText(json);
     final createdAt = _parseDate(json['created_at']) ?? DateTime.now();
     final files = ChatFile.listFromJson(json['files']);
+    final stickerId = _stickerId(json, type: type, rawMessage: rawMessage);
     final resolved = _resolveMessageContent(
       rawMessage: rawMessage,
       type: type,
@@ -164,7 +166,9 @@ class ChatMapper {
         authorName: forwardedFromUser != null
             ? userDisplayNameFromJson(forwardedFromUser)
             : 'Пользователь',
-        textPreview: resolved.text?.trim().isNotEmpty == true
+        textPreview: stickerId != null
+            ? stickerSnippet
+            : resolved.text?.trim().isNotEmpty == true
             ? HtmlTextUtils.toPlainText(resolved.text!)
             : 'Сообщение',
       );
@@ -176,7 +180,8 @@ class ChatMapper {
       authorName: authorName,
       isOutgoing: senderId == currentUserId,
       createdAt: createdAt,
-      text: resolved.text,
+      text: stickerId != null ? null : resolved.text,
+      stickerId: stickerId,
       attachmentKind: resolved.attachmentKind,
       remoteMediaUrl: resolved.remoteMediaUrl,
       fileName: resolved.fileName,
@@ -319,7 +324,10 @@ class ChatMapper {
     return ChatAttachmentKind.file;
   }
 
+  static const stickerSnippet = 'Стикер';
+
   static String snippet(ChatMessage m) {
+    if (m.isSticker) return stickerSnippet;
     if (m.text != null && m.text!.trim().isNotEmpty) {
       return HtmlTextUtils.toPlainText(m.text!);
     }
@@ -416,6 +424,18 @@ class ChatMapper {
     final text = (json['text'] as String?)?.trim();
     if (text != null && text.isNotEmpty) return text;
     return null;
+  }
+
+  /// Стикер — только при `type == "STICKER"` и содержимом из набора
+  /// `"01"`…`"32"`; иначе сообщение показывается как обычный текст.
+  static String? _stickerId(
+    Map<String, dynamic> json, {
+    required String type,
+    required String? rawMessage,
+  }) {
+    if (type != ChatStickers.messageType) return null;
+    final content = (json['content'] as String?)?.trim() ?? rawMessage;
+    return ChatStickers.isValidId(content) ? content : null;
   }
 
   static _ResolvedMessageContent _resolveMessageContent({

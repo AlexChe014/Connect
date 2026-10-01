@@ -1035,6 +1035,49 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  Future<void> sendSticker(
+    String chatId,
+    String stickerId, {
+    MessageReference? replyTo,
+  }) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return;
+
+    final repliedId = replyTo != null ? int.tryParse(replyTo.messageId) : null;
+
+    final tempId = 'local_${DateTime.now().microsecondsSinceEpoch}';
+    _appendMessage(
+      chatId,
+      ChatMessage(
+        id: tempId,
+        chatId: chatId,
+        authorName: '',
+        isOutgoing: true,
+        createdAt: DateTime.now(),
+        stickerId: stickerId,
+        replyTo: replyTo,
+        isRead: true,
+        isSending: true,
+      ),
+    );
+
+    try {
+      final sent = await ChatRepository.instance.sendSticker(
+        chatIntId,
+        stickerId: stickerId,
+        currentUserId: userId,
+        repliedMessageId: repliedId,
+      );
+
+      _removeLocalMessage(chatId, tempId);
+      _appendMessage(chatId, sent.copyWith(replyTo: replyTo, isRead: true));
+    } catch (e) {
+      _removeLocalMessage(chatId, tempId);
+      rethrow;
+    }
+  }
+
   /// Убирает локальное оптимистичное сообщение (по временному id), не трогая
   /// уже подтверждённые сервером сообщения.
   void _removeLocalMessage(String chatId, String tempId) {
@@ -1097,8 +1140,9 @@ class ChatService extends ChangeNotifier {
       return false;
     }
 
+    final stickerId = source.stickerId;
     final text = source.text?.trim();
-    if (text == null || text.isEmpty) {
+    if (stickerId == null && (text == null || text.isEmpty)) {
       _lastActionError = 'Пересылка вложений пока не поддерживается';
       notifyListeners();
       return false;
@@ -1106,22 +1150,29 @@ class ChatService extends ChangeNotifier {
 
     try {
       _lastActionError = null;
-      final sent = await ChatRepository.instance.sendTextMessage(
-        chatIntId,
-        text: text,
-        currentUserId: userId,
-        forwardedMessageId: sourceMessageId,
-      );
+      final sent = stickerId != null
+          ? await ChatRepository.instance.sendSticker(
+              chatIntId,
+              stickerId: stickerId,
+              currentUserId: userId,
+              forwardedMessageId: sourceMessageId,
+            )
+          : await ChatRepository.instance.sendTextMessage(
+              chatIntId,
+              text: text!,
+              currentUserId: userId,
+              forwardedMessageId: sourceMessageId,
+            );
 
       _appendMessage(
         targetChatId,
         sent.copyWith(
-          text: sent.text ?? text,
+          text: sent.text ?? (stickerId != null ? null : text),
           forwardOf: sent.forwardOf ??
               MessageReference(
                 messageId: source.id,
                 authorName: source.authorName,
-                textPreview: text,
+                textPreview: ChatMapper.snippet(source),
               ),
           isRead: true,
         ),
