@@ -15,15 +15,21 @@ class StaffUserPickerSheet extends StatefulWidget {
     super.key,
     required this.selectedIds,
     required this.onUserSelected,
+    this.validateUser,
   });
 
   final Set<String> selectedIds;
   final ValueChanged<StaffUser> onUserSelected;
 
+  /// Доп. проверка перед выбором: вернуть текст ошибки, чтобы показать его
+  /// поверх списка и не отмечать сотрудника (например, нет e-mail).
+  final String? Function(StaffUser user)? validateUser;
+
   static Future<void> show(
     BuildContext context, {
     required Set<String> selectedIds,
     required ValueChanged<StaffUser> onUserSelected,
+    String? Function(StaffUser user)? validateUser,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -50,6 +56,7 @@ class StaffUserPickerSheet extends StatefulWidget {
           child: StaffUserPickerSheet(
             selectedIds: selectedIds,
             onUserSelected: onUserSelected,
+            validateUser: validateUser,
           ),
         );
       },
@@ -229,6 +236,11 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
     }
     if (user.idAsInt == null) {
       _showError('Некорректный id пользователя');
+      return;
+    }
+    final error = widget.validateUser?.call(user);
+    if (error != null) {
+      _showError(error);
       return;
     }
     setState(() => _selectedIds.add(user.id));
