@@ -65,6 +65,41 @@ void main() {
   );
 
   test(
+    'hides inbox subfolders, archive and an empty duplicate sent folder',
+    () async {
+      await http.runWithClient(
+        () async {
+          final folders = await repository.getMailboxes(1);
+          expect(folders.map((f) => f.id), [1, 2, 6, 8]);
+        },
+        () => MockClient(
+          (_) async => response([
+            {
+              'id': 1,
+              'name': 'INBOX',
+              'children': [
+                {'id': 2, 'name': 'INBOX.Drafts'},
+                {
+                  'id': 3,
+                  'name': 'Проекты',
+                  'children': [
+                    {'id': 4, 'name': 'Клиенты'},
+                  ],
+                },
+              ],
+            },
+            {'id': 5, 'name': 'INBOX.Рассылки'},
+            {'id': 6, 'name': 'Sent', 'emails_count': 12},
+            {'id': 7, 'name': 'Отправленные', 'emails_count': 0},
+            {'id': 8, 'name': 'Trash'},
+            {'id': 9, 'name': 'Архив'},
+          ]),
+        ),
+      );
+    },
+  );
+
+  test(
     'send selects intended SMTP connection before sending multipart',
     () async {
       final paths = <String>[];

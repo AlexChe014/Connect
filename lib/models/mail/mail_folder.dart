@@ -172,6 +172,13 @@ class MailFolder {
     caseSensitive: false,
   );
 
+  /// Папка лежит внутри INBOX по пути (`INBOX.Проекты`, `INBOX/Проекты`) —
+  /// так подпапки «Входящих» выглядят у серверов с плоским списком.
+  bool get hasInboxPrefix =>
+      !isInbox &&
+      (_inboxPrefix.hasMatch(originalName ?? '') ||
+          _inboxPrefix.hasMatch(name));
+
   /// Имя папки для показа пользователю — без служебного префикса `INBOX`,
   /// которым некоторые IMAP-серверы (Exchange/Dovecot с точечной иерархией)
   /// предваряют имена всех вложенных папок (`INBOX.Отправленные`,

@@ -495,16 +495,14 @@ class MailRepository {
     return items.map(MailConnection.fromJson).where((c) => c.id > 0).toList();
   }
 
-  Future<MailConnection> setDefaultConnection(int connectionId) async {
+  Future<void> setDefaultConnection(int connectionId) async {
     final decoded = await ApiClient.instance.post(
       MailRoutes.smtpSetDefaultUrl(connectionId),
       body: {'is_default': true},
     );
-    final data = _unwrapMailDataMap(
-      decoded,
-      defaultErrorMessage: 'Не удалось установить ящик по умолчанию',
-    );
-    return MailConnection.fromJson(data);
+    // `data` may be a connection object, `true` or empty depending on the
+    // backend version — only the success flag matters here.
+    _unwrapMailData(decoded, 'Не удалось установить ящик по умолчанию');
   }
 
   Future<void> sendMail(SendMailRequest request) async {
@@ -579,25 +577,49 @@ class MailRepository {
   }
 
   /// Убирает служебные папки групповых серверов (контакты, календарь,
-  /// задачи, RSS, «Ошибки синхронизации» и т.п.) вместе с их вложенными
-  /// подпапками. Список приходит «плоским», но с проставленной [MailFolder.depth],
-  /// поэтому подпапку легко узнать — это последующие элементы с депth больше,
-  /// чем у скрытого родителя.
+  /// задачи, RSS, «Ошибки синхронизации» и т.п.), «Архив» и пользовательские
+  /// подпапки «Входящих» — вместе с их вложенными подпапками. Список приходит
+  /// «плоским», но с проставленной [MailFolder.depth], поэтому подпапку легко
+  /// узнать — это последующие элементы с depth больше, чем у скрытого родителя.
+  /// Служебные папки внутри INBOX (Dovecot: `INBOX.Sent`, `INBOX.Drafts`)
+  /// остаются — у таких серверов это единственные Отправленные/Черновики.
   List<MailFolder> _hideSystemFolders(List<MailFolder> folders) {
     final result = <MailFolder>[];
     int? hiddenDepth;
+    int? inboxDepth;
     for (final folder in folders) {
       if (hiddenDepth != null) {
         if (folder.depth > hiddenDepth) continue;
         hiddenDepth = null;
       }
-      if (folder.isHiddenSystemFolder) {
+      if (inboxDepth != null && folder.depth <= inboxDepth) inboxDepth = null;
+      final isSpecial =
+          folder.isInbox ||
+          folder.isSent ||
+          folder.isDrafts ||
+          folder.isTrash ||
+          folder.isSpam;
+      final isInboxChild =
+          !isSpecial && (inboxDepth != null || folder.hasInboxPrefix);
+      if (folder.isHiddenSystemFolder || folder.isArchive || isInboxChild) {
         hiddenDepth = folder.depth;
         continue;
       }
+      if (folder.isInbox) inboxDepth = folder.depth;
       result.add(folder);
     }
-    return result;
+    return _dropEmptyDuplicateSent(result);
+  }
+
+  /// Некоторые серверы отдают две «Отправленные» (`Sent` и `Отправленные`
+  /// или `INBOX.Sent`), и письма лежат только в одной. Пустую убираем, если
+  /// есть другая непустая; если писем нет нигде или счётчик неизвестен —
+  /// ничего не трогаем.
+  List<MailFolder> _dropEmptyDuplicateSent(List<MailFolder> folders) {
+    final sent = folders.where((f) => f.isSent).toList();
+    if (sent.length < 2) return folders;
+    if (!sent.any((f) => (f.totalCount ?? 0) > 0)) return folders;
+    return folders.where((f) => !f.isSent || f.totalCount != 0).toList();
   }
 
   void _collectMailFolders(
