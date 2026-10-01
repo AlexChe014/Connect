@@ -34,9 +34,29 @@ bool documentNeedsAction(Map<String, dynamic> document) {
 class DocumentPendingService extends ChangeNotifier {
   DocumentPendingService({
     Future<List<Map<String, dynamic>>> Function(int)? load,
-  }) : _load = load ?? DocumentsRepository.instance.getAllDocuments;
+    DateTime Function()? now,
+  }) : _load = load ?? DocumentsRepository.instance.getAllDocuments,
+       _now = now ?? DateTime.now;
   static final instance = DocumentPendingService();
   final Future<List<Map<String, dynamic>>> Function(int) _load;
+  final DateTime Function() _now;
+
+  /// Backend keeps signing access for 20 minutes after the e-mail code is
+  /// verified; without it, listing a signing service e-mails a new code, so
+  /// background badge refreshes must not touch it.
+  static const _signingAccessTtl = Duration(minutes: 19);
+  DateTime? _signingAccessUntil;
+
+  void markSigningAccessGranted() {
+    _signingAccessUntil = _now().add(_signingAccessTtl);
+  }
+
+  bool _canLoad(DocumentService service) {
+    if (!service.isSigningService) return true;
+    final until = _signingAccessUntil;
+    return until != null && _now().isBefore(until);
+  }
+
   final Map<int, int> counts = {};
   final Set<int> errors = {};
   final Set<int> loading = {};
@@ -48,7 +68,7 @@ class DocumentPendingService extends ChangeNotifier {
   Future<void> refresh(List<DocumentService> services) async {
     _services = List.of(services);
     final generation = ++_generation;
-    final ids = services.map((s) => s.id).toSet();
+    final ids = services.where(_canLoad).map((s) => s.id).toSet();
     counts.removeWhere((id, _) => !ids.contains(id));
     errors.removeWhere((id) => !ids.contains(id));
     loading
@@ -73,6 +93,7 @@ class DocumentPendingService extends ChangeNotifier {
 
   void reset() {
     _services = [];
+    _signingAccessUntil = null;
     _generation++;
     counts.clear();
     errors.clear();
