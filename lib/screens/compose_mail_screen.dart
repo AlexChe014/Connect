@@ -8,6 +8,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
+import '../widgets/staff_user_picker_sheet.dart';
 
 class _PendingAttachment {
   final String filename;
@@ -98,6 +99,31 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
   void _removeAttachment(int index) {
     setState(() => _attachments.removeAt(index));
+  }
+
+  /// Подставляет в «Кому» e-mail сотрудника из справочника компании.
+  Future<void> _pickEmployee() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await StaffUserPickerSheet.show(
+      context,
+      selectedIds: const {},
+      onUserSelected: (user) {
+        Navigator.pop(context);
+        final email = user.email?.trim() ?? '';
+        if (email.isEmpty) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(
+              content: Text('У сотрудника ${user.fullName} не указан e-mail'),
+            ),
+          );
+          return;
+        }
+        setState(() {
+          _toController.text = email;
+          _toError = null;
+        });
+      },
+    );
   }
 
   bool _validate() {
@@ -248,16 +274,33 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
                   CupertinoFormSection.insetGrouped(
                     margin: EdgeInsets.zero,
                     children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _toController,
-                        prefix: const Text('Кому'),
-                        placeholder: 'email@example.com',
-                        keyboardType: TextInputType.emailAddress,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSending,
-                        onChanged: (_) {
-                          if (_toError != null) setState(() => _toError = null);
-                        },
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CupertinoTextFormFieldRow(
+                              controller: _toController,
+                              prefix: const Text('Кому'),
+                              placeholder: 'email@example.com',
+                              keyboardType: TextInputType.emailAddress,
+                              textAlign: TextAlign.end,
+                              enabled: !_isSending,
+                              onChanged: (_) {
+                                if (_toError != null) {
+                                  setState(() => _toError = null);
+                                }
+                              },
+                            ),
+                          ),
+                          CupertinoButton(
+                            padding: const EdgeInsets.only(right: 12),
+                            minimumSize: const Size(36, 36),
+                            onPressed: _isSending ? null : _pickEmployee,
+                            child: const Icon(
+                              CupertinoIcons.person_crop_circle_badge_plus,
+                              size: 24,
+                            ),
+                          ),
+                        ],
                       ),
                       CupertinoTextFormFieldRow(
                         controller: _subjectController,
