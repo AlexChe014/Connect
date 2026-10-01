@@ -38,6 +38,14 @@ class DeviceTokenRepository {
     );
   }
 
+  /// `POST /devices/voip/delete` — отвязать VoIP-токен при выходе.
+  Future<void> unregisterVoipToken({required String token}) async {
+    await ApiClient.instance.post(
+      DeviceRoutes.unregisterVoipUrl,
+      body: {'token': token},
+    );
+  }
+
   /// `POST /chat/call/{callId}/decline` — собеседник отклонил звонок.
   Future<void> declineCall({required String callId}) async {
     await ApiClient.instance.post(DeviceRoutes.declineCallUrl(callId));

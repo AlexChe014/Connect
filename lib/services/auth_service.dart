@@ -180,6 +180,36 @@ class AuthService {
     await prefs.remove(_userKey);
   }
 
+  /// `GET /auth/logout` — отозвать Bearer-токен на бэкенде. Best-effort:
+  /// напрямую через http, чтобы 401 не запускал обработку истёкшей сессии.
+  Future<void> revokeServerSession() async {
+    final token = _token;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse(AuthRoutes.logoutUrl),
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+      AppLogger.d(
+        'Auth logout: status ${response.statusCode}',
+        name: 'auth.session',
+      );
+    } catch (e, st) {
+      AppLogger.e(
+        'Auth logout request failed',
+        name: 'auth.session',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
   /// `true` — бэкенд отверг токен, `false` — сессия жива, `null` — неизвестно.
   Future<bool?> _probeSession() async {
     final token = _token;

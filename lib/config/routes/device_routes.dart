@@ -14,6 +14,10 @@ class DeviceRoutes {
   /// `POST /devices/voip` — PushKit VoIP-токен (только iOS).
   static String get registerVoipUrl => '${ApiConfig.baseUrl}$_voipPrefix';
 
+  /// `POST /devices/voip/delete` — отвязать VoIP-токен при выходе.
+  static String get unregisterVoipUrl =>
+      '${ApiConfig.baseUrl}$_voipPrefix/delete';
+
   /// `POST /chat/call/{callId}/decline` — отклонение входящего звонка.
   static String declineCallUrl(String callId) =>
       '${ApiConfig.baseUrl}$_callPrefix/$callId/decline';

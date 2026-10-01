@@ -12,6 +12,7 @@ import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
 import 'package:flutter_callkit_incoming/entities/call_event.dart';
 import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
@@ -32,6 +33,10 @@ Future<void> incomingCallBackgroundHandler(CallEvent event) async {
 class IncomingCallService {
   IncomingCallService._();
   static final IncomingCallService instance = IncomingCallService._();
+
+  /// Нативный канал из AppDelegate: вкл/выкл подписку PushKit на VoIP.
+  static const _voipPushChannel = MethodChannel('connect/voip_push');
+  static const _backendTimeout = Duration(seconds: 5);
 
   StreamSubscription<CallEvent?>? _eventSub;
   bool _initialized = false;
@@ -87,6 +92,10 @@ class IncomingCallService {
     if (!isSupported || !Platform.isIOS) return;
     if (force) _lastVoipToken = null;
 
+    if (AuthService.instance.isAuthenticated) {
+      await _setVoipPushEnabled(true);
+    }
+
     if (_pendingVoipToken != null &&
         _pendingVoipToken!.isNotEmpty &&
         AuthService.instance.isAuthenticated) {
@@ -96,9 +105,68 @@ class IncomingCallService {
     await _registerVoipTokenWhenReady();
   }
 
-  void clearVoipCache() {
+  /// Выход из аккаунта, пока сессия ещё жива: отвязать VoIP-токен на бэкенде.
+  Future<void> unregisterVoipOnBackend() async {
+    if (!isSupported || !Platform.isIOS) return;
+    if (!AuthService.instance.isAuthenticated) return;
+
+    var token = _lastVoipToken;
+    if (token == null || token.isEmpty) {
+      try {
+        token = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
+      } catch (_) {}
+    }
+    if (token == null || token.isEmpty) return;
+
+    try {
+      await DeviceTokenRepository.instance
+          .unregisterVoipToken(token: token)
+          .timeout(_backendTimeout);
+      AppLogger.d('VoIP token unregistered on backend', name: 'callkit');
+    } catch (e, st) {
+      AppLogger.e(
+        'Failed to unregister VoIP token',
+        name: 'callkit',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  /// После выхода / истечения сессии: отписаться от VoIP-пушей на устройстве
+  /// и закрыть висящие CallKit-звонки — не зависит от ответа бэкенда.
+  Future<void> disableLocally() async {
+    if (!isSupported) return;
+    _clearVoipCache();
+    if (Platform.isIOS) await _setVoipPushEnabled(false);
+    try {
+      await FlutterCallkitIncoming.endAllCalls();
+    } catch (e, st) {
+      AppLogger.d(
+        'endAllCalls on logout failed',
+        name: 'callkit',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  void _clearVoipCache() {
     _lastVoipToken = null;
     _pendingVoipToken = null;
+  }
+
+  Future<void> _setVoipPushEnabled(bool enabled) async {
+    try {
+      await _voipPushChannel.invokeMethod<void>('setEnabled', enabled);
+    } catch (e, st) {
+      AppLogger.e(
+        'Failed to set VoIP push enabled=$enabled',
+        name: 'callkit',
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   /// Показать системный экран входящего звонка (в т.ч. на lock screen).

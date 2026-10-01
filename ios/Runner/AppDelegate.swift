@@ -9,6 +9,18 @@ import flutter_callkit_incoming
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, PKPushRegistryDelegate, CallkitIncomingAppDelegate {
   private var voipRegistry: PKPushRegistry?
+  private var voipChannel: FlutterMethodChannel?
+  /// Отдельный provider только для «пустых» звонков, пришедших после выхода
+  /// из аккаунта: iOS требует сообщить о звонке на каждый VoIP-пуш.
+  private lazy var loggedOutCallProvider = CXProvider(configuration: CXProviderConfiguration())
+
+  /// shared_preferences хранит ключи в UserDefaults с префиксом `flutter.`.
+  private static let authTokenDefaultsKey = "flutter.auth_bearer_token"
+
+  private var isLoggedIn: Bool {
+    let token = UserDefaults.standard.string(forKey: AppDelegate.authTokenDefaultsKey)
+    return !(token ?? "").isEmpty
+  }
 
   override func application(
     _ application: UIApplication,
@@ -22,7 +34,8 @@ import flutter_callkit_incoming
     let mainQueue = DispatchQueue.main
     let registry = PKPushRegistry(queue: mainQueue)
     registry.delegate = self
-    registry.desiredPushTypes = [PKPushType.voIP]
+    // Разлогиненное устройство не подписываем на звонки.
+    registry.desiredPushTypes = isLoggedIn ? [PKPushType.voIP] : []
     voipRegistry = registry
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -30,6 +43,33 @@ import flutter_callkit_incoming
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ConnectVoipPush") else {
+      return
+    }
+    let channel = FlutterMethodChannel(name: "connect/voip_push", binaryMessenger: registrar.messenger())
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "setEnabled":
+        let enabled = (call.arguments as? Bool) ?? false
+        self?.setVoipPushEnabled(enabled)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    voipChannel = channel
+  }
+
+  /// Вкл/выкл доставку VoIP-пушей: выключаем при выходе из аккаунта,
+  /// включаем после входа.
+  private func setVoipPushEnabled(_ enabled: Bool) {
+    guard let registry = voipRegistry else { return }
+    let desired: Set<PKPushType> = enabled ? [.voIP] : []
+    // Повторная установка того же значения может снова дёрнуть didUpdate.
+    if registry.desiredPushTypes == desired { return }
+    NSLog("[callkit] VoIP push %@", enabled ? "enabled" : "disabled")
+    registry.desiredPushTypes = desired
   }
 
   // MARK: - PushKit
@@ -56,6 +96,18 @@ import flutter_callkit_incoming
   ) {
     guard type == .voIP else {
       completion()
+      return
+    }
+
+    // Пуш пришёл уже после выхода (сервер ещё не отвязал токен): iOS всё
+    // равно требует сообщить о звонке, поэтому сразу его завершаем.
+    if !isLoggedIn {
+      NSLog("[callkit] VoIP push while logged out, ending immediately")
+      let uuid = UUID()
+      loggedOutCallProvider.reportNewIncomingCall(with: uuid, update: CXCallUpdate()) { [weak self] _ in
+        self?.loggedOutCallProvider.reportCall(with: uuid, endedAt: nil, reason: .failed)
+        completion()
+      }
       return
     }
 

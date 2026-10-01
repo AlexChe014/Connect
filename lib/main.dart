@@ -82,6 +82,7 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
     AuthService.instance.onSessionExpired = () {
       UserPresenceService.instance.reset();
       unawaited(ChatRealtimeService.instance.stop());
+      unawaited(PushNotificationService.instance.disableLocally());
       AppNavigationService.goToLogin();
     };
     WidgetsBinding.instance.addPostFrameCallback((_) async {
