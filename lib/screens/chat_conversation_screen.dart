@@ -29,6 +29,7 @@ import 'package:flutter/material.dart'
     show ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 String _formatMsgTime(DateTime d) {
   final l = d.toLocal();
@@ -44,8 +45,26 @@ bool _sameChatAuthor(ChatMessage a, ChatMessage b) {
   return false;
 }
 
+bool _sameDay(DateTime a, DateTime b) {
+  final la = a.toLocal();
+  final lb = b.toLocal();
+  return la.year == lb.year && la.month == lb.month && la.day == lb.day;
+}
+
+/// «Сегодня», «Вчера», «12 сентября» или «12 сентября 2025» — для плашки
+/// с датой между сообщениями разных дней.
+String _formatDayLabel(DateTime d) {
+  final l = d.toLocal();
+  final now = DateTime.now();
+  if (_sameDay(l, now)) return 'Сегодня';
+  if (_sameDay(l, now.subtract(const Duration(days: 1)))) return 'Вчера';
+  final pattern = l.year == now.year ? 'd MMMM' : 'd MMMM y';
+  return DateFormat(pattern, 'ru_RU').format(l);
+}
+
 bool _showMessageTime(ChatMessage m, ChatMessage? next) {
   if (next == null || !_sameChatAuthor(m, next)) return true;
+  if (!_sameDay(m.createdAt, next.createdAt)) return true;
   return next.createdAt.difference(m.createdAt).inMinutes >= 2;
 }
 
@@ -80,6 +99,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   int _searchCursor = -1;
   String? _highlightedMessageId;
   Timer? _highlightTimer;
+  final _listCtrl = ScrollController();
+  /// Последний построенный `itemBuilder`-ом индекс (в перевёрнутом списке) —
+  /// по нему [_scrollToMessage] понимает, в какую сторону листать.
+  int _lastBuiltIndex = 0;
+  bool _jumpingToPinned = false;
   Timer? _liveRefresh;
   Timer? _draftSaveTimer;
   VoidCallback? _releaseHomeSuppress;
@@ -162,6 +186,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _searchCtrl.dispose();
     _focus.dispose();
     _highlightTimer?.cancel();
+    _listCtrl.dispose();
     super.dispose();
   }
 
@@ -351,34 +376,51 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final list = _service.messagesFor(widget.chat.id);
     final chronoIdx = _searchMatches[_searchCursor];
     if (chronoIdx >= list.length) return;
-    final reversedIdx = list.length - 1 - chronoIdx;
-    setState(() {
-      _scrollToReversedIndex = reversedIdx;
-      _highlightedMessageId = list[chronoIdx].id;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _performSearchScroll());
+    unawaited(_scrollToMessage(list[chronoIdx].id));
   }
 
-  void _performSearchScroll() {
-    if (!mounted) return;
-    final ctx = _scrollTargetKey.currentContext;
-    if (ctx == null) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _performSearchScroll(),
-      );
-      return;
+  /// Прокручивает ленту к сообщению и подсвечивает его. Список ленивый —
+  /// виджет далёкого сообщения ещё не построен, поэтому сначала прыгаем
+  /// в примерную позицию, а потом шагами по экрану, пока он не появится.
+  Future<bool> _scrollToMessage(String messageId) async {
+    setState(() => _highlightedMessageId = messageId);
+    for (var attempt = 0; attempt < 80; attempt++) {
+      if (!mounted) return false;
+      final ctx = _messageKeys[messageId]?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+          alignment: 0.35,
+        );
+        _highlightTimer?.cancel();
+        _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+          if (!mounted) return;
+          setState(() => _highlightedMessageId = null);
+        });
+        return true;
+      }
+
+      final list = _service.messagesFor(widget.chat.id);
+      final chronoIdx = list.indexWhere((m) => m.id == messageId);
+      if (chronoIdx < 0 || !_listCtrl.hasClients) break;
+      final target = list.length - 1 - chronoIdx;
+      final pos = _listCtrl.position;
+      double next;
+      if (attempt == 0 && list.length > 1) {
+        next = pos.maxScrollExtent * target / (list.length - 1);
+      } else {
+        final step = pos.viewportDimension * 0.9;
+        next = pos.pixels + (_lastBuiltIndex < target ? step : -step);
+      }
+      next = next.clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      if (attempt > 0 && next == pos.pixels) break;
+      _listCtrl.jumpTo(next);
+      await WidgetsBinding.instance.endOfFrame;
     }
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
-      alignment: 0.35,
-    );
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
-      if (!mounted) return;
-      setState(() => _highlightedMessageId = null);
-    });
+    if (mounted) setState(() => _highlightedMessageId = null);
+    return false;
   }
 
   void _prevSearchResult() {
@@ -507,12 +549,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           message: 'Пока нет сообщений — напишите первым',
                         )
                       : ListView.builder(
+                          controller: _listCtrl,
                           reverse: true,
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
                           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                           itemCount: list.length,
                           itemBuilder: (context, i) {
+                            _lastBuiltIndex = i;
                             final chronologicalIndex = list.length - 1 - i;
                             final m = list[chronologicalIndex];
                             final previous = chronologicalIndex > 0
@@ -521,11 +565,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                             final next = chronologicalIndex < list.length - 1
                                 ? list[chronologicalIndex + 1]
                                 : null;
+                            final startsNewDay = previous == null ||
+                                !_sameDay(previous.createdAt, m.createdAt);
                             final showAuthorHeader =
                                 c.isGroup &&
                                 !m.isOutgoing &&
                                 !m.isSystem &&
                                 (previous == null ||
+                                    startsNewDay ||
                                     !_sameChatAuthor(previous, m));
                             final localReactions = _localReactions[m.id];
                             final displayMessage = localReactions == null
@@ -558,10 +605,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 }
                               },
                             );
-                            final wrapped = KeyedSubtree(
+                            final keyed = KeyedSubtree(
                               key: _keyForMessage(m.id),
                               child: tile,
                             );
+                            final wrapped = startsNewDay
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _DaySeparator(
+                                        label: _formatDayLabel(m.createdAt),
+                                      ),
+                                      keyed,
+                                    ],
+                                  )
+                                : keyed;
                             if (i == _scrollToReversedIndex) {
                               return KeyedSubtree(
                                 key: _scrollTargetKey,
@@ -1001,24 +1060,29 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
-  void _jumpToMessage(String messageId) {
-    final ctx = _messageKeys[messageId]?.currentContext;
-    if (ctx == null) {
-      _showSnack('Сообщение ещё не загружено в историю');
-      return;
-    }
-    setState(() => _highlightedMessageId = messageId);
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
-      alignment: 0.35,
-    );
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+  Future<void> _jumpToMessage(String messageId) async {
+    if (_jumpingToPinned) return;
+    final chatId = widget.chat.id;
+    var loaded = _service.messagesFor(chatId).any((m) => m.id == messageId);
+    if (!loaded) {
+      setState(() => _jumpingToPinned = true);
+      try {
+        loaded = await _service.ensureMessageLoaded(chatId, messageId);
+      } catch (e, st) {
+        CrashReportingService.recordNonFatal(e, st, reason: 'chat_jump_load');
+      } finally {
+        if (mounted) setState(() => _jumpingToPinned = false);
+      }
       if (!mounted) return;
-      setState(() => _highlightedMessageId = null);
-    });
+      if (!loaded) {
+        _showSnack('Не удалось найти сообщение в истории');
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted) return;
+    final ok = await _scrollToMessage(messageId);
+    if (!ok && mounted) _showSnack('Не удалось перейти к сообщению');
   }
 
   Widget _buildPinnedBar(BuildContext context) {
@@ -1083,11 +1147,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ],
               ),
             ),
-            Icon(
-              CupertinoIcons.chevron_forward,
-              size: 16,
-              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-            ),
+            if (_jumpingToPinned)
+              const CupertinoActivityIndicator(radius: 8)
+            else
+              Icon(
+                CupertinoIcons.chevron_forward,
+                size: 16,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+              ),
           ],
         ),
       ),
@@ -2296,6 +2363,37 @@ class _ChatFileCardState extends State<_ChatFileCard> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Плашка с датой по центру ленты — отделяет сообщения разных дней.
+class _DaySeparator extends StatelessWidget {
+  const _DaySeparator({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
         ),
       ),
     );

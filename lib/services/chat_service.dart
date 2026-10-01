@@ -257,6 +257,41 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  /// Догружает историю постранично, пока в ней не появится [messageId] —
+  /// для перехода к закреплённому сообщению старше первой страницы.
+  /// Возвращает `false`, если за [maxPages] страниц сообщение не нашлось.
+  Future<bool> ensureMessageLoaded(
+    String chatId,
+    String messageId, {
+    int maxPages = 20,
+  }) async {
+    if (_messages[chatId]?.any((m) => m.id == messageId) ?? false) return true;
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return false;
+
+    final fetched = <ChatMessage>[];
+    String? pageUrl;
+    var pages = 0;
+    var found = false;
+    do {
+      final page = await ChatRepository.instance.getMessages(
+        chatIntId,
+        currentUserId: userId,
+        pageUrl: pageUrl,
+      );
+      fetched.addAll(page.messages.data);
+      found = page.messages.data.any((m) => m.id == messageId);
+      pageUrl = page.messages.hasMore ? page.messages.nextPageUrl : null;
+      pages++;
+    } while (!found && pageUrl != null && pages < maxPages);
+
+    if (!found) return false;
+    _messages[chatId] = _mergeMessages(fetched, _messages[chatId]);
+    notifyListeners();
+    return true;
+  }
+
   /// Отмечает входящие сообщения чата как прочитанные — локально (счётчик,
   /// список сообщений) и на сервере.
   Future<void> markChatRead(String chatId) async {
