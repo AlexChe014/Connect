@@ -392,14 +392,16 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                         icon: CupertinoIcons.repeat,
                         color: CupertinoColors.systemPurple,
                         label: 'Повторение',
-                        value: detail.recurring?.type ?? 'да',
+                        value:
+                            detail.recurring?.label(detail.datetimeStart) ??
+                            'Да',
                       ),
-                      if ((detail.recurring?.endDate ?? '').isNotEmpty)
+                      if (detail.recurring?.endDateLabel case final endDate?)
                         _valueRow(
                           icon: CupertinoIcons.calendar,
                           color: CupertinoColors.systemPurple,
                           label: 'Повторять до',
-                          value: detail.recurring!.endDate!,
+                          value: endDate,
                         ),
                     ],
                     if ((detail.description ?? '').trim().isNotEmpty)

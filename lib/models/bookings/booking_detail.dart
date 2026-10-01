@@ -114,8 +114,10 @@ class BookingDetail {
       link: (json['link'] as String?)?.trim(),
       userIds: userIds,
       participants: participants,
-      recurring: BookingRecurringInfo.fromJson(json['recurring']),
-      recurringParentId: BookingJson.parseInt(json['recurring_parent_id'] ?? json['parent_id']),
+      recurring: BookingRecurringInfo.fromBookingJson(json),
+      recurringParentId: BookingJson.parseInt(
+        json['recurring_parent_id'] ?? json['parent_id'],
+      ),
       isRecurrent: BookingJson.parseBool(json['is_recurrent']),
     );
   }
