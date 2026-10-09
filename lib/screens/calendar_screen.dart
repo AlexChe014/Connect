@@ -581,7 +581,9 @@ class _EventTile extends StatelessWidget {
                       const SizedBox(height: 8),
                       _JoinMeetingChip(
                         url: meetingLink,
-                        isPassed: booking.isPassed,
+                        // Сервер помечает is_passed уже после начала встречи,
+                        // а опоздавшим нужно подключаться до её окончания.
+                        isPassed: DateTime.now().isAfter(booking.datetimeEnd),
                       ),
                     ],
                     if (hasSeparateDescription) ...[

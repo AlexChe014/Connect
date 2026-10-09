@@ -7,6 +7,8 @@ import 'package:connect/services/call_permissions.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -98,6 +100,14 @@ class JitsiMeetingService {
       // нативным UI Jitsi и сразу проявляется.
       _releaseHomeSuppress?.call();
       _releaseHomeSuppress = HomeShortcutButton.suppress();
+
+      // Снимаем фокус с полей ввода Flutter (обычно — поле сообщения в чате).
+      // Нативный экран Jitsi открывается поверх Flutter, но фокус/first
+      // responder у нашего TextField остаётся: клавиатура всплывает поверх
+      // звонка (в т.ч. при возврате приложения из фона после ответа через
+      // CallKit), а закрыть её из UI Jitsi нельзя.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
 
       final options = JitsiMeetConferenceOptions(
         serverURL: server,

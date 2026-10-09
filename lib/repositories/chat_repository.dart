@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/chat_messages_page.dart';
+import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat_message.dart';
@@ -157,6 +158,28 @@ class ChatRepository {
     );
   }
 
+  /// Стикер уходит как сообщение `type: "STICKER"` с id стикера в тексте —
+  /// в том же формате, что отправляет портал.
+  Future<ChatMessage> sendSticker(
+    int chatId, {
+    required String stickerId,
+    required int currentUserId,
+    int? repliedMessageId,
+    int? forwardedMessageId,
+  }) {
+    if (!ChatStickers.isValidId(stickerId)) {
+      throw ApiException(400, 'Неизвестный стикер');
+    }
+    return sendMessage(
+      chatId,
+      text: stickerId,
+      currentUserId: currentUserId,
+      repliedMessageId: repliedMessageId,
+      forwardedMessageId: forwardedMessageId,
+      type: ChatStickers.messageType,
+    );
+  }
+
   Future<ChatMessage> sendMessage(
     int chatId, {
     String text = '',
@@ -164,6 +187,7 @@ class ChatRepository {
     int? repliedMessageId,
     int? forwardedMessageId,
     List<int>? fileIds,
+    String? type,
   }) async {
     final trimmed = text.trim();
     final ids = fileIds ?? const <int>[];
@@ -184,6 +208,9 @@ class ChatRepository {
     if (ids.isNotEmpty) {
       body['file_ids'] = ids;
       body['type'] = 'MEDIA';
+    }
+    if (type != null) {
+      body['type'] = type;
     }
 
     final decoded = await ApiClient.instance.post(

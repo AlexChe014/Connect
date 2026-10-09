@@ -221,7 +221,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   ) {
     const order = [
       ('task', 'Задача'),
-      ('title', 'Комментарий'),
+      ('comment', 'Комментарий'),
+      ('title', 'Описание'),
       ('number', 'Номер'),
       ('author', 'Автор'),
       ('sum', 'Сумма'),
@@ -235,6 +236,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       if (raw == null) continue;
       final value = raw.toString().trim();
       if (value.isEmpty) continue;
+      // 1С иногда дублирует текст в title и comment — не показываем дважды.
+      if (entries.any((e) => e.value == value)) continue;
       entries.add(MapEntry(item.$2, value));
     }
     return entries;

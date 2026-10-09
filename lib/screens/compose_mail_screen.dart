@@ -8,6 +8,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
+import '../widgets/staff_user_picker_sheet.dart';
 
 class _PendingAttachment {
   final String filename;
@@ -100,16 +101,65 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     setState(() => _attachments.removeAt(index));
   }
 
+  /// Адреса из поля «Кому»: можно перечислять через запятую или «;».
+  List<String> get _recipients => _toController.text
+      .split(RegExp(r'[,;]'))
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  /// Получатели одной строкой в формате списка адресов (RFC 5322) —
+  /// так `to` и уходит на сервер.
+  String get _toValue => _recipients.join(', ');
+
+  /// Добавляет в «Кому» e-mail сотрудников из справочника компании. Шторка
+  /// не закрывается после выбора — можно отметить сразу несколько человек.
+  Future<void> _pickEmployees() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await StaffUserPickerSheet.show(
+      context,
+      selectedIds: const {},
+      validateUser: (user) {
+        final email = user.email?.trim() ?? '';
+        if (email.isEmpty) {
+          return 'У сотрудника ${user.fullName} не указан e-mail';
+        }
+        final lower = email.toLowerCase();
+        if (_recipients.any((r) => r.toLowerCase() == lower)) {
+          return '$email уже есть среди получателей';
+        }
+        return null;
+      },
+      onUserSelected: (user) {
+        final email = user.email!.trim();
+        setState(() {
+          _toController.text = [..._recipients, email].join(', ');
+          _toError = null;
+        });
+      },
+    );
+  }
+
   bool _validate() {
-    final to = _toController.text.trim();
+    final recipients = _recipients;
     final subject = _subjectController.text.trim();
+    final invalid = recipients.where((r) => !_looksLikeEmail(r)).toList();
     setState(() {
-      _toError = to.isEmpty
+      _toError = recipients.isEmpty
           ? 'Введите адрес получателя'
-          : (!to.contains('@') ? 'Некорректный email' : null);
+          : invalid.isNotEmpty
+          ? 'Некорректный email: ${invalid.join(', ')}'
+          : null;
       _subjectError = subject.isEmpty ? 'Введите тему письма' : null;
     });
     return _toError == null && _subjectError == null;
+  }
+
+  /// Принимает и `Имя <a@b.ru>`, и просто `a@b.ru`.
+  static bool _looksLikeEmail(String value) {
+    final match = RegExp(r'<([^>]+)>').firstMatch(value);
+    final address = (match?.group(1) ?? value).trim();
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(address);
   }
 
   Future<void> _send() async {
@@ -131,7 +181,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         await MailRepository.instance.replyMail(
           ReplyMailRequest(
             messageId: replyTo.id,
-            to: _toController.text.trim(),
+            to: _toValue,
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
           ),
@@ -140,7 +190,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         await MailRepository.instance.forwardMail(
           ForwardMailRequest(
             messageId: forwardOf.id,
-            to: _toController.text.trim(),
+            to: _toValue,
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
           ),
@@ -159,7 +209,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         await MailRepository.instance.sendMail(
           SendMailRequest(
             connectionId: widget.connection.id,
-            to: _toController.text.trim(),
+            to: _toValue,
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
             attachments: files,
@@ -248,16 +298,35 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
                   CupertinoFormSection.insetGrouped(
                     margin: EdgeInsets.zero,
                     children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _toController,
-                        prefix: const Text('Кому'),
-                        placeholder: 'email@example.com',
-                        keyboardType: TextInputType.emailAddress,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSending,
-                        onChanged: (_) {
-                          if (_toError != null) setState(() => _toError = null);
-                        },
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CupertinoTextFormFieldRow(
+                              controller: _toController,
+                              prefix: const Text('Кому'),
+                              placeholder: 'email@example.com',
+                              keyboardType: TextInputType.emailAddress,
+                              minLines: 1,
+                              maxLines: 4,
+                              textAlign: TextAlign.end,
+                              enabled: !_isSending,
+                              onChanged: (_) {
+                                if (_toError != null) {
+                                  setState(() => _toError = null);
+                                }
+                              },
+                            ),
+                          ),
+                          CupertinoButton(
+                            padding: const EdgeInsets.only(right: 12),
+                            minimumSize: const Size(36, 36),
+                            onPressed: _isSending ? null : _pickEmployees,
+                            child: const Icon(
+                              CupertinoIcons.person_crop_circle_badge_plus,
+                              size: 24,
+                            ),
+                          ),
+                        ],
                       ),
                       CupertinoTextFormFieldRow(
                         controller: _subjectController,

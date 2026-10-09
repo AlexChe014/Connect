@@ -625,4 +625,56 @@ void main() {
       expect(Chat.unreadBadgeLabel(11), '10+');
     });
   });
+  group('ChatMapper stickers', () {
+    ChatMessage map(Map<String, dynamic> json) =>
+        ChatMapper.mapMessage(json, chatId: '1', currentUserId: 1);
+
+    test('STICKER with an id from the set is a sticker', () {
+      final m = map({
+        'id': 1,
+        'sender_id': 2,
+        'type': 'STICKER',
+        'message': '07',
+      });
+      expect(m.stickerId, '07');
+      expect(m.text, isNull);
+      expect(ChatMapper.snippet(m), 'Стикер');
+
+      final byContent = map({
+        'id': 2,
+        'sender_id': 2,
+        'type': 'STICKER',
+        'content': '32',
+      });
+      expect(byContent.stickerId, '32');
+    });
+
+    test('both conditions are required', () {
+      final outOfSet = map({
+        'id': 1,
+        'sender_id': 2,
+        'type': 'STICKER',
+        'message': '33',
+      });
+      expect(outOfSet.stickerId, isNull);
+      expect(outOfSet.text, '33');
+
+      final notPadded = map({
+        'id': 2,
+        'sender_id': 2,
+        'type': 'STICKER',
+        'message': '7',
+      });
+      expect(notPadded.stickerId, isNull);
+
+      final plainText = map({
+        'id': 3,
+        'sender_id': 2,
+        'type': 'TEXT',
+        'message': '05',
+      });
+      expect(plainText.stickerId, isNull);
+      expect(plainText.text, '05');
+    });
+  });
 }

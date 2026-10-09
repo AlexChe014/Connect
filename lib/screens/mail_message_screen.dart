@@ -428,7 +428,11 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                             .resolveFrom(context),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      padding: const EdgeInsets.all(16),
+                      // HTML-письмо сам WebView отбивает от краёв, лишний
+                      // отступ карточки только отнимал у него ширину.
+                      padding: MailBodyContent.rendersHtml(message)
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.all(16),
                       child: MailBodyContent(message: message),
                     ),
                     if (message.attachments.isNotEmpty) ...[

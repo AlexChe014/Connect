@@ -25,6 +25,7 @@ class PushNotificationService {
 
   static const _androidChannelId = 'connect_high_importance';
   static const _androidChannelName = 'Connect уведомления';
+  static const _backendTimeout = Duration(seconds: 5);
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -259,15 +260,25 @@ class PushNotificationService {
     }
   }
 
-  Future<void> unregisterCurrentDevice() async {
-    IncomingCallService.instance.clearVoipCache();
+  /// Выход из аккаунта, пока сессия ещё жива: отвязать FCM- и VoIP-токены
+  /// на бэкенде. Ошибки не блокируют выход — локально токены всё равно
+  /// гасятся в [disableLocally].
+  Future<void> unregisterOnBackend() async {
+    await IncomingCallService.instance.unregisterVoipOnBackend();
     if (!_initialized) return;
 
-    final token = _currentToken ?? await FirebaseMessaging.instance.getToken();
+    String? token = _currentToken;
+    if (token == null || token.isEmpty) {
+      try {
+        token = await FirebaseMessaging.instance.getToken();
+      } catch (_) {}
+    }
     if (token == null || token.isEmpty) return;
 
     try {
-      await DeviceTokenRepository.instance.unregisterToken(token: token);
+      await DeviceTokenRepository.instance
+          .unregisterToken(token: token)
+          .timeout(_backendTimeout);
     } catch (e, st) {
       AppLogger.e(
         'Failed to unregister FCM token',
@@ -275,8 +286,28 @@ class PushNotificationService {
         error: e,
         stackTrace: st,
       );
-    } finally {
-      _currentToken = null;
+    }
+  }
+
+  /// Вызывать после очистки сессии: инвалидирует FCM-токен в Firebase и
+  /// отключает VoIP, чтобы пуши не приходили, даже если бэкенд не отвязал
+  /// токены. После очистки сессии — иначе `onTokenRefresh` успеет
+  /// зарегистрировать новый токен на старого пользователя.
+  Future<void> disableLocally() async {
+    await IncomingCallService.instance.disableLocally();
+    if (!_initialized) return;
+
+    _currentToken = null;
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+      AppLogger.d('FCM token deleted locally', name: 'push');
+    } catch (e, st) {
+      AppLogger.e(
+        'Failed to delete FCM token',
+        name: 'push',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 

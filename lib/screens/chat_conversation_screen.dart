@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_file.dart';
+import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
+import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
@@ -15,7 +18,6 @@ import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
-import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
@@ -28,6 +30,7 @@ import 'package:flutter/material.dart'
     show ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 String _formatMsgTime(DateTime d) {
   final l = d.toLocal();
@@ -43,8 +46,26 @@ bool _sameChatAuthor(ChatMessage a, ChatMessage b) {
   return false;
 }
 
+bool _sameDay(DateTime a, DateTime b) {
+  final la = a.toLocal();
+  final lb = b.toLocal();
+  return la.year == lb.year && la.month == lb.month && la.day == lb.day;
+}
+
+/// «Сегодня», «Вчера», «12 сентября» или «12 сентября 2025» — для плашки
+/// с датой между сообщениями разных дней.
+String _formatDayLabel(DateTime d) {
+  final l = d.toLocal();
+  final now = DateTime.now();
+  if (_sameDay(l, now)) return 'Сегодня';
+  if (_sameDay(l, now.subtract(const Duration(days: 1)))) return 'Вчера';
+  final pattern = l.year == now.year ? 'd MMMM' : 'd MMMM y';
+  return DateFormat(pattern, 'ru_RU').format(l);
+}
+
 bool _showMessageTime(ChatMessage m, ChatMessage? next) {
   if (next == null || !_sameChatAuthor(m, next)) return true;
+  if (!_sameDay(m.createdAt, next.createdAt)) return true;
   return next.createdAt.difference(m.createdAt).inMinutes >= 2;
 }
 
@@ -79,6 +100,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   int _searchCursor = -1;
   String? _highlightedMessageId;
   Timer? _highlightTimer;
+  final _listCtrl = ScrollController();
+  /// Последний построенный `itemBuilder`-ом индекс (в перевёрнутом списке) —
+  /// по нему [_scrollToMessage] понимает, в какую сторону листать.
+  int _lastBuiltIndex = 0;
+  bool _jumpingToPinned = false;
   Timer? _liveRefresh;
   Timer? _draftSaveTimer;
   VoidCallback? _releaseHomeSuppress;
@@ -161,6 +187,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _searchCtrl.dispose();
     _focus.dispose();
     _highlightTimer?.cancel();
+    _listCtrl.dispose();
     super.dispose();
   }
 
@@ -350,34 +377,51 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final list = _service.messagesFor(widget.chat.id);
     final chronoIdx = _searchMatches[_searchCursor];
     if (chronoIdx >= list.length) return;
-    final reversedIdx = list.length - 1 - chronoIdx;
-    setState(() {
-      _scrollToReversedIndex = reversedIdx;
-      _highlightedMessageId = list[chronoIdx].id;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _performSearchScroll());
+    unawaited(_scrollToMessage(list[chronoIdx].id));
   }
 
-  void _performSearchScroll() {
-    if (!mounted) return;
-    final ctx = _scrollTargetKey.currentContext;
-    if (ctx == null) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _performSearchScroll(),
-      );
-      return;
+  /// Прокручивает ленту к сообщению и подсвечивает его. Список ленивый —
+  /// виджет далёкого сообщения ещё не построен, поэтому сначала прыгаем
+  /// в примерную позицию, а потом шагами по экрану, пока он не появится.
+  Future<bool> _scrollToMessage(String messageId) async {
+    setState(() => _highlightedMessageId = messageId);
+    for (var attempt = 0; attempt < 80; attempt++) {
+      if (!mounted) return false;
+      final ctx = _messageKeys[messageId]?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+          alignment: 0.35,
+        );
+        _highlightTimer?.cancel();
+        _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+          if (!mounted) return;
+          setState(() => _highlightedMessageId = null);
+        });
+        return true;
+      }
+
+      final list = _service.messagesFor(widget.chat.id);
+      final chronoIdx = list.indexWhere((m) => m.id == messageId);
+      if (chronoIdx < 0 || !_listCtrl.hasClients) break;
+      final target = list.length - 1 - chronoIdx;
+      final pos = _listCtrl.position;
+      double next;
+      if (attempt == 0 && list.length > 1) {
+        next = pos.maxScrollExtent * target / (list.length - 1);
+      } else {
+        final step = pos.viewportDimension * 0.9;
+        next = pos.pixels + (_lastBuiltIndex < target ? step : -step);
+      }
+      next = next.clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      if (attempt > 0 && next == pos.pixels) break;
+      _listCtrl.jumpTo(next);
+      await WidgetsBinding.instance.endOfFrame;
     }
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
-      alignment: 0.35,
-    );
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
-      if (!mounted) return;
-      setState(() => _highlightedMessageId = null);
-    });
+    if (mounted) setState(() => _highlightedMessageId = null);
+    return false;
   }
 
   void _prevSearchResult() {
@@ -506,12 +550,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           message: 'Пока нет сообщений — напишите первым',
                         )
                       : ListView.builder(
+                          controller: _listCtrl,
                           reverse: true,
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
                           padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
                           itemCount: list.length,
                           itemBuilder: (context, i) {
+                            _lastBuiltIndex = i;
                             final chronologicalIndex = list.length - 1 - i;
                             final m = list[chronologicalIndex];
                             final previous = chronologicalIndex > 0
@@ -520,11 +566,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                             final next = chronologicalIndex < list.length - 1
                                 ? list[chronologicalIndex + 1]
                                 : null;
+                            final startsNewDay = previous == null ||
+                                !_sameDay(previous.createdAt, m.createdAt);
                             final showAuthorHeader =
                                 c.isGroup &&
                                 !m.isOutgoing &&
                                 !m.isSystem &&
                                 (previous == null ||
+                                    startsNewDay ||
                                     !_sameChatAuthor(previous, m));
                             final localReactions = _localReactions[m.id];
                             final displayMessage = localReactions == null
@@ -538,6 +587,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                               highlighted: m.id == _highlightedMessageId,
                               onReact: (emoji) => _toggleReaction(m, emoji),
                               onOpenFile: _openChatFile,
+                              onOpenImages: (images, index) =>
+                                  _openChatImages(m, images, index),
                               onLongMenu: (action) {
                                 if (action == _MsgAction.reply) {
                                   setState(() {
@@ -555,10 +606,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 }
                               },
                             );
-                            final wrapped = KeyedSubtree(
+                            final keyed = KeyedSubtree(
                               key: _keyForMessage(m.id),
                               child: tile,
                             );
+                            final wrapped = startsNewDay
+                                ? Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _DaySeparator(
+                                        label: _formatDayLabel(m.createdAt),
+                                      ),
+                                      keyed,
+                                    ],
+                                  )
+                                : keyed;
                             if (i == _scrollToReversedIndex) {
                               return KeyedSubtree(
                                 key: _scrollTargetKey,
@@ -585,6 +648,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 focus: _focus,
                 onSend: _send,
                 onAttach: _openAttachMenu,
+                onStickers: _editingMessage != null ? null : _openStickerPicker,
                 isEditing: _editingMessage != null,
                 isSendingAttachment: _sendingAttachment,
               ),
@@ -705,6 +769,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       }
     } finally {
       _sendingText = false;
+    }
+  }
+
+  Future<void> _openStickerPicker() async {
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.5,
+        child: SafeArea(
+          child: GridView.builder(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+            ),
+            itemCount: ChatStickers.ids.length,
+            itemBuilder: (context, i) {
+              final id = ChatStickers.ids[i];
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.pop(context, id),
+                child: _ChatSticker(id: id),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (id == null || !mounted) return;
+    final replyTo = _replyingTo;
+    setState(() => _replyingTo = null);
+    try {
+      await _service.sendSticker(widget.chat.id, id, replyTo: replyTo);
+    } catch (e) {
+      if (mounted) _showSnack('Не удалось отправить стикер: $e');
     }
   }
 
@@ -977,24 +1082,50 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
-  void _jumpToMessage(String messageId) {
-    final ctx = _messageKeys[messageId]?.currentContext;
-    if (ctx == null) {
-      _showSnack('Сообщение ещё не загружено в историю');
-      return;
-    }
-    setState(() => _highlightedMessageId = messageId);
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
-      alignment: 0.35,
+  void _openChatImages(ChatMessage m, List<ChatFile> images, int index) {
+    if (images.isEmpty) return;
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => MediaViewer(
+          items: [
+            for (final file in images)
+              m.copyWith(
+                attachmentKind: ChatAttachmentKind.image,
+                remoteMediaUrl: ChatRoutes.fileUrl(file.id),
+                fileName: file.originalName,
+                files: [file],
+              ),
+          ],
+          initialIndex: index < 0 ? 0 : index,
+        ),
+      ),
     );
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+  }
+
+  Future<void> _jumpToMessage(String messageId) async {
+    if (_jumpingToPinned) return;
+    final chatId = widget.chat.id;
+    var loaded = _service.messagesFor(chatId).any((m) => m.id == messageId);
+    if (!loaded) {
+      setState(() => _jumpingToPinned = true);
+      try {
+        loaded = await _service.ensureMessageLoaded(chatId, messageId);
+      } catch (e, st) {
+        CrashReportingService.recordNonFatal(e, st, reason: 'chat_jump_load');
+      } finally {
+        if (mounted) setState(() => _jumpingToPinned = false);
+      }
       if (!mounted) return;
-      setState(() => _highlightedMessageId = null);
-    });
+      if (!loaded) {
+        _showSnack('Не удалось найти сообщение в истории');
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted) return;
+    final ok = await _scrollToMessage(messageId);
+    if (!ok && mounted) _showSnack('Не удалось перейти к сообщению');
   }
 
   Widget _buildPinnedBar(BuildContext context) {
@@ -1059,11 +1190,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 ],
               ),
             ),
-            Icon(
-              CupertinoIcons.chevron_forward,
-              size: 16,
-              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-            ),
+            if (_jumpingToPinned)
+              const CupertinoActivityIndicator(radius: 8)
+            else
+              Icon(
+                CupertinoIcons.chevron_forward,
+                size: 16,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+              ),
           ],
         ),
       ),
@@ -1300,6 +1434,7 @@ class _Composer extends StatelessWidget {
     required this.focus,
     required this.onSend,
     required this.onAttach,
+    this.onStickers,
     this.isEditing = false,
     this.isSendingAttachment = false,
   });
@@ -1308,6 +1443,9 @@ class _Composer extends StatelessWidget {
   final FocusNode focus;
   final VoidCallback onSend;
   final VoidCallback onAttach;
+
+  /// Открывает панель стикеров; `null` — кнопка скрыта (например, при правке).
+  final VoidCallback? onStickers;
   final bool isEditing;
   final bool isSendingAttachment;
 
@@ -1363,6 +1501,20 @@ class _Composer extends StatelessWidget {
                       vertical: 8,
                     ),
                     onSubmitted: (_) => onSend(),
+                    suffix: onStickers == null
+                        ? null
+                        : CupertinoButton(
+                            padding: const EdgeInsets.fromLTRB(4, 6, 10, 6),
+                            minimumSize: Size.zero,
+                            onPressed: onStickers,
+                            child: Icon(
+                              CupertinoIcons.smiley,
+                              size: 22,
+                              color: CupertinoColors.secondaryLabel.resolveFrom(
+                                context,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -1401,6 +1553,7 @@ class _MessageTile extends StatelessWidget {
     required this.onLongMenu,
     required this.onReact,
     required this.onOpenFile,
+    required this.onOpenImages,
     this.showAuthorHeader = false,
     this.showAvatarInHeader = false,
     this.showTime = true,
@@ -1410,18 +1563,47 @@ class _MessageTile extends StatelessWidget {
   final ChatMessage m;
   final void Function(_MsgAction) onLongMenu;
   final void Function(String emoji) onReact;
-  final void Function(ChatFile file) onOpenFile;
+  final Future<void> Function(ChatFile file) onOpenFile;
+  final void Function(List<ChatFile> images, int index) onOpenImages;
   final bool showAuthorHeader;
   final bool showAvatarInHeader;
   final bool showTime;
   final bool highlighted;
 
+  /// Только картинки, без текста/цитаты/пересылки — такой пузырь рисуется
+  /// почти без отступов, чтобы фото заполняло его целиком.
+  bool get _isMediaOnly {
+    if (m.forwardOf != null || m.replyTo != null || m.isPinned) return false;
+    if (m.text != null && m.text!.trim().isNotEmpty) return false;
+    if (m.files.isNotEmpty) return m.files.every((f) => f.isImage);
+    return m.attachmentKind == ChatAttachmentKind.image &&
+        ((m.localMediaPath != null && !kIsWeb) || m.remoteMediaUrl != null);
+  }
+
   List<Widget> _buildAttachments(BuildContext context, Color onBubble) {
+    if (m.isSticker) {
+      return [_ChatSticker(id: m.stickerId!)];
+    }
+    final radius = _isMediaOnly ? 15.0 : 10.0;
     if (m.files.isNotEmpty) {
+      final images = m.files.where((f) => f.isImage).toList();
       return [
-        for (final file in m.files) ...[
-          _buildChatFile(context, file, onBubble),
-          const SizedBox(height: 6),
+        for (var i = 0; i < m.files.length; i++) ...[
+          if (i > 0) const SizedBox(height: 4),
+          if (m.files[i].isImage)
+            _ChatImage(
+              url: ChatRoutes.fileUrl(m.files[i].id),
+              radius: radius,
+              onTap: () => onOpenImages(images, images.indexOf(m.files[i])),
+            )
+          else
+            _ChatFileCard(
+              name: m.files[i].originalName,
+              subtitle: m.files[i].sizeLabel,
+              isVideo: m.files[i].isVideo,
+              onBubble: onBubble,
+              onTap: () => onOpenFile(m.files[i]),
+            ),
         ],
       ];
     }
@@ -1430,27 +1612,13 @@ class _MessageTile extends StatelessWidget {
         m.localMediaPath != null &&
         !kIsWeb) {
       return [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(m.localMediaPath!),
-            width: 220,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(CupertinoIcons.exclamationmark_triangle),
-          ),
-        ),
+        _ChatImage(localPath: m.localMediaPath, radius: radius),
       ];
     }
     if (m.attachmentKind == ChatAttachmentKind.image &&
         m.remoteMediaUrl != null) {
       return [
-        AppNetworkImage(
-          url: m.remoteMediaUrl,
-          width: 220,
-          borderRadius: 8,
-          httpHeaders: ChatFileShare.imageHeaders(m.remoteMediaUrl),
-        ),
+        _ChatImage(url: m.remoteMediaUrl, radius: radius),
       ];
     }
     if (m.attachmentKind == ChatAttachmentKind.image && kIsWeb) {
@@ -1461,76 +1629,18 @@ class _MessageTile extends StatelessWidget {
         ),
       ];
     }
-    if (m.attachmentKind == ChatAttachmentKind.video) {
+    if (m.attachmentKind == ChatAttachmentKind.video ||
+        m.attachmentKind == ChatAttachmentKind.file) {
+      final isVideo = m.attachmentKind == ChatAttachmentKind.video;
       return [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.play_circle, size: 28),
-            const SizedBox(width: 8),
-            Flexible(child: Text(m.fileName ?? 'Видео', maxLines: 2)),
-          ],
-        ),
-      ];
-    }
-    if (m.attachmentKind == ChatAttachmentKind.file) {
-      return [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(CupertinoIcons.doc, size: 24),
-            const SizedBox(width: 8),
-            Flexible(child: Text(m.fileName ?? 'Файл', maxLines: 2)),
-          ],
+        _ChatFileCard(
+          name: m.fileName ?? (isVideo ? 'Видео' : 'Файл'),
+          isVideo: isVideo,
+          onBubble: onBubble,
         ),
       ];
     }
     return const [];
-  }
-
-  Widget _buildChatFile(BuildContext context, ChatFile file, Color onBubble) {
-    final url = ChatRoutes.fileUrl(file.id);
-    if (file.isImage) {
-      return GestureDetector(
-        onTap: () => onOpenFile(file),
-        child: AppNetworkImage(
-          url: url,
-          width: 220,
-          borderRadius: 8,
-          httpHeaders: ChatFileShare.imageHeaders(url),
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onTap: () => onOpenFile(file),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            file.isVideo ? CupertinoIcons.play_circle : CupertinoIcons.doc,
-            size: file.isVideo ? 28 : 24,
-            color: onBubble,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(file.originalName, maxLines: 2),
-                Text(
-                  file.sizeLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: onBubble.withValues(alpha: 0.75),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _wrapHighlight(BuildContext context, Widget child) {
@@ -1695,7 +1805,8 @@ class _MessageTile extends StatelessWidget {
     final bubble = m.isOutgoing
         ? CupertinoColors.activeBlue
         : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
-    final onBubble = m.isOutgoing
+    // Стикер рисуется без пузыря — цитата и подписи над ним на фоне чата.
+    final onBubble = m.isOutgoing && !m.isSticker
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
 
@@ -1746,28 +1857,39 @@ class _MessageTile extends StatelessWidget {
                     child: GestureDetector(
                       onLongPress: () => _showActions(context),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bubble,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: Radius.circular(m.isOutgoing ? 18 : 6),
-                            bottomRight: Radius.circular(m.isOutgoing ? 6 : 18),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: CupertinoColors.black.withValues(
-                                alpha: 0.04,
+                        width: m.isSticker ? _ChatSticker.bubbleSize : null,
+                        padding: m.isSticker
+                            ? EdgeInsets.zero
+                            : _isMediaOnly
+                            ? const EdgeInsets.all(3)
+                            : const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
                               ),
-                              blurRadius: 10,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
+                        decoration: m.isSticker
+                            ? null
+                            : BoxDecoration(
+                                color: bubble,
+                                borderRadius: BorderRadius.only(
+                                  topLeft: const Radius.circular(18),
+                                  topRight: const Radius.circular(18),
+                                  bottomLeft: Radius.circular(
+                                    m.isOutgoing ? 18 : 6,
+                                  ),
+                                  bottomRight: Radius.circular(
+                                    m.isOutgoing ? 6 : 18,
+                                  ),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: CupertinoColors.black.withValues(
+                                      alpha: 0.04,
+                                    ),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
                         child: DefaultTextStyle.merge(
                           style: TextStyle(color: onBubble),
                           child: Column(
@@ -1781,7 +1903,7 @@ class _MessageTile extends StatelessWidget {
                               if (m.replyTo != null)
                                 _ReplyBlock(
                                   ref: m.replyTo!,
-                                  isOutgoing: m.isOutgoing,
+                                  isOutgoing: m.isOutgoing && !m.isSticker,
                                 ),
                               if (m.isPinned)
                                 Padding(
@@ -2115,6 +2237,266 @@ class _ReplyBlock extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Стикер из набора портала. Квадрат фиксированного размера, чтобы лента
+/// не прыгала, пока картинка грузится.
+class _ChatSticker extends StatelessWidget {
+  const _ChatSticker({required this.id});
+
+  final String id;
+
+  static const double bubbleSize = 150;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = CachedNetworkImage(
+      imageUrl: ChatStickers.url(id),
+      fit: BoxFit.contain,
+      fadeInDuration: const Duration(milliseconds: 150),
+      placeholder: (context, _) =>
+          const Center(child: CupertinoActivityIndicator()),
+      errorWidget: (context, _, _) => Center(
+        child: Icon(
+          CupertinoIcons.smiley,
+          size: 32,
+          color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+    return AspectRatio(aspectRatio: 1, child: image);
+  }
+}
+
+/// Фото в пузыре: держит размер, пока грузится (а не полоску в 16 px),
+/// и не растягивается выше [_maxHeight] у вертикальных снимков.
+class _ChatImage extends StatelessWidget {
+  const _ChatImage({this.url, this.localPath, required this.radius, this.onTap})
+    : assert(url != null || localPath != null);
+
+  final String? url;
+  final String? localPath;
+  final double radius;
+  final VoidCallback? onTap;
+
+  static const double _width = 240;
+  static const double _maxHeight = 320;
+  static const double _placeholderHeight = 180;
+
+  Widget _box(BuildContext context, Widget child) {
+    return Container(
+      width: _width,
+      height: _placeholderHeight,
+      color: CupertinoColors.systemFill.resolveFrom(context),
+      alignment: Alignment.center,
+      child: child,
+    );
+  }
+
+  Widget _error(BuildContext context) {
+    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return _box(
+      context,
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(CupertinoIcons.photo, size: 28, color: color),
+          const SizedBox(height: 6),
+          Text(
+            'Не удалось загрузить фото',
+            style: TextStyle(fontSize: 12, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget image;
+    if (localPath != null && !kIsWeb) {
+      image = Image.file(
+        File(localPath!),
+        width: _width,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _error(context),
+      );
+    } else {
+      image = CachedNetworkImage(
+        imageUrl: url!.trim(),
+        httpHeaders: ChatFileShare.imageHeaders(url),
+        width: _width,
+        fit: BoxFit.cover,
+        fadeInDuration: const Duration(milliseconds: 150),
+        placeholder: (context, _) =>
+            _box(context, const CupertinoActivityIndicator()),
+        errorWidget: (context, _, _) => _error(context),
+      );
+    }
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: _width,
+            maxHeight: _maxHeight,
+          ),
+          child: image,
+        ),
+      ),
+    );
+  }
+}
+
+/// Документ/видео в пузыре: плашка с иконкой-расширением, именем и размером.
+/// Пока файл скачивается для шаринга — вместо иконки крутится индикатор.
+class _ChatFileCard extends StatefulWidget {
+  const _ChatFileCard({
+    required this.name,
+    required this.isVideo,
+    required this.onBubble,
+    this.subtitle,
+    this.onTap,
+  });
+
+  final String name;
+  final String? subtitle;
+  final bool isVideo;
+  final Color onBubble;
+  final Future<void> Function()? onTap;
+
+  @override
+  State<_ChatFileCard> createState() => _ChatFileCardState();
+}
+
+class _ChatFileCardState extends State<_ChatFileCard> {
+  bool _busy = false;
+
+  String get _extension {
+    final dot = widget.name.lastIndexOf('.');
+    if (dot < 0 || dot == widget.name.length - 1) return '';
+    final ext = widget.name.substring(dot + 1).toUpperCase();
+    return ext.length > 5 ? '' : ext;
+  }
+
+  Future<void> _handleTap() async {
+    final onTap = widget.onTap;
+    if (onTap == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await onTap();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onBubble = widget.onBubble;
+    final ext = _extension;
+    final details = [
+      if (ext.isNotEmpty) ext,
+      if (widget.subtitle != null && widget.subtitle!.isNotEmpty)
+        widget.subtitle!,
+    ].join(' · ');
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap == null ? null : _handleTap,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 200),
+        padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: onBubble.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: onBubble.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: _busy
+                  ? CupertinoActivityIndicator(color: onBubble, radius: 9)
+                  : Icon(
+                      widget.isVideo
+                          ? CupertinoIcons.play_fill
+                          : CupertinoIcons.doc_text_fill,
+                      size: 20,
+                      color: onBubble,
+                    ),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: onBubble,
+                    ),
+                  ),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      details,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: onBubble.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Плашка с датой по центру ленты — отделяет сообщения разных дней.
+class _DaySeparator extends StatelessWidget {
+  const _DaySeparator({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
         ),
       ),
     );

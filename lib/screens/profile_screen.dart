@@ -301,8 +301,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await UserPresenceService.instance.setOnline(false);
       UserPresenceService.instance.reset();
       await ChatRealtimeService.instance.stop();
-      await PushNotificationService.instance.unregisterCurrentDevice();
+      // Порядок важен: токены отвязываем, пока Bearer ещё валиден, а
+      // локально гасим уже после очистки сессии.
+      await PushNotificationService.instance.unregisterOnBackend();
+      await AuthService.instance.revokeServerSession();
       await AuthService.instance.logout();
+      await PushNotificationService.instance.disableLocally();
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
       }

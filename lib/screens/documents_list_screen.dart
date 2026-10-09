@@ -5,6 +5,7 @@ import 'package:flutter/material.dart'
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
+import '../services/document_pending_service.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
@@ -131,6 +132,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       final ok = await DocumentsRepository.instance.verifyCode(code);
       if (!mounted) return false;
       setState(() => _isVerifying = false);
+      if (ok) DocumentPendingService.instance.markSigningAccessGranted();
       if (!ok) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           const SnackBar(content: Text('Неверный код подтверждения')),

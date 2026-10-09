@@ -6,6 +6,11 @@ class DocumentService {
   final bool isActive;
   final String? type;
 
+  /// Количество документов, ожидающих согласования/подписания в этом
+  /// разделе — приходит от backend, чтобы показать бейдж в списке разделов
+  /// без захода в каждый из них.
+  final int? pendingCount;
+
   const DocumentService({
     required this.id,
     required this.name,
@@ -13,6 +18,7 @@ class DocumentService {
     this.url,
     this.isActive = true,
     this.type,
+    this.pendingCount,
   });
 
   bool get isSigningService {
@@ -46,6 +52,9 @@ class DocumentService {
       url: _optionalString(json, ['url']),
       isActive: _parseBool(json['is_active'], defaultValue: true),
       type: _optionalString(json, ['type']),
+      pendingCount: _parseInt(
+        json['pending_count'] ?? json['unresolved_count'] ?? json['count'],
+      ),
     );
   }
 

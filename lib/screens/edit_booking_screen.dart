@@ -8,16 +8,6 @@ import '../utils/booking_time_utils.dart';
 import '../widgets/bookable_object_preview.dart';
 import '../widgets/selected_staff_field.dart';
 
-const _weekdayNames = [
-  'Понедельник',
-  'Вторник',
-  'Среда',
-  'Четверг',
-  'Пятница',
-  'Суббота',
-  'Воскресенье',
-];
-
 /// Редактирование брони (`POST /booking/update/{id}`).
 ///
 /// Бэкенд на данный момент принимает изменение только темы, описания,
@@ -223,9 +213,8 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: SelectedStaffField(
                   participants: _participants,
-                  onUserAdded: (user) => setState(
-                    () => _participants = [..._participants, user],
-                  ),
+                  onUserAdded: (user) =>
+                      setState(() => _participants = [..._participants, user]),
                   onUserRemoved: (user) => setState(
                     () => _participants = _participants
                         .where((p) => p.id != user.id)
@@ -262,9 +251,7 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
                     CupertinoListTile(
                       title: const Text('Дни недели'),
                       additionalInfo: Text(
-                        detail.recurring!.daysOfWeek
-                            .map((d) => _weekdayNames[(d - 1).clamp(0, 6)])
-                            .join(', '),
+                        detail.recurring!.daysOfWeekLabel,
                         style: disabledStyle,
                       ),
                     ),
@@ -276,9 +263,7 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
                   'Дату, время и дни повторения пока нельзя изменить.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(
-                      context,
-                    ),
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ),

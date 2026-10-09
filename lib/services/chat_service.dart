@@ -225,6 +225,12 @@ class ChatService extends ChangeNotifier {
         return;
       }
 
+      // Сообщения, которые уже были на экране до запроса: если какое-то из
+      // них сервер больше не отдаёт, значит его удалили (бэкенд удаляет
+      // физически), а не что оно пришло по сокету, пока шёл запрос.
+      final knownBeforeFetch = {
+        for (final m in _messages[chatId] ?? const <ChatMessage>[]) m.id,
+      };
       final page = await ChatRepository.instance.getMessages(
         int.parse(chatId),
         currentUserId: userId,
@@ -232,6 +238,7 @@ class ChatService extends ChangeNotifier {
       _messages[chatId] = _mergeMessages(
         page.messages.data,
         _messages[chatId],
+        knownBeforeFetch: knownBeforeFetch,
       );
       if (page.members.isNotEmpty) {
         final idx = _chats.indexWhere((c) => c.id == chatId);
@@ -248,6 +255,41 @@ class ChatService extends ChangeNotifier {
       _messagesLoading[chatId] = false;
       notifyListeners();
     }
+  }
+
+  /// Догружает историю постранично, пока в ней не появится [messageId] —
+  /// для перехода к закреплённому сообщению старше первой страницы.
+  /// Возвращает `false`, если за [maxPages] страниц сообщение не нашлось.
+  Future<bool> ensureMessageLoaded(
+    String chatId,
+    String messageId, {
+    int maxPages = 20,
+  }) async {
+    if (_messages[chatId]?.any((m) => m.id == messageId) ?? false) return true;
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return false;
+
+    final fetched = <ChatMessage>[];
+    String? pageUrl;
+    var pages = 0;
+    var found = false;
+    do {
+      final page = await ChatRepository.instance.getMessages(
+        chatIntId,
+        currentUserId: userId,
+        pageUrl: pageUrl,
+      );
+      fetched.addAll(page.messages.data);
+      found = page.messages.data.any((m) => m.id == messageId);
+      pageUrl = page.messages.hasMore ? page.messages.nextPageUrl : null;
+      pages++;
+    } while (!found && pageUrl != null && pages < maxPages);
+
+    if (!found) return false;
+    _messages[chatId] = _mergeMessages(fetched, _messages[chatId]);
+    notifyListeners();
+    return true;
   }
 
   /// Отмечает входящие сообщения чата как прочитанные — локально (счётчик,
@@ -993,6 +1035,49 @@ class ChatService extends ChangeNotifier {
     }
   }
 
+  Future<void> sendSticker(
+    String chatId,
+    String stickerId, {
+    MessageReference? replyTo,
+  }) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return;
+
+    final repliedId = replyTo != null ? int.tryParse(replyTo.messageId) : null;
+
+    final tempId = 'local_${DateTime.now().microsecondsSinceEpoch}';
+    _appendMessage(
+      chatId,
+      ChatMessage(
+        id: tempId,
+        chatId: chatId,
+        authorName: '',
+        isOutgoing: true,
+        createdAt: DateTime.now(),
+        stickerId: stickerId,
+        replyTo: replyTo,
+        isRead: true,
+        isSending: true,
+      ),
+    );
+
+    try {
+      final sent = await ChatRepository.instance.sendSticker(
+        chatIntId,
+        stickerId: stickerId,
+        currentUserId: userId,
+        repliedMessageId: repliedId,
+      );
+
+      _removeLocalMessage(chatId, tempId);
+      _appendMessage(chatId, sent.copyWith(replyTo: replyTo, isRead: true));
+    } catch (e) {
+      _removeLocalMessage(chatId, tempId);
+      rethrow;
+    }
+  }
+
   /// Убирает локальное оптимистичное сообщение (по временному id), не трогая
   /// уже подтверждённые сервером сообщения.
   void _removeLocalMessage(String chatId, String tempId) {
@@ -1055,8 +1140,9 @@ class ChatService extends ChangeNotifier {
       return false;
     }
 
+    final stickerId = source.stickerId;
     final text = source.text?.trim();
-    if (text == null || text.isEmpty) {
+    if (stickerId == null && (text == null || text.isEmpty)) {
       _lastActionError = 'Пересылка вложений пока не поддерживается';
       notifyListeners();
       return false;
@@ -1064,22 +1150,29 @@ class ChatService extends ChangeNotifier {
 
     try {
       _lastActionError = null;
-      final sent = await ChatRepository.instance.sendTextMessage(
-        chatIntId,
-        text: text,
-        currentUserId: userId,
-        forwardedMessageId: sourceMessageId,
-      );
+      final sent = stickerId != null
+          ? await ChatRepository.instance.sendSticker(
+              chatIntId,
+              stickerId: stickerId,
+              currentUserId: userId,
+              forwardedMessageId: sourceMessageId,
+            )
+          : await ChatRepository.instance.sendTextMessage(
+              chatIntId,
+              text: text!,
+              currentUserId: userId,
+              forwardedMessageId: sourceMessageId,
+            );
 
       _appendMessage(
         targetChatId,
         sent.copyWith(
-          text: sent.text ?? text,
+          text: sent.text ?? (stickerId != null ? null : text),
           forwardOf: sent.forwardOf ??
               MessageReference(
                 messageId: source.id,
                 authorName: source.authorName,
-                textPreview: text,
+                textPreview: ChatMapper.snippet(source),
               ),
           isRead: true,
         ),
@@ -1238,6 +1331,9 @@ class ChatService extends ChangeNotifier {
       list![idx] = list[idx].copyWithDeleted();
       _upsertLastMessage(chatId);
       notifyListeners();
+    } else {
+      // История чата не загружена — обновляем хотя бы превью в списке чатов.
+      unawaited(refreshChats(showLoading: false));
     }
   }
 
@@ -1349,20 +1445,40 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// [fromServer] — последняя страница истории (самые новые сообщения).
+  /// Серверное сообщение из [previous], которого нет в ответе, но которое по
+  /// id попадает в диапазон этой страницы, было удалено на сервере — у
+  /// собеседника оно превращается в "Сообщение удалено", а не висит со старым
+  /// текстом. Более старые (подгруженные пагинацией) и локальные сообщения
+  /// (`local_…`, `call_…`) остаются как есть.
   List<ChatMessage> _mergeMessages(
     List<ChatMessage> fromServer,
-    List<ChatMessage>? previous,
-  ) {
+    List<ChatMessage>? previous, {
+    Set<String> knownBeforeFetch = const {},
+  }) {
     if (previous == null || previous.isEmpty) {
       final sorted = List<ChatMessage>.from(fromServer)
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
       return ChatMapper.attachReplyReferences(sorted).toList();
     }
+    int? oldestServerId;
+    for (final m in fromServer) {
+      final id = int.tryParse(m.id);
+      if (id != null && (oldestServerId == null || id < oldestServerId)) {
+        oldestServerId = id;
+      }
+    }
     final merged = List<ChatMessage>.from(fromServer);
     final ids = {for (final m in merged) m.id};
     for (final m in previous) {
       if (m.id.isEmpty || !ids.add(m.id)) continue;
-      merged.add(m);
+      final serverId = int.tryParse(m.id);
+      final vanishedOnServer = serverId != null &&
+          !m.isDeleted &&
+          !m.isSending &&
+          knownBeforeFetch.contains(m.id) &&
+          (oldestServerId == null || serverId >= oldestServerId);
+      merged.add(vanishedOnServer ? m.copyWithDeleted() : m);
     }
     merged.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return ChatMapper.attachReplyReferences(merged).toList();
