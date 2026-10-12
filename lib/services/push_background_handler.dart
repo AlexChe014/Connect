@@ -1,4 +1,5 @@
 import 'package:connect/firebase_options.dart';
+import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_call_service.dart';
@@ -27,11 +28,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     return;
   }
 
-  if (message.data['type'] == 'chat_call_ended') {
-    final callId = message.data['call_id']?.toString();
-    final status = message.data['status']?.toString() ?? 'ended';
-    if (callId != null && callId.isNotEmpty) {
-      ChatCallService.instance.notifyCallEnded(callId, status);
-    }
+  // Отмена / ответ на другом устройстве, пока приложение в фоне или убито
+  // (Android): гасим звонящий ConnectionService. В этом изоляте нет наших
+  // исходящих звонков, поэтому `accepted` здесь всегда означает «принят
+  // в другом месте».
+  if (ChatCallSignal.isCallSignal(message.data)) {
+    final signal = ChatCallSignal.tryParse(message.data);
+    if (signal != null) ChatCallService.instance.applySignal(signal);
   }
 }

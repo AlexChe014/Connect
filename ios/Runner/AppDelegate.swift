@@ -10,9 +10,21 @@ import flutter_callkit_incoming
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, PKPushRegistryDelegate, CallkitIncomingAppDelegate {
   private var voipRegistry: PKPushRegistry?
   private var voipChannel: FlutterMethodChannel?
-  /// Отдельный provider только для «пустых» звонков, пришедших после выхода
-  /// из аккаунта: iOS требует сообщить о звонке на каждый VoIP-пуш.
-  private lazy var loggedOutCallProvider = CXProvider(configuration: CXProviderConfiguration())
+  /// Отдельный provider только для «пустых» звонков: VoIP-пуш после выхода
+  /// из аккаунта или служебный VoIP-пуш (отмена/ответ на другом устройстве).
+  /// iOS требует сообщить о звонке на каждый VoIP-пуш.
+  private lazy var placeholderCallProvider: CXProvider = {
+    let config = CXProviderConfiguration()
+    config.includesCallsInRecents = false
+    return CXProvider(configuration: config)
+  }()
+
+  /// Должен совпадать с CallConfig.incomingRingTimeout в Dart.
+  private static let incomingRingTimeoutMs = 35000
+
+  /// Тот же ключ, что IncomingCallService._dismissedPrefsKey: callId, погашенные
+  /// по событию с сервера, — Dart не отправит на них `decline`.
+  private static let dismissedCallsDefaultsKey = "flutter.callkit_remote_dismissed"
 
   /// shared_preferences хранит ключи в UserDefaults с префиксом `flutter.`.
   private static let authTokenDefaultsKey = "flutter.auth_bearer_token"
@@ -103,17 +115,25 @@ import flutter_callkit_incoming
     // равно требует сообщить о звонке, поэтому сразу его завершаем.
     if !isLoggedIn {
       NSLog("[callkit] VoIP push while logged out, ending immediately")
-      let uuid = UUID()
-      loggedOutCallProvider.reportNewIncomingCall(with: uuid, update: CXCallUpdate()) { [weak self] _ in
-        self?.loggedOutCallProvider.reportCall(with: uuid, endedAt: nil, reason: .failed)
-        completion()
-      }
+      reportPlaceholderCall(completion: completion)
       return
     }
 
     // APNs может класть поля в корень или во вложенный data / custom.
     let raw = payload.dictionaryPayload
     let dict = flattenVoipPayload(raw)
+
+    // Служебный VoIP-пуш: звонок отменён / принят или отклонён на другом
+    // устройстве. FCM не будит убитое приложение на iOS, поэтому бэкенд
+    // шлёт такие события через VoIP — гасим звонящий CallKit здесь же.
+    let pushType = stringValue(dict["type"]) ?? "chat_call"
+    if pushType != "chat_call" {
+      if let callId = stringValue(dict["call_id"]) {
+        endRingingCall(callId: callId, status: stringValue(dict["status"]) ?? pushType)
+      }
+      reportPlaceholderCall(completion: completion)
+      return
+    }
 
     var info: [String: Any?] = [:]
 
@@ -130,7 +150,7 @@ import flutter_callkit_incoming
     info["handle"] = topic ?? callerName
     info["type"] = isVideo ? 1 : 0
     info["avatar"] = avatar
-    info["duration"] = 45000
+    info["duration"] = AppDelegate.incomingRingTimeoutMs
     info["textAccept"] = "Принять"
     info["textDecline"] = "Отклонить"
     info["extra"] = [
@@ -150,6 +170,44 @@ import flutter_callkit_incoming
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
       completion()
     }
+  }
+
+  /// Сообщить о «пустом» звонке и сразу завершить его — выполняет требование
+  /// iOS 13+ к каждому VoIP-пушу, не показывая пользователю звонок.
+  private func reportPlaceholderCall(completion: @escaping () -> Void) {
+    let uuid = UUID()
+    placeholderCallProvider.reportNewIncomingCall(with: uuid, update: CXCallUpdate()) { [weak self] _ in
+      self?.placeholderCallProvider.reportCall(with: uuid, endedAt: nil, reason: .remoteEnded)
+      completion()
+    }
+  }
+
+  /// Погасить звонящий (ещё не принятый) CallKit-звонок с этим callId.
+  private func endRingingCall(callId: String, status: String) {
+    guard let plugin = SwiftFlutterCallkitIncomingPlugin.sharedInstance else { return }
+    let target = plugin.activeCalls().first { call in
+      (call["id"] as? String)?.lowercased() == callId.lowercased()
+    }
+    guard let call = target else {
+      NSLog("[callkit] VoIP %@ for unknown call, nothing to end", status)
+      return
+    }
+    if (call["accepted"] as? Bool) == true || (call["isAccepted"] as? Bool) == true {
+      NSLog("[callkit] VoIP %@ for accepted call — ignored", status)
+      return
+    }
+    NSLog("[callkit] VoIP %@ — ending ringing call", status)
+    markDismissed(callId)
+    plugin.endCall(flutter_callkit_incoming.Data(args: ["id": callId]))
+  }
+
+  private func markDismissed(_ callId: String) {
+    let defaults = UserDefaults.standard
+    var list = defaults.stringArray(forKey: AppDelegate.dismissedCallsDefaultsKey) ?? []
+    if list.contains(callId) { return }
+    list.append(callId)
+    if list.count > 20 { list.removeFirst(list.count - 20) }
+    defaults.set(list, forKey: AppDelegate.dismissedCallsDefaultsKey)
   }
 
   /// Разворачивает вложенные словари (data / custom), чтобы call_id/room
