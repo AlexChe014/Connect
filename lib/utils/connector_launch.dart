@@ -1,3 +1,4 @@
+import '../models/chat/chat_call_status.dart';
 import '../models/connector/connector_session.dart';
 import '../services/chat_call_service.dart';
 import '../services/jitsi_meeting_service.dart';
@@ -14,7 +15,10 @@ Future<void> openConnectorSession(
     callId: callId,
     endWhenLeave: endWhenLeave,
     onLeave: endWhenLeave
-        ? (id) => ChatCallService.instance.onLocalCallLeft(id)
+        ? (id, {failed = false}) => ChatCallService.instance.onLocalCallLeft(
+            id,
+            reason: failed ? ChatCallEndReason.failed : ChatCallEndReason.hangup,
+          )
         : null,
   );
 }

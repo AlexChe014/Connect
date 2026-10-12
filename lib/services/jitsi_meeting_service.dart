@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:connect/config/call_config.dart';
 import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
@@ -12,7 +14,8 @@ import 'package:flutter/widgets.dart';
 import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-typedef JitsiLeaveCallback = void Function(String? callId);
+/// [failed] — разговор не состоялся: собеседник так и не вошёл в комнату.
+typedef JitsiLeaveCallback = void Function(String? callId, {bool failed});
 
 /// Запуск видеоконференции через Jitsi Meet Flutter SDK.
 ///
@@ -50,8 +53,15 @@ class JitsiMeetingService {
   String? _activeCallId;
   bool _endWhenLeave = false;
   bool _leaveNotified = false;
+  bool _inConference = false;
+  bool _peerJoined = false;
+  Timer? _peerJoinTimer;
+  Timer? _peerRejoinTimer;
   JitsiLeaveCallback? _onLeave;
   VoidCallback? _releaseHomeSuppress;
+
+  /// Нативный экран конференции открыт (от входа до выхода/закрытия).
+  bool get isInConference => _inConference || _joining;
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -85,6 +95,8 @@ class JitsiMeetingService {
     _endWhenLeave = endWhenLeave;
     _onLeave = onLeave;
     _leaveNotified = false;
+    _peerJoined = false;
+    _peerJoinTimer?.cancel();
 
     try {
       final granted = await CallPermissions.ensureMediaOnly();
@@ -218,6 +230,15 @@ class JitsiMeetingService {
         JitsiMeetEventListener(
           conferenceJoined: (url) {
             AppLogger.d('Jitsi joined: $url', name: 'meeting');
+            _inConference = true;
+            if (_endWhenLeave && !_peerJoined) _armPeerJoinWatchdog();
+          },
+          participantJoined: (email, name, role, participantId) {
+            // До conferenceJoined может прийти событие о нас самих.
+            if (!_inConference) return;
+            _peerJoined = true;
+            _peerJoinTimer?.cancel();
+            _peerRejoinTimer?.cancel();
           },
           conferenceTerminated: (url, error) {
             AppLogger.d(
@@ -232,13 +253,24 @@ class JitsiMeetingService {
           },
           participantLeft: (participantId) {
             if (!_endWhenLeave) return;
+            // Обычное завершение собеседником приходит пушем/вебхуком сразу;
+            // здесь ждём — это может быть реконнект (смена сети), см.
+            // CallConfig.peerRejoinGrace.
             AppLogger.d(
-              'Jitsi participantLeft: $participantId — ending 1:1 call',
+              'Jitsi participantLeft: $participantId — waiting for rejoin',
               name: 'meeting',
             );
-            _notifyLeft();
-            // ignore: discarded_futures
-            hangUp();
+            _peerRejoinTimer?.cancel();
+            _peerRejoinTimer = Timer(CallConfig.peerRejoinGrace, () {
+              if (_leaveNotified) return;
+              AppLogger.d(
+                'Jitsi: peer did not return — ending 1:1 call',
+                name: 'meeting',
+              );
+              _notifyLeft();
+              // ignore: discarded_futures
+              hangUp();
+            });
           },
         ),
       );
@@ -273,9 +305,30 @@ class JitsiMeetingService {
     }
   }
 
-  void _notifyLeft() {
+  /// 1:1: собеседник принял звонок, но так и не вошёл в комнату (упало
+  /// приложение, нет сети, отказ в правах) — не держим пользователя одного.
+  void _armPeerJoinWatchdog() {
+    _peerJoinTimer?.cancel();
+    _peerJoinTimer = Timer(CallConfig.peerJoinTimeout, () {
+      if (_peerJoined || _leaveNotified) return;
+      AppLogger.d(
+        'Jitsi: peer never joined in ${CallConfig.peerJoinTimeout} — ending',
+        name: 'meeting',
+      );
+      _notifyLeft(failed: true);
+      // ignore: discarded_futures
+      hangUp();
+    });
+  }
+
+  void _notifyLeft({bool failed = false}) {
     if (_leaveNotified) return;
     _leaveNotified = true;
+    _inConference = false;
+    _peerJoinTimer?.cancel();
+    _peerJoinTimer = null;
+    _peerRejoinTimer?.cancel();
+    _peerRejoinTimer = null;
     _releaseHomeSuppress?.call();
     _releaseHomeSuppress = null;
     final callId = _activeCallId;
@@ -283,7 +336,7 @@ class JitsiMeetingService {
     _activeCallId = null;
     _onLeave = null;
     if (_endWhenLeave) {
-      cb?.call(callId);
+      cb?.call(callId, failed: failed);
     }
   }
 

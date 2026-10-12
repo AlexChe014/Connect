@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connect/config/call_config.dart';
+import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/repositories/chat_call_repository.dart';
 import 'package:connect/repositories/connector_repository.dart';
@@ -19,6 +21,7 @@ import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
 import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_callkit_incoming/entities/notification_params.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Обработка CallKit-событий, когда приложение было в фоне/убито (Android).
 @pragma('vm:entry-point')
@@ -38,12 +41,23 @@ class IncomingCallService {
   static const _voipPushChannel = MethodChannel('connect/voip_push');
   static const _backendTimeout = Duration(seconds: 5);
 
+  /// callId, которые погашены программно (по событию с сервера). Плагин
+  /// сообщает о таком закрытии как о DECLINE/ENDED — без этого фильтра мы бы
+  /// отправили `decline` и, например, сбросили звонок, принятый в вебе.
+  /// Дублируется в SharedPreferences: FCM на Android приходит в отдельном
+  /// фоновом изоляте, а событие CallKit — в основной.
+  static const _dismissedPrefsKey = 'callkit_remote_dismissed';
+
   StreamSubscription<CallEvent?>? _eventSub;
   bool _initialized = false;
   String? _lastVoipToken;
   String? _pendingVoipToken;
   final Set<String> _acceptedLocally = {};
+  final Set<String> _dismissedRemotely = {};
+  final Set<String> _shownCallIds = {};
   bool _acceptInFlight = false;
+
+  bool isAcceptedLocally(String callId) => _acceptedLocally.contains(callId);
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -169,6 +183,56 @@ class IncomingCallService {
     }
   }
 
+  /// Убрать CallKit/ConnectionService-звонок по событию с сервера (отменён,
+  /// принят/отклонён на другом устройстве) — без отправки `decline`.
+  Future<void> dismissRemotely(String callId) async {
+    if (!isSupported || callId.isEmpty) return;
+    if (_acceptedLocally.contains(callId)) {
+      // Наш разговор: CallKit уже закрыт после входа в Jitsi.
+      try {
+        await FlutterCallkitIncoming.endCall(callId);
+      } catch (_) {}
+      return;
+    }
+    await _markDismissed(callId);
+    try {
+      await FlutterCallkitIncoming.endCall(callId);
+    } catch (e, st) {
+      AppLogger.d(
+        'dismissRemotely($callId) failed',
+        name: 'callkit',
+        error: e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  Future<void> _markDismissed(String callId) async {
+    _dismissedRemotely.add(callId);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_dismissedPrefsKey) ?? <String>[];
+      if (list.contains(callId)) return;
+      list.add(callId);
+      if (list.length > 20) list.removeRange(0, list.length - 20);
+      await prefs.setStringList(_dismissedPrefsKey, list);
+    } catch (_) {}
+  }
+
+  Future<bool> _consumeDismissed(String callId) async {
+    if (_dismissedRemotely.remove(callId)) return true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final list = prefs.getStringList(_dismissedPrefsKey) ?? <String>[];
+      if (!list.remove(callId)) return false;
+      await prefs.setStringList(_dismissedPrefsKey, list);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Показать системный экран входящего звонка (в т.ч. на lock screen).
   Future<void> showIncomingCall(IncomingCallPayload payload) async {
     if (!isSupported) return;
@@ -180,7 +244,7 @@ class IncomingCallService {
       avatar: payload.callerAvatar,
       handle: payload.topic ?? payload.callerName,
       type: payload.isVideo ? 1 : 0,
-      duration: 45000,
+      duration: CallConfig.incomingRingTimeout.inMilliseconds,
       extra: payload.toExtra(),
       missedCallNotification: const NotificationParams(
         showNotification: true,
@@ -231,6 +295,24 @@ class IncomingCallService {
 
     try {
       final payload = IncomingCallPayload.fromData(data);
+      final callId = payload.callId;
+
+      // Пуш о вызове пришёл позже отмены (FCM не гарантирует порядок)
+      // или повторно (FCM + VoIP / FCM + Reverb).
+      if (ChatCallService.instance.endedStatusFor(callId) != null) return;
+      if (!_shownCallIds.add(callId)) return;
+
+      if (_isBusyFor(callId)) {
+        AppLogger.d('Incoming $callId while busy — auto-decline', name: 'callkit');
+        unawaited(
+          ChatCallRepository.instance.declineCall(
+            callId,
+            reason: ChatCallEndReason.busy,
+          ),
+        );
+        return;
+      }
+
       await showIncomingCall(payload);
     } catch (e, st) {
       AppLogger.e(
@@ -248,7 +330,12 @@ class IncomingCallService {
     try {
       final calls = await FlutterCallkitIncoming.activeCalls();
       for (final call in calls) {
-        if (!call.isAccepted) continue;
+        if (!call.isAccepted) {
+          // Ещё звонит: проверяем, не отменён ли звонок, пока мы были в фоне
+          // и событие об отмене не дошло (iOS не будит убитое приложение FCM-ом).
+          unawaited(_reconcileRinging(call.id));
+          continue;
+        }
         if (_acceptedLocally.contains(call.id)) continue;
         AppLogger.d(
           'Recovering accepted CallKit call ${call.id}',
@@ -272,15 +359,18 @@ class IncomingCallService {
     AppLogger.d('CallKit event: ${event.eventName}', name: 'callkit');
 
     switch (event) {
+      case CallEventActionCallIncoming(:final callKitParams):
+        await _onIncomingShown(callKitParams.id);
       case CallEventActionCallAccept(:final callKitParams):
         await _onAccept(callKitParams);
       case CallEventActionCallDecline(:final callKitParams):
         await _onDecline(callKitParams);
       case CallEventActionCallEnded(:final callKitParams):
-        if (_acceptedLocally.remove(callKitParams.id)) break;
+        // Закрытие CallKit после входа в Jitsi — разговор продолжается.
+        if (_acceptedLocally.contains(callKitParams.id)) break;
         await _onDecline(callKitParams);
       case CallEventActionCallTimeout(:final id):
-        await _declineByCallId(id);
+        await _declineByCallId(id, reason: ChatCallEndReason.timeout);
       case CallEventActionDidUpdateDevicePushTokenVoip():
         await refreshVoipRegistration(force: true);
       default:
@@ -290,6 +380,52 @@ class IncomingCallService {
 
   Future<void> handleBackgroundAccept(CallKitParams params) async {
     await _onAccept(params);
+  }
+
+  bool _isBusyFor(String callId) {
+    final calls = ChatCallService.instance;
+    if (calls.liveDirectCallId == callId) return false;
+    return calls.isBusy || (_acceptInFlight && !_acceptedLocally.contains(callId));
+  }
+
+  /// CallKit показал входящий (и для FCM-пути, и для VoIP, показанного нативно).
+  /// Сообщаем серверу «ringing» — звонящий видит «Идут гудки…», а сервер
+  /// возвращает актуальный статус: устаревший VoIP-пуш сразу гасим.
+  Future<void> _onIncomingShown(String callId) async {
+    if (callId.isEmpty) return;
+    _shownCallIds.add(callId);
+
+    if (_isBusyFor(callId)) {
+      AppLogger.d('CallKit $callId while busy — auto-decline', name: 'callkit');
+      await dismissRemotely(callId);
+      unawaited(
+        ChatCallRepository.instance.declineCall(
+          callId,
+          reason: ChatCallEndReason.busy,
+        ),
+      );
+      return;
+    }
+
+    if (!AuthService.instance.isAuthenticated) {
+      await AuthService.instance.init();
+    }
+    final status = await ChatCallRepository.instance.markRinging(callId);
+    if (status != null && status.isFinal && !_acceptedLocally.contains(callId)) {
+      AppLogger.d(
+        'CallKit $callId is already ${status.wire} on server — dismissing',
+        name: 'callkit',
+      );
+      ChatCallService.instance.notifyCallEnded(callId, status);
+    }
+  }
+
+  Future<void> _reconcileRinging(String callId) async {
+    if (callId.isEmpty || _acceptedLocally.contains(callId)) return;
+    final status = await ChatCallRepository.instance.fetchStatus(callId);
+    if (status == null || !status.isFinal) return;
+    if (_acceptedLocally.contains(callId)) return;
+    ChatCallService.instance.notifyCallEnded(callId, status);
   }
 
   Future<void> _onAccept(CallKitParams params) async {
@@ -307,26 +443,59 @@ class IncomingCallService {
         await AuthService.instance.init();
       }
 
-      if (callId.isNotEmpty) {
-        _acceptedLocally.add(callId);
-        unawaited(ChatCallRepository.instance.acceptCall(callId));
-      }
+      if (callId.isEmpty) return;
+      if (_acceptedLocally.contains(callId)) return;
 
-      await FlutterCallkitIncoming.setCallConnected(callId);
+      // Звонок уже завершён (отменён, принят в вебе) — событие успело дойти.
+      final knownEnd = ChatCallService.instance.endedStatusFor(callId);
+      if (knownEnd != null) {
+        await dismissRemotely(callId);
+        return;
+      }
 
       if (room == null || room.isEmpty) {
         AppLogger.e('Accept call: room missing', name: 'callkit');
+        await _markDismissed(callId);
         await FlutterCallkitIncoming.endCall(callId);
+        unawaited(
+          ChatCallRepository.instance.declineCall(
+            callId,
+            reason: ChatCallEndReason.failed,
+          ),
+        );
         return;
       }
+
+      _acceptedLocally.add(callId);
+      // Ждём подтверждения: сервер закрепляет звонок за этим устройством и
+      // гасит его на остальных. Если звонящий уже отменил или звонок приняли
+      // в другом месте — в комнату не входим.
+      final accept = await ChatCallRepository.instance.acceptCall(callId);
+      if (!accept.ok) {
+        AppLogger.d(
+          'Accept call: rejected by server (${accept.status?.wire})',
+          name: 'callkit',
+        );
+        _acceptedLocally.remove(callId);
+        ChatCallService.instance.notifyCallEnded(
+          callId,
+          accept.status ?? ChatCallStatus.ended,
+        );
+        return;
+      }
+
+      await FlutterCallkitIncoming.setCallConnected(callId);
 
       final mediaOk = await CallPermissions.ensureMediaOnly();
       if (!mediaOk) {
         AppLogger.e('Accept call: media permissions denied', name: 'callkit');
         await FlutterCallkitIncoming.endCall(callId);
-        if (callId.isNotEmpty) {
-          unawaited(DeviceTokenRepository.instance.declineCall(callId: callId));
-        }
+        unawaited(
+          ChatCallRepository.instance.endCall(
+            callId,
+            reason: ChatCallEndReason.failed,
+          ),
+        );
         return;
       }
 
@@ -363,7 +532,12 @@ class IncomingCallService {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);
       await FlutterCallkitIncoming.endCall(callId);
       if (callId.isNotEmpty) {
-        unawaited(ChatCallRepository.instance.endCall(callId));
+        unawaited(
+          ChatCallService.instance.onLocalCallLeft(
+            callId,
+            reason: ChatCallEndReason.failed,
+          ),
+        );
       }
     } finally {
       _acceptInFlight = false;
@@ -374,21 +548,24 @@ class IncomingCallService {
     await _declineByCallId(params.id);
   }
 
-  Future<void> _declineByCallId(String callId) async {
+  Future<void> _declineByCallId(
+    String callId, {
+    ChatCallEndReason reason = ChatCallEndReason.declined,
+  }) async {
     if (callId.isEmpty) return;
 
-    ChatCallService.instance.notifyCallEnded(callId, 'declined');
+    // Закрыли мы сами по событию с сервера — это не отказ пользователя.
+    if (await _consumeDismissed(callId)) return;
+    if (_acceptedLocally.contains(callId)) return;
+    if (ChatCallService.instance.endedStatusFor(callId) != null) return;
 
-    try {
-      await DeviceTokenRepository.instance.declineCall(callId: callId);
-    } catch (e, st) {
-      AppLogger.d(
-        'Decline call API failed (backend may be unavailable)',
-        name: 'callkit',
-        error: e,
-        stackTrace: st,
-      );
-    }
+    ChatCallService.instance.notifyCallEnded(
+      callId,
+      reason == ChatCallEndReason.timeout
+          ? ChatCallStatus.missed
+          : ChatCallStatus.declined,
+    );
+    await ChatCallRepository.instance.declineCall(callId, reason: reason);
   }
 
   Future<void> _registerVoipTokenWhenReady() async {

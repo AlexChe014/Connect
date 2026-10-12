@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:connect/config/call_config.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_active_call.dart';
+import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/repositories/chat_call_repository.dart';
 import 'package:connect/repositories/connector_repository.dart';
@@ -11,12 +13,12 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/connector_invite_service.dart';
+import 'package:connect/services/incoming_call_service.dart';
 import 'package:connect/services/jitsi_meeting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:connect/utils/connector_url_utils.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
 /// Звонки из чатов: групповые (ссылка + плашка) и личные 1:1 (CallKit, без сообщения).
 class ChatCallService extends ChangeNotifier {
@@ -29,9 +31,15 @@ class ChatCallService extends ChangeNotifier {
   final Map<String, ChatActiveCall> _activeByChat = {};
   final Map<String, Timer> _pollTimers = {};
   final Set<String> _watchingChats = {};
-  final Map<String, String> _endedCalls = {};
+  final Map<String, ChatCallStatus> _endedCalls = {};
   final Set<String> _acceptedCalls = {};
+  final Set<String> _ringingCalls = {};
   bool _startingCall = false;
+
+  /// callId исходящих 1:1 звонков, начатых с этого устройства. Нужен, чтобы
+  /// отличать «собеседник ответил» (мы звонили) от «ответили на другом нашем
+  /// устройстве» (звонили нам) при одном и том же событии `accepted`.
+  final Set<String> _outgoingCallIds = {};
 
   /// callId 1:1 звонков, для которых уже показано локальное сообщение
   /// "Начат звонок" — используется, чтобы показать ровно одно сообщение
@@ -40,8 +48,19 @@ class ChatCallService extends ChangeNotifier {
 
   /// callId активного 1:1 звонка в Jitsi (чтобы hangUp по push).
   String? _liveDirectCallId;
+  Timer? _heartbeatTimer;
 
   bool get isStartingCall => _startingCall;
+
+  /// Пользователь уже занят звонком на этом устройстве: дозвон, разговор
+  /// или вход в комнату. Новый входящий 1:1 в этот момент отклоняется как `busy`.
+  bool get isBusy =>
+      _startingCall ||
+      _liveDirectCallId != null ||
+      JitsiMeetingService.instance.isInConference;
+
+  /// callId текущего 1:1 разговора на этом устройстве.
+  String? get liveDirectCallId => _liveDirectCallId;
 
   ChatActiveCall? activeCallFor(String chatId) => _activeByChat[chatId];
 
@@ -52,20 +71,75 @@ class ChatCallService extends ChangeNotifier {
     return call;
   }
 
-  String? endedStatusFor(String callId) => _endedCalls[callId];
+  ChatCallStatus? endedStatusFor(String callId) => _endedCalls[callId];
 
   bool isAccepted(String callId) => _acceptedCalls.contains(callId);
 
-  void notifyCallEnded(String callId, String status) {
+  /// Собеседник получил звонок хотя бы на одном устройстве (для «Идут гудки…»).
+  bool isRinging(String callId) => _ringingCalls.contains(callId);
+
+  bool isOutgoing(String callId) => _outgoingCallIds.contains(callId);
+
+  /// Единая точка входа для статусов звонка из push, VoIP, Reverb,
+  /// опроса `GET /chat/call/{id}` и heartbeat. Повторные и запоздавшие
+  /// события безопасны: финальный статус фиксируется один раз.
+  void applySignal(ChatCallSignal signal) {
+    final callId = signal.callId;
+    AppLogger.d('Call signal: $signal', name: 'chat.call');
+
+    if (_endedCalls.containsKey(callId)) return;
+
+    switch (signal.status) {
+      case ChatCallStatus.calling:
+        return;
+      case ChatCallStatus.ringing:
+        if (_outgoingCallIds.contains(callId) && _ringingCalls.add(callId)) {
+          notifyListeners();
+        }
+        return;
+      case ChatCallStatus.accepted:
+        if (_outgoingCallIds.contains(callId)) {
+          if (_acceptedCalls.add(callId)) notifyListeners();
+          return;
+        }
+        // Звонили нам, а приняли не здесь — веб или другое наше устройство.
+        if (IncomingCallService.instance.isAcceptedLocally(callId)) return;
+        if (_liveDirectCallId == callId) return;
+        _finish(callId, ChatCallStatus.answeredElsewhere);
+        return;
+      case ChatCallStatus.answeredElsewhere:
+      case ChatCallStatus.declinedElsewhere:
+        // На устройстве, которое само приняло звонок, это событие не гасит разговор.
+        if (_liveDirectCallId == callId ||
+            IncomingCallService.instance.isAcceptedLocally(callId)) {
+          return;
+        }
+        _finish(callId, signal.status);
+        return;
+      case ChatCallStatus.declined:
+      case ChatCallStatus.cancelled:
+      case ChatCallStatus.missed:
+      case ChatCallStatus.busy:
+      case ChatCallStatus.ended:
+      case ChatCallStatus.failed:
+        _finish(callId, signal.status);
+        return;
+    }
+  }
+
+  /// Звонок завершён с любой стороны: зафиксировать статус, убрать CallKit,
+  /// выйти из Jitsi, если идёт разговор.
+  void notifyCallEnded(String callId, ChatCallStatus status) {
+    if (_endedCalls.containsKey(callId)) return;
+    _finish(callId, status);
+  }
+
+  void _finish(String callId, ChatCallStatus status) {
     _endedCalls[callId] = status;
+    _ringingCalls.remove(callId);
     _appendCallEndedMessage(callId);
     _clearActiveByCallId(callId);
     unawaited(_hangUpRemote(callId));
-    notifyListeners();
-  }
-
-  void notifyCallAccepted(String callId) {
-    _acceptedCalls.add(callId);
     notifyListeners();
   }
 
@@ -136,13 +210,26 @@ class ChatCallService extends ChangeNotifier {
         );
       }
 
-      String? callId;
       if (isDirect) {
-        callId = await ChatCallRepository.instance.ringDirectCall(
+        final ring = await ChatCallRepository.instance.ringDirectCall(
           chatId: chat.id,
           room: session.room,
           topic: topic,
         );
+        final callId = ring.callId;
+        final ringStatus = ring.status;
+        if (callId != null) {
+          _outgoingCallIds.add(callId);
+          // `busy` — собеседник занят; `accepted` — встречный вызов, сервер
+          // склеил его с нашим, и можно сразу входить в комнату.
+          if (ringStatus == ChatCallStatus.accepted) _acceptedCalls.add(callId);
+          if (ringStatus != null && ringStatus.isFinal) {
+            _endedCalls[callId] = ringStatus;
+          }
+        }
+        final ringFailure = callId == null
+            ? (ringStatus ?? ChatCallStatus.failed)
+            : (ringStatus != null && ringStatus.isFinal ? ringStatus : null);
 
         _setActiveCall(
           ChatActiveCall(
@@ -156,14 +243,27 @@ class ChatCallService extends ChangeNotifier {
           ),
         );
 
+        // Без call_id собеседник звонок не получил — сразу показываем причину,
+        // а не 30 секунд гудков в пустоту.
         final outcome = await _showOutgoingCallScreen(
           chat: chat,
           callId: callId,
+          initialFailure: ringFailure,
         );
 
         if (outcome != OutgoingCallOutcome.proceed) {
-          if (callId != null) {
-            unawaited(ChatCallRepository.instance.endCall(callId));
+          final reason = switch (outcome) {
+            OutgoingCallOutcome.timeout => ChatCallEndReason.timeout,
+            _ => ChatCallEndReason.cancelled,
+          };
+          // Если звонок уже завершила другая сторона/сервер, повторно не шлём.
+          if (callId != null && !_endedCalls.containsKey(callId)) {
+            _endedCalls[callId] = outcome == OutgoingCallOutcome.timeout
+                ? ChatCallStatus.missed
+                : ChatCallStatus.cancelled;
+            unawaited(
+              ChatCallRepository.instance.endCall(callId, reason: reason),
+            );
           }
           _activeByChat.remove(chat.id);
           notifyListeners();
@@ -172,6 +272,7 @@ class ChatCallService extends ChangeNotifier {
 
         _liveDirectCallId = callId;
         _appendCallStartedMessage(chat.id, callId);
+        _startHeartbeat(callId);
         await openConnectorSession(
           session,
           callId: callId,
@@ -201,23 +302,41 @@ class ChatCallService extends ChangeNotifier {
   Future<OutgoingCallOutcome> _showOutgoingCallScreen({
     required Chat chat,
     required String? callId,
+    ChatCallStatus? initialFailure,
   }) async {
     final navigator = AppNavigationService.navigatorKey.currentState;
-    if (navigator == null) return OutgoingCallOutcome.proceed;
+    if (navigator == null) {
+      return callId == null
+          ? OutgoingCallOutcome.failed
+          : OutgoingCallOutcome.proceed;
+    }
 
     final result = await navigator.push<OutgoingCallOutcome>(
       CupertinoPageRoute<OutgoingCallOutcome>(
         fullscreenDialog: true,
-        builder: (_) => OutgoingCallScreen(chat: chat, callId: callId),
+        builder: (_) => OutgoingCallScreen(
+          chat: chat,
+          callId: callId,
+          initialFailure: initialFailure,
+        ),
       ),
     );
     return result ?? OutgoingCallOutcome.cancelled;
+  }
+
+  /// Опрос статуса исходящего звонка — страховка, если push/сокет потерялся.
+  Future<void> pollCallStatus(String callId) async {
+    if (_endedCalls.containsKey(callId)) return;
+    final status = await ChatCallRepository.instance.fetchStatus(callId);
+    if (status == null) return;
+    applySignal(ChatCallSignal(callId: callId, status: status));
   }
 
   Future<void> joinActiveCall(ChatActiveCall call) async {
     final session = await ConnectorRepository.instance.join(call.room);
     if (call.isDirect) {
       _liveDirectCallId = call.callId;
+      _startHeartbeat(call.callId);
       await openConnectorSession(
         session,
         callId: call.callId,
@@ -229,24 +348,68 @@ class ChatCallService extends ChangeNotifier {
   }
 
   /// Локальный выход из Jitsi: завершить звонок на бэкенде для обеих сторон.
-  Future<void> onLocalCallLeft(String? callId) async {
+  Future<void> onLocalCallLeft(
+    String? callId, {
+    ChatCallEndReason reason = ChatCallEndReason.hangup,
+  }) async {
     final id = callId ?? _liveDirectCallId;
-    _liveDirectCallId = null;
     if (id == null || id.isEmpty) return;
+    if (_liveDirectCallId == id) {
+      _liveDirectCallId = null;
+      _stopHeartbeat();
+    }
 
     _appendCallEndedMessage(id);
     _clearActiveByCallId(id);
     notifyListeners();
-    await ChatCallRepository.instance.endCall(id);
+    // Звонок уже завершила другая сторона — сервер в курсе.
+    if (_endedCalls.containsKey(id)) return;
+    _endedCalls[id] = reason == ChatCallEndReason.failed
+        ? ChatCallStatus.failed
+        : ChatCallStatus.ended;
+    await ChatCallRepository.instance.endCall(id, reason: reason);
+  }
+
+  /// Выход из аккаунта: завершить текущий разговор, пока токен ещё жив.
+  Future<void> endLiveCallForLogout() async {
+    final id = _liveDirectCallId;
+    if (id == null) return;
+    await JitsiMeetingService.instance.hangUp();
+    await onLocalCallLeft(id);
+  }
+
+  void _startHeartbeat(String? callId) {
+    _stopHeartbeat();
+    if (callId == null || callId.isEmpty) return;
+    _heartbeatTimer = Timer.periodic(CallConfig.heartbeatInterval, (_) async {
+      if (_liveDirectCallId != callId) {
+        _stopHeartbeat();
+        return;
+      }
+      final status = await ChatCallRepository.instance.heartbeat(callId);
+      if (status != null && status.isFinal) {
+        AppLogger.d(
+          'Heartbeat: call $callId is ${status.wire} on server — hanging up',
+          name: 'chat.call',
+        );
+        applySignal(ChatCallSignal(callId: callId, status: status));
+      }
+    });
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
   }
 
   Future<void> _hangUpRemote(String callId) async {
     try {
       if (_liveDirectCallId == callId) {
         _liveDirectCallId = null;
+        _stopHeartbeat();
         await JitsiMeetingService.instance.hangUp();
       }
-      await FlutterCallkitIncoming.endCall(callId);
+      await IncomingCallService.instance.dismissRemotely(callId);
     } catch (e, st) {
       AppLogger.d(
         'hangUp after call ended failed',
@@ -414,6 +577,7 @@ class ChatCallService extends ChangeNotifier {
     );
     _liveDirectCallId = callId;
     _appendCallStartedMessage(chatId, callId);
+    _startHeartbeat(callId);
   }
 
   /// Локальное сообщение "Начат звонок" — только для этого устройства,
