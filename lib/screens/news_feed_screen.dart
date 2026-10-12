@@ -18,6 +18,7 @@ import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/menu_button.dart';
 import '../widgets/news_people_sheet.dart';
+import '../widgets/news_reactions.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
 
@@ -38,6 +39,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   String? _nextPageUrl;
   final ScrollController _scrollController = ScrollController();
   final Set<String> _viewInFlight = <String>{};
+  final Set<String> _reactionInFlight = <String>{};
 
   /// Id новостей, которые сейчас полностью видны (чтобы отметить просмотр
   /// снова после ухода с экрана и повторного появления).
@@ -176,7 +178,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       });
       return;
     }
-    // Обновляем карточку после возврата (лайки / просмотры могли измениться).
+    // Обновляем карточку после возврата (реакции / просмотры могли измениться).
     try {
       final fresh = await NewsRepository.instance.getById(current.id);
       if (!mounted) return;
@@ -225,6 +227,30 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       if (mounted) {
         setState(() => _viewInFlight.remove(id));
       }
+    }
+  }
+
+  Future<void> _toggleReaction(NewsItem item, String emoji) async {
+    final id = item.id;
+    if (id.isEmpty || _reactionInFlight.contains(id)) return;
+    setState(() => _reactionInFlight.add(id));
+    try {
+      await toggleNewsReaction(
+        item,
+        emoji,
+        onUpdate: (news) {
+          if (mounted) _updateItem(id, (_) => news);
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppFeedback.showSnackBar(
+        context,
+        e,
+        fallback: 'Не удалось поставить реакцию',
+      );
+    } finally {
+      if (mounted) setState(() => _reactionInFlight.remove(id));
     }
   }
 
@@ -283,11 +309,8 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
               news: news,
               dateLabel: _formatDate(news.date),
               onOpen: () => _openDetail(news),
-              onShowLikers: () => NewsPeopleSheet.show(
-                context,
-                newsId: news.id,
-                kind: NewsPeopleKind.likers,
-              ),
+              reactionInFlight: _reactionInFlight.contains(news.id),
+              onToggleReaction: (emoji) => _toggleReaction(news, emoji),
               onShowViewers: () => NewsPeopleSheet.show(
                 context,
                 newsId: news.id,
@@ -338,14 +361,16 @@ class _NewsCard extends StatelessWidget {
   final NewsItem news;
   final String dateLabel;
   final VoidCallback onOpen;
-  final VoidCallback onShowLikers;
+  final bool reactionInFlight;
+  final void Function(String emoji) onToggleReaction;
   final VoidCallback onShowViewers;
 
   const _NewsCard({
     required this.news,
     required this.dateLabel,
     required this.onOpen,
-    required this.onShowLikers,
+    required this.reactionInFlight,
+    required this.onToggleReaction,
     required this.onShowViewers,
   });
 
@@ -472,24 +497,25 @@ class _NewsCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _StatChip(
-                    icon: CupertinoIcons.eye,
-                    label: '${news.viewsCount}',
-                    onTap: onShowViewers,
+                  Expanded(
+                    child: NewsReactionsBar(
+                      news: news,
+                      isLoading: reactionInFlight,
+                      onToggle: onToggleReaction,
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 12),
                   _StatChip(
                     icon: CupertinoIcons.chat_bubble,
                     onTap: onOpen,
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   _StatChip(
-                    icon: news.isLiked
-                        ? CupertinoIcons.heart_fill
-                        : CupertinoIcons.heart,
-                    label: '${news.likesCount}',
-                    onTap: onShowLikers,
+                    icon: CupertinoIcons.eye,
+                    label: '${news.viewsCount}',
+                    onTap: onShowViewers,
                   ),
                 ],
               ),

@@ -13,6 +13,9 @@ class NewsItem {
   final int viewsCount;
   final bool isLiked;
   final String? myReaction;
+
+  /// Реакции на пост, сгруппированные по эмодзи (поле `reactions`).
+  final List<NewsReaction> reactions;
   final bool isViewed;
   final bool isPinned;
   final NewsAuthor? author;
@@ -31,6 +34,7 @@ class NewsItem {
     this.viewsCount = 0,
     this.isLiked = false,
     this.myReaction,
+    this.reactions = const [],
     this.isViewed = false,
     this.isPinned = false,
     this.author,
@@ -51,6 +55,7 @@ class NewsItem {
     bool? isLiked,
     String? myReaction,
     bool clearReaction = false,
+    List<NewsReaction>? reactions,
     bool? isViewed,
     bool? isPinned,
     NewsAuthor? author,
@@ -69,6 +74,7 @@ class NewsItem {
       viewsCount: viewsCount ?? this.viewsCount,
       isLiked: isLiked ?? this.isLiked,
       myReaction: clearReaction ? null : (myReaction ?? this.myReaction),
+      reactions: reactions ?? this.reactions,
       isViewed: isViewed ?? this.isViewed,
       isPinned: isPinned ?? this.isPinned,
       author: author ?? this.author,
@@ -152,12 +158,58 @@ class NewsItem {
       viewsCount: viewsCount,
       isLiked: _parseIsLiked(json),
       myReaction: _parseMyReaction(json),
+      reactions: _parseReactions(json['reactions']),
       isViewed: _parseBool(json['is_viewed'] ?? json['isViewed']),
       isPinned: _parseBool(json['is_pinned'] ?? json['isPinned']),
       author: author,
       likers: likers,
       viewers: viewers,
     );
+  }
+
+  /// Общее число реакций на пост.
+  int get reactionsCount => reactions.fold(0, (sum, r) => sum + r.count);
+
+  /// Локально применяет реакцию текущего пользователя так же, как сервер:
+  /// `null` снимает реакцию, иначе ставит/заменяет её на [emoji].
+  /// [me] добавляется/убирается из списков `users` соответствующих групп.
+  NewsItem withMyReaction(String? emoji, {NewsAuthor? me}) {
+    final previous = myReaction;
+    if (previous == emoji) return this;
+
+    final groups = <NewsReaction>[];
+    var added = false;
+    for (final r in reactions) {
+      var group = r;
+      if (previous != null && r.emoji == previous) {
+        group = group.withoutUser(me);
+      }
+      if (emoji != null && r.emoji == emoji) {
+        group = group.withUser(me);
+        added = true;
+      }
+      if (group.count > 0) groups.add(group);
+    }
+    if (emoji != null && !added) {
+      groups.add(
+        NewsReaction(emoji: emoji, count: 1, users: [?me]),
+      );
+    }
+
+    return emoji == null
+        ? copyWith(clearReaction: true, reactions: groups)
+        : copyWith(myReaction: emoji, reactions: groups);
+  }
+
+  static List<NewsReaction> _parseReactions(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <NewsReaction>[];
+    for (final e in raw) {
+      if (e is! Map) continue;
+      final reaction = NewsReaction.fromJson(Map<String, dynamic>.from(e));
+      if (reaction.emoji.isNotEmpty && reaction.count > 0) out.add(reaction);
+    }
+    return out;
   }
 
   static List<NewsAuthor> _parseAuthors(Object? raw) {
@@ -220,7 +272,7 @@ class NewsItem {
   /// Реакция текущего пользователя на пост — приходит в поле `user_reaction`
   /// (см. `NewsResource::toArray` на бэкенде).
   static String? _parseMyReaction(Map<String, dynamic> json) {
-    for (final key in ['my_reaction', 'reaction', 'user_reaction']) {
+    for (final key in ['user_reaction', 'my_reaction', 'reaction']) {
       final v = json[key];
       if (v is String && v.trim().isNotEmpty) return v.trim();
       if (v is Map) {
@@ -238,6 +290,44 @@ class NewsItem {
     final s = v.toString().trim().toLowerCase();
     return s == 'true' || s == '1' || s == 'yes';
   }
+}
+
+/// Группа реакций с одним эмодзи: `{ emoji, count, users }`.
+class NewsReaction {
+  final String emoji;
+  final int count;
+  final List<NewsAuthor> users;
+
+  const NewsReaction({
+    required this.emoji,
+    required this.count,
+    this.users = const [],
+  });
+
+  factory NewsReaction.fromJson(Map<String, dynamic> json) {
+    final users = NewsItem._parseAuthors(json['users']);
+    final rawCount = json['count'];
+    return NewsReaction(
+      emoji: json['emoji']?.toString().trim() ?? '',
+      count: rawCount == null ? users.length : NewsItem._parseInt(rawCount),
+      users: users,
+    );
+  }
+
+  NewsReaction withUser(NewsAuthor? user) => NewsReaction(
+    emoji: emoji,
+    count: count + 1,
+    users: [
+      ?user,
+      ...users.where((u) => user == null || u.id != user.id),
+    ],
+  );
+
+  NewsReaction withoutUser(NewsAuthor? user) => NewsReaction(
+    emoji: emoji,
+    count: count > 0 ? count - 1 : 0,
+    users: user == null ? users : users.where((u) => u.id != user.id).toList(),
+  );
 }
 
 class NewsAuthor {

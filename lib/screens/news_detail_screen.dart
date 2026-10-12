@@ -13,13 +13,14 @@ import '../repositories/comments_repository.dart';
 import '../repositories/news_repository.dart';
 import '../services/auth_service.dart';
 import '../services/paginated.dart';
+import '../utils/app_feedback.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/chat_message_text.dart';
 import '../widgets/news_people_sheet.dart';
-import '../widgets/news_reaction_button.dart';
+import '../widgets/news_reactions.dart';
 import 'news_image_viewer_screen.dart';
 
 class NewsDetailScreen extends StatefulWidget {
@@ -41,7 +42,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
   bool _commentsLoadingMore = false;
   String? _commentsNextUrl;
   bool _sendingComment = false;
-  bool _likeInFlight = false;
+  bool _reactionInFlight = false;
   bool _viewRecordedForOpen = false;
   String? _currentUserId;
   final Set<String> _deletingCommentIds = {};
@@ -104,44 +105,28 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     _recordView();
   }
 
-  Future<void> _setReaction(String? emoji) async {
-    if (_likeInFlight || _news.id.isEmpty) return;
-    setState(() => _likeInFlight = true);
+  Future<void> _toggleReaction(String emoji) async {
+    if (_reactionInFlight || _news.id.isEmpty) return;
+    setState(() => _reactionInFlight = true);
     try {
-      if (emoji == null) {
-        final count = await NewsRepository.instance.removeReaction(_news.id);
-        if (!mounted) return;
-        setState(() {
-          _news = _news.copyWith(
-            clearReaction: true,
-            isLiked: false,
-            likesCount: count ?? (_news.likesCount - 1).clamp(0, 1 << 30),
-          );
-        });
-      } else {
-        final updated = await NewsRepository.instance.react(_news.id, emoji);
-        if (!mounted) return;
-        setState(() {
-          _news = _news.copyWith(
-            myReaction: emoji,
-            isLiked: true,
-            likesCount: updated.likesCount,
-          );
-        });
-      }
-    } catch (_) {
+      await toggleNewsReaction(
+        _news,
+        emoji,
+        onUpdate: (news) {
+          if (mounted) setState(() => _news = news);
+        },
+      );
+      // Подтягиваем точные группы реакций и списки пользователей с сервера.
+      unawaited(_refreshNews());
+    } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(
-          content: Text(
-            emoji == null
-                ? 'Не удалось убрать реакцию'
-                : 'Не удалось поставить реакцию',
-          ),
-        ),
+      AppFeedback.showSnackBar(
+        context,
+        e,
+        fallback: 'Не удалось поставить реакцию',
       );
     } finally {
-      if (mounted) setState(() => _likeInFlight = false);
+      if (mounted) setState(() => _reactionInFlight = false);
     }
   }
 
@@ -496,7 +481,16 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                                 ),
                               const SizedBox(height: 20),
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  Expanded(
+                                    child: NewsReactionsBar(
+                                      news: _news,
+                                      isLoading: _reactionInFlight,
+                                      onToggle: _toggleReaction,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
                                   _StatChip(
                                     icon: CupertinoIcons.eye,
                                     label: '${_news.viewsCount}',
@@ -504,18 +498,6 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                                       context,
                                       newsId: _news.id,
                                       kind: NewsPeopleKind.viewers,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  NewsReactionButton(
-                                    emoji: _news.myReaction,
-                                    count: _news.likesCount,
-                                    isLoading: _likeInFlight,
-                                    onSelect: _setReaction,
-                                    onCountTap: () => NewsPeopleSheet.show(
-                                      context,
-                                      newsId: _news.id,
-                                      kind: NewsPeopleKind.likers,
                                     ),
                                   ),
                                 ],
