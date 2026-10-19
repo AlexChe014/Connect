@@ -1,5 +1,6 @@
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
+import 'package:connect/models/chat/chat_call_record.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/chat_record.dart';
 import 'package:connect/models/chat/chat_sticker.dart';
@@ -52,7 +53,10 @@ class ChatMapper {
       peerUserId: peer?.userId,
       peerAvatarUrl: peer?.avatarUrl,
       lastMessagePreview: previewMessage?.preview,
-      lastMessageAt: previewMessage?.createdAt,
+      lastMessageAt: _laterOf(
+        previewMessage?.createdAt,
+        _parseDate(json['last_message_at']),
+      ),
       lastMessageIsOutgoing: previewMessage?.isOutgoing ?? false,
       lastMessageReadByRecipients: previewMessage?.readByRecipients ?? false,
       unreadCount: fromServer != null && fromServer > fromMessages
@@ -140,6 +144,9 @@ class ChatMapper {
     final createdAt = _parseDate(json['created_at']) ?? DateTime.now();
     final files = ChatFile.listFromJson(json['files']);
     final stickerId = _stickerId(json, type: type, rawMessage: rawMessage);
+    final call = type == ChatCallRecord.messageType
+        ? ChatCallRecord.tryParse(json['call'], fallbackCallId: json['call_id'])
+        : null;
     final resolved = _resolveMessageContent(
       rawMessage: rawMessage,
       type: type,
@@ -180,8 +187,9 @@ class ChatMapper {
       authorName: authorName,
       isOutgoing: senderId == currentUserId,
       createdAt: createdAt,
-      text: stickerId != null ? null : resolved.text,
+      text: stickerId != null || call != null ? null : resolved.text,
       stickerId: stickerId,
+      call: call,
       attachmentKind: resolved.attachmentKind,
       remoteMediaUrl: resolved.remoteMediaUrl,
       fileName: resolved.fileName,
@@ -328,6 +336,7 @@ class ChatMapper {
 
   static String snippet(ChatMessage m) {
     if (m.isSticker) return stickerSnippet;
+    if (m.isCall) return m.call!.snippet(isOutgoing: m.isOutgoing);
     if (m.text != null && m.text!.trim().isNotEmpty) {
       return HtmlTextUtils.toPlainText(m.text!);
     }
@@ -426,16 +435,25 @@ class ChatMapper {
     return null;
   }
 
-  /// Стикер — только при `type == "STICKER"` и содержимом из набора
-  /// `"01"`…`"32"`; иначе сообщение показывается как обычный текст.
+  /// Стикер — любое сообщение `type == "STICKER"`; содержимое — код стикера.
+  /// Набор кодов может расширяться раньше, чем приложение узнает о новых
+  /// картинках, поэтому неизвестный код всё равно показывается как стикер
+  /// (заглушкой), а не как текст.
   static String? _stickerId(
     Map<String, dynamic> json, {
     required String type,
     required String? rawMessage,
   }) {
     if (type != ChatStickers.messageType) return null;
-    final content = (json['content'] as String?)?.trim() ?? rawMessage;
-    return ChatStickers.isValidId(content) ? content : null;
+    final content = (json['content'] as String?)?.trim();
+    final code = content != null && content.isNotEmpty ? content : rawMessage;
+    return code != null && code.isNotEmpty ? code : '';
+  }
+
+  static DateTime? _laterOf(DateTime? a, DateTime? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return b.isAfter(a) ? b : a;
   }
 
   static _ResolvedMessageContent _resolveMessageContent({
