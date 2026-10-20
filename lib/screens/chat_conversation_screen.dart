@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
+import 'package:connect/models/chat/chat_call_record.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
@@ -15,6 +16,7 @@ import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
+import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_loading.dart';
@@ -648,7 +650,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 focus: _focus,
                 onSend: _send,
                 onAttach: _openAttachMenu,
-                onStickers: _editingMessage != null ? null : _openStickerPicker,
+                onStickers:
+                    _editingMessage != null || !ChatStickers.imagesAvailable
+                    ? null
+                    : _openStickerPicker,
                 isEditing: _editingMessage != null,
                 isSendingAttachment: _sendingAttachment,
               ),
@@ -1584,6 +1589,15 @@ class _MessageTile extends StatelessWidget {
     if (m.isSticker) {
       return [_ChatSticker(id: m.stickerId!)];
     }
+    if (m.isCall) {
+      return [
+        _CallRecordContent(
+          call: m.call!,
+          isOutgoing: m.isOutgoing,
+          onBubble: onBubble,
+        ),
+      ];
+    }
     final radius = _isMediaOnly ? 15.0 : 10.0;
     if (m.files.isNotEmpty) {
       final images = m.files.where((f) => f.isImage).toList();
@@ -1699,13 +1713,14 @@ class _MessageTile extends StatelessWidget {
             },
             child: const Text('Ответить'),
           ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              onLongMenu(_MsgAction.forward);
-            },
-            child: const Text('Переслать'),
-          ),
+          if (!m.isCall)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                onLongMenu(_MsgAction.forward);
+              },
+              child: const Text('Переслать'),
+            ),
           if (!m.isSystem)
             CupertinoActionSheetAction(
               onPressed: () {
@@ -2244,7 +2259,8 @@ class _ReplyBlock extends StatelessWidget {
 }
 
 /// Стикер из набора портала. Квадрат фиксированного размера, чтобы лента
-/// не прыгала, пока картинка грузится.
+/// не прыгала, пока картинка грузится. Пока картинок нет
+/// ([ChatStickers.imagesAvailable]) или код неизвестен — заглушка.
 class _ChatSticker extends StatelessWidget {
   const _ChatSticker({required this.id});
 
@@ -2252,8 +2268,35 @@ class _ChatSticker extends StatelessWidget {
 
   static const double bubbleSize = 150;
 
+  Widget _placeholder(BuildContext context) {
+    final muted = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return AspectRatio(
+      aspectRatio: 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(CupertinoIcons.smiley, size: 44, color: muted),
+            const SizedBox(height: 6),
+            Text(
+              ChatMapper.stickerSnippet,
+              style: TextStyle(fontSize: 13, color: muted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!ChatStickers.imagesAvailable || !ChatStickers.isValidId(id)) {
+      return _placeholder(context);
+    }
     final image = CachedNetworkImage(
       imageUrl: ChatStickers.url(id),
       fit: BoxFit.contain,
@@ -2269,6 +2312,68 @@ class _ChatSticker extends StatelessWidget {
       ),
     );
     return AspectRatio(aspectRatio: 1, child: image);
+  }
+}
+
+/// Содержимое пузыря сообщения-звонка: иконка, «Исходящий/Пропущенный
+/// звонок» и длительность.
+class _CallRecordContent extends StatelessWidget {
+  const _CallRecordContent({
+    required this.call,
+    required this.isOutgoing,
+    required this.onBubble,
+  });
+
+  final ChatCallRecord call;
+  final bool isOutgoing;
+  final Color onBubble;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = call.isUnsuccessful;
+    final iconColor = failed && !isOutgoing
+        ? CupertinoColors.systemRed.resolveFrom(context)
+        : onBubble;
+    final subtitle = call.subtitle;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isOutgoing
+              ? CupertinoIcons.phone_arrow_up_right
+              : failed
+              ? CupertinoIcons.phone_down
+              : CupertinoIcons.phone_arrow_down_left,
+          size: 22,
+          color: iconColor,
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                call.title(isOutgoing: isOutgoing),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: onBubble,
+                ),
+              ),
+              if (subtitle != null)
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: onBubble.withValues(alpha: 0.75),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 

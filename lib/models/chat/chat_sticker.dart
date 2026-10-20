@@ -2,13 +2,17 @@ import 'package:connect/config/api_config.dart';
 
 /// Набор стикеров портала: картинки `{host}/stickers/01.png` … `32.png`.
 ///
-/// Сообщение считается стикером, только если одновременно
-/// `type == "STICKER"` и его содержимое — один из идентификаторов набора
-/// (так же решает портал).
+/// Любое сообщение `type == "STICKER"` — стикер, его содержимое — код.
+/// Картинка показывается только для кода из набора и при
+/// [imagesAvailable]; иначе в ленте заглушка, в превью — «Стикер».
 class ChatStickers {
   ChatStickers._();
 
   static const String messageType = 'STICKER';
+
+  /// Картинок стикеров на сервере пока нет: в ленте рисуется заглушка,
+  /// а выбор стикеров в поле ввода скрыт. Включить, когда картинки появятся.
+  static const bool imagesAvailable = false;
 
   static const int count = 32;
 

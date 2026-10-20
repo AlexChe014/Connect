@@ -581,10 +581,13 @@ class ChatCallService extends ChangeNotifier {
   }
 
   /// Локальное сообщение "Начат звонок" — только для этого устройства,
-  /// без обращения к бэкенду.
+  /// без обращения к бэкенду. Нужно, пока бэкенд не прислал сообщение
+  /// `CALL` этого звонка: оно персистентно и заменяет локальные записи
+  /// (см. [ChatService.appendLocalSystemMessage]).
   void _appendCallStartedMessage(String chatId, String? callId) {
     if (callId == null || callId.isEmpty) return;
     if (!_callsWithStartMessage.add(callId)) return;
+    if (ChatService.instance.hasServerCallMessage(chatId, callId)) return;
     ChatService.instance.appendLocalSystemMessage(
       chatId,
       'Начат звонок',
@@ -607,6 +610,7 @@ class ChatCallService extends ChangeNotifier {
       }
     }
     if (call == null) return;
+    if (ChatService.instance.hasServerCallMessage(call.chatId, callId)) return;
 
     final duration = DateTime.now().difference(call.startedAt);
     ChatService.instance.appendLocalSystemMessage(

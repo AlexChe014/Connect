@@ -649,24 +649,22 @@ void main() {
       expect(byContent.stickerId, '32');
     });
 
-    test('both conditions are required', () {
+    test('any STICKER code is a sticker, never text', () {
       final outOfSet = map({
         'id': 1,
         'sender_id': 2,
         'type': 'STICKER',
-        'message': '33',
+        'message': 'cat_wave',
       });
-      expect(outOfSet.stickerId, isNull);
-      expect(outOfSet.text, '33');
+      expect(outOfSet.stickerId, 'cat_wave');
+      expect(outOfSet.text, isNull);
+      expect(ChatMapper.snippet(outOfSet), 'Стикер');
 
-      final notPadded = map({
-        'id': 2,
-        'sender_id': 2,
-        'type': 'STICKER',
-        'message': '7',
-      });
-      expect(notPadded.stickerId, isNull);
+      final empty = map({'id': 2, 'sender_id': 2, 'type': 'STICKER'});
+      expect(empty.isSticker, isTrue);
+    });
 
+    test('TEXT that looks like a sticker id stays text', () {
       final plainText = map({
         'id': 3,
         'sender_id': 2,
@@ -675,6 +673,55 @@ void main() {
       });
       expect(plainText.stickerId, isNull);
       expect(plainText.text, '05');
+    });
+  });
+
+  group('ChatMapper calls', () {
+    ChatMessage map(Map<String, dynamic> json) =>
+        ChatMapper.mapMessage(json, chatId: '1', currentUserId: 1);
+
+    test('CALL message carries the call record, not text', () {
+      final m = map({
+        'id': 10,
+        'sender_id': 1,
+        'type': 'CALL',
+        'message': 'Звонок',
+        'call': {'id': 'abc', 'status': 'ended', 'duration': 75},
+      });
+      expect(m.isCall, isTrue);
+      expect(m.text, isNull);
+      expect(m.call!.callId, 'abc');
+      expect(ChatMapper.snippet(m), '📞 Исходящий звонок · 01:15');
+    });
+
+    test('missed incoming call', () {
+      final m = map({
+        'id': 11,
+        'sender_id': 2,
+        'type': 'CALL',
+        'call_id': 'x',
+        'call': {'status': 'missed'},
+      });
+      expect(m.call!.callId, 'x');
+      expect(ChatMapper.snippet(m), '📞 Пропущенный звонок');
+    });
+
+    test('chat list uses the latest of messages and last_message_at', () {
+      final chat = ChatMapper.mapChat({
+        'id': 5,
+        'is_group': false,
+        'last_message_at': '2026-10-19T12:00:00Z',
+        'messages': [
+          {
+            'id': 1,
+            'chat_id': 5,
+            'sender_id': 2,
+            'message': 'hi',
+            'created_at': '2026-10-19T10:00:00Z',
+          },
+        ],
+      }, currentUserId: 1);
+      expect(chat.lastMessageAt, DateTime.parse('2026-10-19T12:00:00Z'));
     });
   });
 }

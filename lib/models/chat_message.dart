@@ -1,3 +1,4 @@
+import 'package:connect/models/chat/chat_call_record.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:flutter/foundation.dart';
 
@@ -47,6 +48,7 @@ class ChatMessage {
     this.files = const [],
     this.isSending = false,
     this.stickerId,
+    this.call,
   });
 
   /// Сообщение можно редактировать в течение 15 минут после отправки.
@@ -85,10 +87,15 @@ class ChatMessage {
   /// Оптимистично добавлено локально и ещё ожидает подтверждения от сервера.
   final bool isSending;
 
-  /// Идентификатор стикера (`"01"`…`"32"`), если это сообщение-стикер.
+  /// Код стикера (`type: "STICKER"`), если это сообщение-стикер.
   final String? stickerId;
 
   bool get isSticker => stickerId != null;
+
+  /// Запись о звонке (`type: "CALL"`), если это сообщение-звонок.
+  final ChatCallRecord? call;
+
+  bool get isCall => call != null;
 
   bool get hasMedia =>
       files.isNotEmpty ||
@@ -121,6 +128,7 @@ class ChatMessage {
     List<ChatFile>? files,
     bool? isSending,
     String? stickerId,
+    ChatCallRecord? call,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -147,6 +155,7 @@ class ChatMessage {
       files: files ?? this.files,
       isSending: isSending ?? this.isSending,
       stickerId: stickerId ?? this.stickerId,
+      call: call ?? this.call,
     );
   }
 
