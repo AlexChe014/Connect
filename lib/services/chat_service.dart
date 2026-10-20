@@ -18,7 +18,6 @@ import 'package:connect/services/chat_draft_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/chat_realtime_payload.dart';
-import 'package:connect/utils/html_text_utils.dart';
 import 'package:flutter/foundation.dart';
 
 String _messagePreview(ChatMessage m) {
@@ -26,28 +25,22 @@ String _messagePreview(ChatMessage m) {
     return 'Сообщение удалено';
   }
   if (m.forwardOf != null) {
-    return 'Переслано: ${_snippet(m.text, m.fileName, m.attachmentKind)}';
+    return 'Переслано: ${ChatMapper.snippet(m)}';
   }
-  if (m.replyTo != null) {
-    return _snippet(m.text, m.fileName, m.attachmentKind);
-  }
-  return _snippet(m.text, m.fileName, m.attachmentKind);
+  return ChatMapper.snippet(m);
 }
 
-String _snippet(String? text, String? fileName, ChatAttachmentKind kind) {
-  if (text != null && text.trim().isNotEmpty) {
-    return HtmlTextUtils.toPlainText(text);
+/// id локальных сообщений о звонке (см. [ChatService.appendLocalSystemMessage]).
+const _localCallMessagePrefixes = ['call_start_', 'call_end_'];
+
+bool _isLocalCallMessageFor(ChatMessage m, Set<String> callIds) {
+  for (final prefix in _localCallMessagePrefixes) {
+    if (m.id.startsWith(prefix) &&
+        callIds.contains(m.id.substring(prefix.length))) {
+      return true;
+    }
   }
-  switch (kind) {
-    case ChatAttachmentKind.image:
-      return '📷 Фото';
-    case ChatAttachmentKind.video:
-      return '🎬 Видео';
-    case ChatAttachmentKind.file:
-      return '📎 ${fileName ?? 'Файл'}';
-    case ChatAttachmentKind.none:
-      return 'Сообщение';
-  }
+  return false;
 }
 
 @immutable
@@ -1206,10 +1199,19 @@ class ChatService extends ChangeNotifier {
     _upsertMessage(chatId, m, increaseUnread: false);
   }
 
+  /// Есть ли в загруженной ленте серверное сообщение `CALL` для [callId].
+  bool hasServerCallMessage(String chatId, String callId) {
+    final list = _messages[chatId];
+    if (list == null) return false;
+    return list.any((m) => m.call?.callId == callId);
+  }
+
   /// Локальное системное сообщение (например, о звонке) — существует только
   /// в этой сессии приложения, на сервер не отправляется и не синхронизируется
   /// с другими устройствами/собеседником. [id] должен быть уникальным
   /// (например, привязан к callId), чтобы не задублировать сообщение.
+  /// Локальные `call_start_<callId>` / `call_end_<callId>` убираются, как
+  /// только приходит серверное сообщение `CALL` этого звонка.
   void appendLocalSystemMessage(String chatId, String text, {required String id}) {
     _appendMessage(
       chatId,
@@ -1289,7 +1291,12 @@ class ChatService extends ChangeNotifier {
     if (mapped.id.isEmpty) return;
 
     if (kind == ChatRealtimeKind.updated) {
-      _upsertMessage(chatId, mapped.copyWith(isEdited: true), increaseUnread: false);
+      // Сообщение-звонок обновляет сервер (статус, длительность) — это не правка.
+      _upsertMessage(
+        chatId,
+        mapped.isCall ? mapped : mapped.copyWith(isEdited: true),
+        increaseUnread: false,
+      );
       return;
     }
 
@@ -1389,6 +1396,10 @@ class ChatService extends ChangeNotifier {
 
     var replaced = false;
     final list = _messages.putIfAbsent(chatId, () => <ChatMessage>[]);
+    final callId = incoming.call?.callId;
+    if (callId != null) {
+      list.removeWhere((m) => _isLocalCallMessageFor(m, {callId}));
+    }
     final idx = list.indexWhere((m) => m.id == incoming.id);
     if (idx >= 0) {
       replaced = true;
@@ -1470,8 +1481,10 @@ class ChatService extends ChangeNotifier {
     }
     final merged = List<ChatMessage>.from(fromServer);
     final ids = {for (final m in merged) m.id};
+    final serverCallIds = {for (final m in fromServer) ?m.call?.callId};
     for (final m in previous) {
       if (m.id.isEmpty || !ids.add(m.id)) continue;
+      if (_isLocalCallMessageFor(m, serverCallIds)) continue;
       final serverId = int.tryParse(m.id);
       final vanishedOnServer = serverId != null &&
           !m.isDeleted &&

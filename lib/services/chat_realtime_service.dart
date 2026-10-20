@@ -3,8 +3,10 @@ import 'dart:convert';
 
 import 'package:connect/config/api_config.dart';
 import 'package:connect/config/reverb_config.dart';
+import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/repositories/settings_repository.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/chat_realtime_payload.dart';
@@ -244,6 +246,13 @@ class ChatRealtimeService {
   Subscription _listen(PrivateChannel channel, String name) {
     return channel.listenAll((event, data) {
       if (ChatRealtimePayload.isProtocolEvent(event)) return;
+      // Статусы звонков — тот же канал, что получает веб-клиент: ответ/отказ
+      // в вебе доходит до приложения, даже если FCM задержался.
+      if (ChatCallSignal.isCallSignal(data, eventName: event)) {
+        final signal = ChatCallSignal.tryParse(data, eventName: event);
+        if (signal != null) ChatCallService.instance.applySignal(signal);
+        return;
+      }
       ChatService.instance.applyRealtimeEvent(
         eventName: event,
         data: data,

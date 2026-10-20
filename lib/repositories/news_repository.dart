@@ -65,11 +65,13 @@ class NewsRepository {
     return (likers: likers, viewers: viewers, news: merged);
   }
 
-  /// `POST /dashboard/news/reaction/{news}` → `data` — обновлённый пост.
+  /// `POST /dashboard/news/reaction/{news}` с `{ "emoji": ... }`.
   ///
-  /// Ставит/меняет реакцию пользователя на [emoji]. Повторный вызов с тем же
-  /// эмодзи снимает реакцию.
-  Future<NewsItem> react(String newsId, String emoji) async {
+  /// Работает как переключатель: нет реакции → `created`, другая реакция →
+  /// `updated`, та же реакция → `removed` (в ответе `emoji: null`).
+  /// Возвращает итоговую реакцию пользователя (`null` — реакции нет).
+  /// Лайки (`add-like` / `remove-like`) — отдельный механизм и не затрагиваются.
+  Future<String?> toggleReaction(String newsId, String emoji) async {
     final decoded = await ApiClient.instance.post(
       NewsRoutes.reactionUrl(newsId),
       body: {'emoji': emoji},
@@ -78,13 +80,10 @@ class NewsRepository {
       decoded,
       defaultErrorMessage: 'Не удалось поставить реакцию',
     );
-    return NewsItem.fromJson(data);
+    if (data['action']?.toString() == 'removed') return null;
+    final result = data['emoji']?.toString().trim();
+    return result == null || result.isEmpty ? emoji : result;
   }
-
-  /// Снимает текущую реакцию пользователя. Пока сервер не подтверждён как
-  /// умеющий снимать реакцию повторным `reaction`-запросом, используем
-  /// существующий `remove-like` как надёжный фолбэк.
-  Future<int?> removeReaction(String newsId) => removeLike(newsId);
 
   /// `POST /dashboard/news/add-like/{news}` → `data` — новое число лайков.
   Future<int?> addLike(String newsId) async {

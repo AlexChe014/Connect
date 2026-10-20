@@ -1,5 +1,6 @@
 import 'package:connect/config/routes/device_routes.dart';
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/device_identity.dart';
 
 class DeviceTokenRepository {
   DeviceTokenRepository._();
@@ -16,6 +17,7 @@ class DeviceTokenRepository {
       body: {
         'token': token,
         'platform': platform,
+        'device_id': await DeviceIdentity.instance.id(),
       },
     );
   }
@@ -34,6 +36,7 @@ class DeviceTokenRepository {
       body: {
         'token': token,
         'platform': 'ios',
+        'device_id': await DeviceIdentity.instance.id(),
       },
     );
   }
@@ -44,10 +47,5 @@ class DeviceTokenRepository {
       DeviceRoutes.unregisterVoipUrl,
       body: {'token': token},
     );
-  }
-
-  /// `POST /chat/call/{callId}/decline` — собеседник отклонил звонок.
-  Future<void> declineCall({required String callId}) async {
-    await ApiClient.instance.post(DeviceRoutes.declineCallUrl(callId));
   }
 }

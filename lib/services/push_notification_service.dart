@@ -10,10 +10,14 @@ import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/mail_unread_service.dart';
 import 'package:connect/services/document_pending_service.dart';
+import 'package:connect/models/chat/chat_call_record.dart';
+import 'package:connect/models/chat/chat_call_status.dart';
+import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/services/incoming_call_service.dart';
 import 'package:connect/services/push_background_handler.dart';
 import 'package:connect/utils/app_logger.dart';
+import 'package:connect/utils/chat_mapper.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -264,6 +268,12 @@ class PushNotificationService {
   /// на бэкенде. Ошибки не блокируют выход — локально токены всё равно
   /// гасятся в [disableLocally].
   Future<void> unregisterOnBackend() async {
+    // Иначе собеседник останется в комнате с «зависшим» звонком.
+    try {
+      await ChatCallService.instance
+          .endLiveCallForLogout()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {}
     await IncomingCallService.instance.unregisterVoipOnBackend();
     if (!_initialized) return;
 
@@ -341,20 +351,9 @@ class PushNotificationService {
       return;
     }
 
-    if (message.data['type'] == 'chat_call_ended') {
-      final callId = message.data['call_id']?.toString();
-      final status = message.data['status']?.toString();
-      if (callId != null && callId.isNotEmpty && status != null) {
-        ChatCallService.instance.notifyCallEnded(callId, status);
-      }
-      return;
-    }
-
-    if (message.data['type'] == 'chat_call_accepted') {
-      final callId = message.data['call_id']?.toString();
-      if (callId != null && callId.isNotEmpty) {
-        ChatCallService.instance.notifyCallAccepted(callId);
-      }
+    if (ChatCallSignal.isCallSignal(message.data)) {
+      final signal = ChatCallSignal.tryParse(message.data);
+      if (signal != null) ChatCallService.instance.applySignal(signal);
       return;
     }
 
@@ -380,6 +379,16 @@ class PushNotificationService {
     if (!Platform.isAndroid) return;
     if (isMutedChat) return;
 
+    // `message_type` нового сообщения чата: у звонка свой пуш, а код стикера
+    // показывать пользователю бессмысленно.
+    final chatMessageType = message.data['type'] == 'chat_message'
+        ? message.data['message_type']?.toString().trim().toUpperCase()
+        : null;
+    if (chatMessageType == ChatCallRecord.messageType) return;
+    final bodyOverride = chatMessageType == ChatStickers.messageType
+        ? ChatMapper.stickerSnippet
+        : null;
+
     final payload = _encodePayload(message.data);
     _localNotifications.show(
       id: message.messageId.hashCode ^ message.data.hashCode,
@@ -388,6 +397,7 @@ class PushNotificationService {
           message.data['title']?.toString() ??
           (isMail ? 'Новое письмо' : null),
       body:
+          bodyOverride ??
           notification?.body ??
           message.data['body']?.toString() ??
           message.data['subject']?.toString(),
