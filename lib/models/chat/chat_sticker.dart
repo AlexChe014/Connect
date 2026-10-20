@@ -10,9 +10,11 @@ class ChatStickers {
 
   static const String messageType = 'STICKER';
 
-  /// Картинок стикеров на сервере пока нет: в ленте рисуется заглушка,
-  /// а выбор стикеров в поле ввода скрыт. Включить, когда картинки появятся.
-  static const bool imagesAvailable = false;
+  /// Картинки лежат на портале. Без User-Agent сайт отвечает 403 (защита
+  /// от ботов), поэтому `curl` без `-A` их «не видит»; приложение ходит
+  /// с UA `Dart/…` и получает 200. При `false` в ленте рисуется заглушка,
+  /// а выбор стикеров в поле ввода скрыт.
+  static const bool imagesAvailable = true;
 
   static const int count = 32;
 
