@@ -142,7 +142,16 @@ Future<String?> showNewsReactionPicker(
                         : null,
                     shape: BoxShape.circle,
                   ),
-                  child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                  // `message` у CupertinoActionSheet рисуется полупрозрачным
+                  // серым, и цветные эмодзи наследуют эту прозрачность —
+                  // выглядят выключенными. Цвет задаём явно, непрозрачный.
+                  child: Text(
+                    emoji,
+                    style: TextStyle(
+                      fontSize: 28,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -203,7 +212,13 @@ class _ReactionChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(reaction.emoji, style: const TextStyle(fontSize: 15)),
+              Text(
+                reaction.emoji,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
               const SizedBox(width: 5),
               Text(
                 '${reaction.count}',
