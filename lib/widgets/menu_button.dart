@@ -12,7 +12,11 @@ class MenuButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: Size.zero,
       onPressed: () => Scaffold.of(context).openDrawer(),
-      child: const Icon(CupertinoIcons.line_horizontal_3, size: 26),
+      child: Icon(
+        CupertinoIcons.line_horizontal_3,
+        size: 26,
+        color: CupertinoColors.label.resolveFrom(context),
+      ),
     );
   }
 }

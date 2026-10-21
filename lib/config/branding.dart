@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../services/branding_service.dart';
-import 'app_icons.dart';
 
 /// Пути к PNG в [assets/branding/]. После замены файлов выполните
 /// `dart run flutter_launcher_icons` для обновления иконки ярлыка.
@@ -63,8 +63,8 @@ class _AssetLogo extends StatelessWidget {
       BrandingAssets.loginLogoPng,
       height: height,
       fit: fit,
-      errorBuilder: (context, error, stackTrace) => AppIcon(
-        AppIcons.dashboard,
+      errorBuilder: (context, error, stackTrace) => Icon(
+        CupertinoIcons.news,
         size: height * 0.85,
         color: scheme.primary,
       ),

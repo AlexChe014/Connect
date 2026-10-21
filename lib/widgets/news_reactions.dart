@@ -51,6 +51,11 @@ Future<NewsAuthor?> _currentAuthor() async {
   }
 }
 
+/// Общая высота чипов реакций, кнопки «смайлик» и счётчиков просмотров/
+/// комментариев: раньше высота чипа зависела от метрик эмодзи, и ряд под
+/// постом «плясал» от поста к посту.
+const double kNewsReactionRowHeight = 32;
+
 /// Ряд реакций под постом: чипы «эмодзи + счётчик» (своя реакция
 /// подсвечена) и кнопка выбора новой реакции.
 ///
@@ -112,10 +117,7 @@ class NewsReactionsBar extends StatelessWidget {
 
 /// Пикер реакции. Возвращает выбранный эмодзи (выбор уже активного снимет
 /// реакцию на сервере) или `null`, если пользователь закрыл пикер.
-Future<String?> showNewsReactionPicker(
-  BuildContext context, {
-  String? active,
-}) {
+Future<String?> showNewsReactionPicker(BuildContext context, {String? active}) {
   return showCupertinoModalPopup<String>(
     context: context,
     builder: (context) => CupertinoActionSheet(
@@ -142,7 +144,16 @@ Future<String?> showNewsReactionPicker(
                         : null,
                     shape: BoxShape.circle,
                   ),
-                  child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                  // `message` у CupertinoActionSheet рисуется полупрозрачным
+                  // серым, и цветные эмодзи наследуют эту прозрачность —
+                  // выглядят выключенными. Цвет задаём явно, непрозрачный.
+                  child: Text(
+                    emoji,
+                    style: TextStyle(
+                      fontSize: 28,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -190,7 +201,8 @@ class _ReactionChip extends StatelessWidget {
         onLongPress: onLongPress,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          height: kNewsReactionRowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: selected
                 ? accent.withValues(alpha: 0.14)
@@ -203,13 +215,22 @@ class _ReactionChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(reaction.emoji, style: const TextStyle(fontSize: 15)),
+              Text(
+                reaction.emoji,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
               const SizedBox(width: 5),
               Text(
                 '${reaction.count}',
                 style: TextStyle(
                   fontSize: 13,
+                  height: 1,
                   fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                   color: selected
                       ? accent
                       : CupertinoColors.secondaryLabel.resolveFrom(context),
@@ -238,8 +259,8 @@ class _AddReactionButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
-          width: 36,
-          height: 28,
+          width: 40,
+          height: kNewsReactionRowHeight,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
@@ -253,6 +274,43 @@ class _AddReactionButton extends StatelessWidget {
                   color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// Счётчик рядом с реакциями (просмотры, комментарии) той же высоты, что
+/// и чипы реакций, — чтобы ряд под постом стоял на одной линии.
+class NewsStatChip extends StatelessWidget {
+  const NewsStatChip({super.key, required this.icon, this.label, this.onTap});
+
+  final IconData icon;
+  final String? label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      minimumSize: const Size(0, kNewsReactionRowHeight),
+      onPressed: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: color),
+          if (label != null) ...[
+            const SizedBox(width: 4),
+            Text(
+              label!,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:connect/config/api_config.dart';
 import 'package:connect/services/auth_service.dart';
@@ -47,10 +48,7 @@ class ApiClient {
     var uri = Uri.parse(url);
     if (queryParameters != null && queryParameters.isNotEmpty) {
       uri = uri.replace(
-        queryParameters: {
-          ...uri.queryParameters,
-          ...queryParameters,
-        },
+        queryParameters: {...uri.queryParameters, ...queryParameters},
       );
     }
     final sessionGeneration = AuthService.instance.sessionGeneration;
@@ -88,11 +86,7 @@ class ApiClient {
 
     try {
       final response = await http
-          .post(
-            uri,
-            headers: headers,
-            body: body,
-          )
+          .post(uri, headers: headers, body: body)
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
       return _handleResponse(
         response,
@@ -105,7 +99,10 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> post(String url, {Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> post(
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse(url);
     final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
@@ -127,7 +124,10 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> patch(String url, {Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> patch(
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse(url);
     final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
@@ -149,7 +149,10 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> put(String url, {Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> put(
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
     final uri = Uri.parse(url);
     final sessionGeneration = AuthService.instance.sessionGeneration;
     try {
@@ -194,9 +197,13 @@ class ApiClient {
     String url, {
     Map<String, String> fields = const {},
     List<http.MultipartFile> files = const [],
+    Duration? timeout,
+    void Function(int sent, int total)? onProgress,
   }) async {
     final uri = Uri.parse(url);
-    final request = http.MultipartRequest('POST', uri);
+    final request = onProgress == null
+        ? http.MultipartRequest('POST', uri)
+        : _ProgressMultipartRequest('POST', uri, onProgress);
     final headers = Map<String, String>.from(_headers);
     headers.remove('Content-Type');
     request.headers.addAll(headers);
@@ -205,8 +212,10 @@ class ApiClient {
     final sessionGeneration = AuthService.instance.sessionGeneration;
 
     try {
+      // Тайм-аут считается до ответа сервера, то есть вместе с отправкой
+      // всего тела: крупному файлу нужен свой, иначе он не успеет уйти.
       final streamed = await request.send().timeout(
-        Duration(seconds: ApiConfig.timeoutSeconds),
+        timeout ?? Duration(seconds: ApiConfig.timeoutSeconds),
       );
       final response = await http.Response.fromStream(streamed);
       return _handleResponse(
@@ -251,6 +260,59 @@ class ApiClient {
       throw ApiException(response.statusCode, 'Не удалось скачать файл');
     } catch (e, st) {
       throw _mapAndLog('HTTP download failed: $uri', e, st);
+    }
+  }
+
+  /// Скачивает файл потоком прямо на диск, не держа его целиком в памяти.
+  /// Пишет во временный `.part` и переименовывает только после успеха, чтобы
+  /// оборванная загрузка не осталась на месте готового файла.
+  Future<void> downloadToFile(
+    String url,
+    File target, {
+    void Function(int received, int? total)? onProgress,
+  }) async {
+    final uri = Uri.parse(url);
+    final sessionGeneration = AuthService.instance.sessionGeneration;
+    final client = http.Client();
+    final part = File('${target.path}.part');
+    try {
+      final request = http.Request('GET', uri)..headers.addAll(authHeaders);
+      final response = await client
+          .send(request)
+          .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _noteResponseAuthOutcome(
+          statusCode: response.statusCode,
+          sessionGeneration: sessionGeneration,
+        );
+        throw ApiException(response.statusCode, 'Не удалось скачать файл');
+      }
+      AuthService.instance.noteRequestSucceeded(
+        sessionGeneration: sessionGeneration,
+      );
+
+      await part.parent.create(recursive: true);
+      final sink = part.openWrite();
+      var received = 0;
+      try {
+        // Тайм-аут на паузу между кусками, а не на весь файл: большой файл
+        // на медленной сети качается долго, но не должен «висеть» молча.
+        await for (final chunk in response.stream.timeout(
+          Duration(seconds: ApiConfig.timeoutSeconds),
+        )) {
+          sink.add(chunk);
+          received += chunk.length;
+          onProgress?.call(received, response.contentLength);
+        }
+      } finally {
+        await sink.close();
+      }
+      await part.rename(target.path);
+    } catch (e, st) {
+      if (await part.exists()) await part.delete();
+      throw _mapAndLog('HTTP download to file failed: $uri', e, st);
+    } finally {
+      client.close();
     }
   }
 
@@ -315,7 +377,8 @@ class ApiClient {
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw ApiException(
         response.statusCode,
-        message.isNotEmpty && message != 'Ошибка запроса (${response.statusCode})'
+        message.isNotEmpty &&
+                message != 'Ошибка запроса (${response.statusCode})'
             ? message
             : 'Ошибка авторизации. Войдите в аккаунт снова.',
       );
@@ -340,5 +403,26 @@ class ApiClient {
     if (statusCode == 401) return true;
     final normalized = message?.toLowerCase() ?? '';
     return normalized.contains('unauthenticated');
+  }
+}
+
+/// [http.MultipartRequest], который сообщает, сколько байт тела уже ушло.
+class _ProgressMultipartRequest extends http.MultipartRequest {
+  _ProgressMultipartRequest(super.method, super.url, this.onProgress);
+
+  final void Function(int sent, int total) onProgress;
+
+  @override
+  http.ByteStream finalize() {
+    final stream = super.finalize();
+    final total = contentLength;
+    var sent = 0;
+    return http.ByteStream(
+      stream.map((chunk) {
+        sent += chunk.length;
+        onProgress(sent, total);
+        return chunk;
+      }),
+    );
   }
 }

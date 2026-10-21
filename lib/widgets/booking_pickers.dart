@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/app_theme.dart';
 import '../utils/booking_time_utils.dart';
+import 'app_glass.dart';
 
 /// Общие Cupertino-пикеры для форм бронирования: выбор одного варианта
 /// из короткого списка, дата, получасовой слот времени.
@@ -144,6 +146,8 @@ Future<int?> showBookingTimeSheet({
   );
 }
 
+/// Плавающая стеклянная панель с колесом выбора — как системные
+/// шторки iOS 26: отступ от краёв экрана и скругление со всех сторон.
 class _PickerSheetScaffold extends StatelessWidget {
   const _PickerSheetScaffold({
     required this.child,
@@ -157,44 +161,66 @@ class _PickerSheetScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 292,
-      color: CupertinoColors.systemGroupedBackground.resolveFrom(context),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                CupertinoButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Отмена'),
-                ),
-                Expanded(
-                  child: title == null
-                      ? const SizedBox.shrink()
-                      : Text(
-                          title!,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
-                            color: CupertinoColors.label.resolveFrom(context),
+    final label = CupertinoColors.label.resolveFrom(context);
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: AppGlass(
+          borderRadius: BorderRadius.circular(32),
+          child: SizedBox(
+            height: 280,
+            child: DefaultTextStyle(
+              style: TextStyle(
+                fontFamily: '.SF Pro Text',
+                decoration: TextDecoration.none,
+                color: label,
+                fontSize: 17,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                    child: Row(
+                      children: [
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          onPressed: () => Navigator.pop(context),
+                          child: Text('Отмена', style: TextStyle(color: label)),
+                        ),
+                        Expanded(
+                          child: title == null
+                              ? const SizedBox.shrink()
+                              : Text(
+                                  title!,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          onPressed: onDone,
+                          child: const Text(
+                            'Готово',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                ),
-                CupertinoButton(onPressed: onDone, child: const Text('Готово')),
-              ],
+                      ],
+                    ),
+                  ),
+                  Expanded(child: child),
+                ],
+              ),
             ),
-            Container(
-              height: 0.5,
-              color: CupertinoColors.separator.resolveFrom(context),
-            ),
-            Expanded(child: child),
-          ],
+          ),
         ),
       ),
     );

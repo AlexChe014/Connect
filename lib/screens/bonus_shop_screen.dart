@@ -167,7 +167,7 @@ class _BonusShopScreenState extends State<BonusShopScreen> {
     }
 
     if (_items.isEmpty) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: _load,
         child: const AppEmptyState(
           icon: CupertinoIcons.gift,
@@ -176,7 +176,7 @@ class _BonusShopScreenState extends State<BonusShopScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: GridView.builder(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

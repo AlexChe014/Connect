@@ -9,6 +9,9 @@ class NewsItem {
   final DateTime date;
   final String? imageUrl;
   final List<String> imageUrls;
+
+  /// Файлы, приложенные к посту (поле `documents`).
+  final List<NewsDocument> documents;
   final int likesCount;
   final int viewsCount;
   final bool isLiked;
@@ -30,6 +33,7 @@ class NewsItem {
     required this.date,
     this.imageUrl,
     this.imageUrls = const [],
+    this.documents = const [],
     this.likesCount = 0,
     this.viewsCount = 0,
     this.isLiked = false,
@@ -50,6 +54,7 @@ class NewsItem {
     DateTime? date,
     String? imageUrl,
     List<String>? imageUrls,
+    List<NewsDocument>? documents,
     int? likesCount,
     int? viewsCount,
     bool? isLiked,
@@ -70,6 +75,7 @@ class NewsItem {
       date: date ?? this.date,
       imageUrl: imageUrl ?? this.imageUrl,
       imageUrls: imageUrls ?? this.imageUrls,
+      documents: documents ?? this.documents,
       likesCount: likesCount ?? this.likesCount,
       viewsCount: viewsCount ?? this.viewsCount,
       isLiked: isLiked ?? this.isLiked,
@@ -89,12 +95,19 @@ class NewsItem {
 
     final title = (json['title'] as String?)?.trim() ?? '';
 
-    final rawText = (json['text'] as String?) ?? (json['content'] as String?) ?? '';
+    final rawText =
+        (json['text'] as String?) ?? (json['content'] as String?) ?? '';
     final content = HtmlTextUtils.toPlainText(rawText).trim();
     final contentHtml = rawText.trim();
 
-    final rawDate = (json['created_at'] as String?) ?? (json['date'] as String?) ?? '';
-    final date = _parseBackendDate(rawDate) ?? DateTime.now();
+    // Дата публикации: `publish_at` (unix-время) — пост могут создать
+    // заранее и опубликовать позже, `created_at` тогда отстаёт.
+    final rawDate =
+        (json['created_at'] as String?) ?? (json['date'] as String?) ?? '';
+    final date =
+        _parseUnixSeconds(json['publish_at']) ??
+        _parseBackendDate(rawDate) ??
+        DateTime.now();
 
     final imageUrls = <String>[];
     final pics = json['pictures'] ?? json['media'];
@@ -113,8 +126,26 @@ class NewsItem {
     }
     final imageUrl = imageUrls.isEmpty ? null : imageUrls.first;
 
-    final likesRaw = json['likes_count'] ?? json['likes'] ?? json['like_count'] ?? json['likesCount'];
-    final viewsRaw = json['views_count'] ?? json['views'] ?? json['view_count'] ?? json['viewsCount'];
+    final documents = <NewsDocument>[];
+    final rawDocuments = json['documents'];
+    if (rawDocuments is List) {
+      for (final raw in rawDocuments) {
+        if (raw is! Map) continue;
+        final document = NewsDocument.fromJson(Map<String, dynamic>.from(raw));
+        if (document != null) documents.add(document);
+      }
+    }
+
+    final likesRaw =
+        json['likes_count'] ??
+        json['likes'] ??
+        json['like_count'] ??
+        json['likesCount'];
+    final viewsRaw =
+        json['views_count'] ??
+        json['views'] ??
+        json['view_count'] ??
+        json['viewsCount'];
 
     final likers = _parseAuthors(
       json['liked_users'] ??
@@ -131,12 +162,8 @@ class NewsItem {
           (viewsRaw is List ? viewsRaw : null),
     );
 
-    final likesCount = likesRaw is List
-        ? likers.length
-        : _parseInt(likesRaw);
-    final viewsCount = viewsRaw is List
-        ? viewers.length
-        : _parseInt(viewsRaw);
+    final likesCount = likesRaw is List ? likers.length : _parseInt(likesRaw);
+    final viewsCount = viewsRaw is List ? viewers.length : _parseInt(viewsRaw);
 
     NewsAuthor? author;
     final rawAuthor = json['author'];
@@ -154,6 +181,7 @@ class NewsItem {
       date: date,
       imageUrl: imageUrl,
       imageUrls: imageUrls,
+      documents: documents,
       likesCount: likesCount,
       viewsCount: viewsCount,
       isLiked: _parseIsLiked(json),
@@ -191,9 +219,7 @@ class NewsItem {
       if (group.count > 0) groups.add(group);
     }
     if (emoji != null && !added) {
-      groups.add(
-        NewsReaction(emoji: emoji, count: 1, users: [?me]),
-      );
+      groups.add(NewsReaction(emoji: emoji, count: 1, users: [?me]));
     }
 
     return emoji == null
@@ -239,6 +265,12 @@ class NewsItem {
     final year = int.tryParse(parts[2]);
     if (day == null || month == null || year == null) return null;
     return DateTime(year, month, day);
+  }
+
+  static DateTime? _parseUnixSeconds(Object? v) {
+    final seconds = v is num ? v.toInt() : int.tryParse('${v ?? ''}');
+    if (seconds == null || seconds <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
   }
 
   static int _parseInt(Object? v) {
@@ -317,10 +349,7 @@ class NewsReaction {
   NewsReaction withUser(NewsAuthor? user) => NewsReaction(
     emoji: emoji,
     count: count + 1,
-    users: [
-      ?user,
-      ...users.where((u) => user == null || u.id != user.id),
-    ],
+    users: [?user, ...users.where((u) => user == null || u.id != user.id)],
   );
 
   NewsReaction withoutUser(NewsAuthor? user) => NewsReaction(
@@ -330,16 +359,45 @@ class NewsReaction {
   );
 }
 
+/// Файл, приложенный к посту: `{ name, file_name, mime_type, size, original_url }`.
+class NewsDocument {
+  final String name;
+  final String url;
+  final String? mimeType;
+  final int size;
+
+  const NewsDocument({
+    required this.name,
+    required this.url,
+    this.mimeType,
+    this.size = 0,
+  });
+
+  /// `null`, если у файла нет ссылки.
+  static NewsDocument? fromJson(Map<String, dynamic> json) {
+    final url = MediaUrlUtils.normalizeFirstOriginalUrl(json);
+    if (url == null || url.isEmpty) return null;
+    final fileName = json['file_name']?.toString().trim() ?? '';
+    final name = json['name']?.toString().trim() ?? '';
+    return NewsDocument(
+      // `file_name` — с расширением: по нему системный просмотр
+      // понимает тип файла.
+      name: fileName.isNotEmpty
+          ? fileName
+          : (name.isNotEmpty ? name : Uri.parse(url).pathSegments.last),
+      url: url,
+      mimeType: json['mime_type']?.toString(),
+      size: NewsItem._parseInt(json['size']),
+    );
+  }
+}
+
 class NewsAuthor {
   final String id;
   final String fullName;
   final String? avatarUrl;
 
-  const NewsAuthor({
-    required this.id,
-    required this.fullName,
-    this.avatarUrl,
-  });
+  const NewsAuthor({required this.id, required this.fullName, this.avatarUrl});
 
   factory NewsAuthor.fromJson(Map<String, dynamic> json) {
     final rawId = json['id'];

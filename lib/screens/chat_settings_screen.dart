@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:connect/config/app_theme.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/repositories/chat_repository.dart';
@@ -9,6 +10,7 @@ import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
+import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/cupertino_empty_state.dart';
@@ -38,33 +40,6 @@ class _FileAccent {
 String _domainFor(String url) {
   final host = Uri.tryParse(url)?.host ?? '';
   return host.replaceFirst(RegExp(r'^www\.'), '');
-}
-
-/// Заголовок для группировки списка по дате — «Сегодня» / «Вчера» / дата.
-String _dateSectionLabel(DateTime date) {
-  final now = DateTime.now();
-  final local = date.toLocal();
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(local.year, local.month, local.day);
-  switch (today.difference(day).inDays) {
-    case 0:
-      return 'Сегодня';
-    case 1:
-      return 'Вчера';
-  }
-  final pattern = local.year == now.year ? 'd MMMM' : 'd MMMM yyyy';
-  return DateFormat(pattern, 'ru_RU').format(local);
-}
-
-Map<String, List<T>> _groupByDate<T>(
-  List<T> items,
-  DateTime Function(T) dateOf,
-) {
-  final groups = <String, List<T>>{};
-  for (final item in items) {
-    (groups[_dateSectionLabel(dateOf(item))] ??= []).add(item);
-  }
-  return groups;
 }
 
 class ChatSettingsScreen extends StatefulWidget {
@@ -458,7 +433,11 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       if (uri == null) return;
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e, st) {
-      CrashReportingService.recordNonFatal(e, st, reason: 'chat_settings_file_open');
+      CrashReportingService.recordNonFatal(
+        e,
+        st,
+        reason: 'chat_settings_file_open',
+      );
       if (!mounted) return;
       _showSnack('Не удалось открыть файл');
     }
@@ -474,28 +453,32 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
 
   Widget _buildGalleryTabs(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-      child: CupertinoSlidingSegmentedControl<int>(
-        groupValue: _galleryTab,
-        backgroundColor: CupertinoColors.systemGrey5.resolveFrom(context),
-        thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
-        onValueChanged: (value) {
-          if (value != null) setState(() => _galleryTab = value);
-        },
-        children: const {
-          0: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('Медиа'),
-          ),
-          1: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('Файлы'),
-          ),
-          2: Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('Ссылки'),
-          ),
-        },
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(12),
+        shadows: AppGlass.controlShadow,
+        child: CupertinoSlidingSegmentedControl<int>(
+          groupValue: _galleryTab,
+          backgroundColor: const Color(0x00000000),
+          thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
+          onValueChanged: (value) {
+            if (value != null) setState(() => _galleryTab = value);
+          },
+          children: const {
+            0: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Медиа'),
+            ),
+            1: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Файлы'),
+            ),
+            2: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Ссылки'),
+            ),
+          },
+        ),
       ),
     );
   }
@@ -554,76 +537,79 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('${_media.length} ФОТО И ВИДЕО'),
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-              context,
-            ),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.zero,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                crossAxisSpacing: 2,
-                mainAxisSpacing: 2,
-              ),
-              itemCount: _media.length,
-              itemBuilder: (context, index) {
-                final m = _media[index];
-                final localPath = m.localMediaPath;
-                final isVideo = m.attachmentKind == ChatAttachmentKind.video;
-                return GestureDetector(
-                  onTap: () => _openViewer(index),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Превью видео не декодируем — файла-кадра нет (в
-                      // приложении нет video_player), поэтому вместо
-                      // попытки отрисовать видео как картинку (даёт
-                      // "битую" плитку) показываем нейтральную подложку.
-                      if (isVideo)
-                        Container(color: CupertinoColors.darkBackgroundGray)
-                      else
-                        localPath != null && localPath.isNotEmpty
-                            ? Image.file(File(localPath), fit: BoxFit.cover)
-                            : AppNetworkImage(
-                                url: m.remoteMediaUrl,
-                                fit: BoxFit.cover,
-                                httpHeaders: ChatFileShare.imageHeaders(
-                                  m.remoteMediaUrl,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: AppGlass(
+            borderRadius: BorderRadius.circular(22),
+            shadows: AppGlass.controlShadow,
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(19),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 2,
+                    mainAxisSpacing: 2,
+                  ),
+                  itemCount: _media.length,
+                  itemBuilder: (context, index) {
+                    final m = _media[index];
+                    final localPath = m.localMediaPath;
+                    final isVideo =
+                        m.attachmentKind == ChatAttachmentKind.video;
+                    return GestureDetector(
+                      onTap: () => _openViewer(index),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          // Превью видео не декодируем — файла-кадра нет (в
+                          // приложении нет video_player), поэтому вместо
+                          // попытки отрисовать видео как картинку (даёт
+                          // "битую" плитку) показываем нейтральную подложку.
+                          if (isVideo)
+                            Container(color: CupertinoColors.darkBackgroundGray)
+                          else
+                            localPath != null && localPath.isNotEmpty
+                                ? Image.file(File(localPath), fit: BoxFit.cover)
+                                : AppNetworkImage(
+                                    url: m.remoteMediaUrl,
+                                    fit: BoxFit.cover,
+                                    httpHeaders: ChatFileShare.imageHeaders(
+                                      m.remoteMediaUrl,
+                                    ),
+                                  ),
+                          if (isVideo)
+                            Container(
+                              alignment: Alignment.bottomLeft,
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    CupertinoColors.black.withValues(
+                                      alpha: 0.45,
+                                    ),
+                                    CupertinoColors.black.withValues(alpha: 0),
+                                  ],
                                 ),
                               ),
-                      if (isVideo)
-                        Container(
-                          alignment: Alignment.bottomLeft,
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                CupertinoColors.black.withValues(alpha: 0.45),
-                                CupertinoColors.black.withValues(alpha: 0),
-                              ],
+                              child: const Icon(
+                                CupertinoIcons.play_fill,
+                                color: CupertinoColors.white,
+                                size: 15,
+                              ),
                             ),
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.play_fill,
-                            color: CupertinoColors.white,
-                            size: 15,
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ),
@@ -641,39 +627,59 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         ),
       );
     }
-    final groups = _groupByDate(_files, (m) => m.createdAt);
+    // Без заголовков-дат: дата стоит в подписи рядом с размером,
+    // как в Telegram, — список компактнее.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: groups.entries.expand((group) {
-        return [
-          _sectionLabel(group.key.toUpperCase()),
-          CupertinoListSection.insetGrouped(
-            margin: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
-            children: group.value.map((m) {
-              final name = m.files.isNotEmpty
-                  ? m.files.first.originalName
-                  : m.fileName;
-              final accent = _fileAccentFor(name);
-              return CupertinoListTile(
-                leading: _iconBadge(accent.icon, accent.color),
-                title: Text(
-                  name ?? 'Файл',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                subtitle: Text(
-                  '${accent.label} · '
-                  '${DateFormat('HH:mm', 'ru_RU').format(m.createdAt.toLocal())}',
-                ),
-                trailing: const CupertinoListTileChevron(),
-                onTap: () => _openFile(m),
-              );
-            }).toList(),
-          ),
-        ];
-      }).toList(),
+      children: [
+        _sectionLabel('${_files.length} ${_filesCountLabel(_files.length)}'),
+        _glassSection(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          children: _files.map((m) {
+            final file = m.files.isNotEmpty ? m.files.first : null;
+            final name = file?.originalName ?? m.fileName;
+            final accent = _fileAccentFor(name);
+            final size = file != null && file.size > 0
+                ? file.sizeLabel
+                : accent.label;
+            return CupertinoListTile(
+              leading: _iconBadge(accent.icon, accent.color),
+              title: Text(
+                name ?? 'Файл',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _listTitleStyle,
+              ),
+              subtitle: Text(
+                '$size · ${_fileDateLabel(m.createdAt)}',
+                style: _listSubtitleStyle,
+              ),
+              trailing: const CupertinoListTileChevron(),
+              onTap: () => _openFile(m),
+            );
+          }).toList(),
+        ),
+      ],
     );
+  }
+
+  /// «27 авг. в 17:01», для прошлых лет — «27 авг. 2025 в 17:01».
+  String _fileDateLabel(DateTime date) {
+    final local = date.toLocal();
+    final pattern = local.year == DateTime.now().year
+        ? "d MMM 'в' HH:mm"
+        : "d MMM y 'в' HH:mm";
+    return DateFormat(pattern, 'ru_RU').format(local);
+  }
+
+  String _filesCountLabel(int n) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return 'ФАЙЛ';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return 'ФАЙЛА';
+    }
+    return 'ФАЙЛОВ';
   }
 
   Widget _buildLinksList() {
@@ -686,61 +692,77 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         ),
       );
     }
-    final groups = _groupByDate(_links, (e) => e.createdAt);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: groups.entries.expand((group) {
-        return [
-          _sectionLabel(group.key.toUpperCase()),
-          CupertinoListSection.insetGrouped(
-            margin: const EdgeInsetsDirectional.fromSTEB(20, 0, 20, 10),
-            children: group.value.map((entry) {
-              final domain = _domainFor(entry.url);
-              final label = domain.isEmpty ? entry.url : domain;
-              return CupertinoListTile(
-                leading: Container(
-                  width: 29,
-                  height: 29,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: chatAvatarColor(label),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.link,
-                    size: 15,
-                    color: CupertinoColors.white,
-                  ),
+      children: [
+        _sectionLabel('${_links.length} ${_linksCountLabel(_links.length)}'),
+        _glassSection(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          children: _links.map((entry) {
+            final domain = _domainFor(entry.url);
+            return CupertinoListTile(
+              leading: _iconBadge(
+                CupertinoIcons.link,
+                CupertinoColors.systemGrey.resolveFrom(context),
+              ),
+              title: Text(
+                domain.isEmpty ? entry.url : domain,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _listTitleStyle,
+              ),
+              subtitle: Text(
+                entry.url,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _listSubtitleStyle.copyWith(
+                  color: CupertinoColors.activeBlue,
                 ),
-                title: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              additionalInfo: Text(
+                _shortDateLabel(entry.createdAt),
+                style: _listSubtitleStyle.copyWith(
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
                 ),
-                subtitle: Text(
-                  entry.url,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: CupertinoColors.activeBlue),
-                ),
-                trailing: Text(
-                  DateFormat(
-                    'HH:mm',
-                    'ru_RU',
-                  ).format(entry.createdAt.toLocal()),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-                  ),
-                ),
-                onTap: () => _openLink(entry.url),
-              );
-            }).toList(),
-          ),
-        ];
-      }).toList(),
+              ),
+              onTap: () => _openLink(entry.url),
+            );
+          }).toList(),
+        ),
+      ],
     );
+  }
+
+  /// «27 авг.», для прошлых лет — «27.08.25»: в строке ссылки мало места.
+  String _shortDateLabel(DateTime date) {
+    final local = date.toLocal();
+    final pattern = local.year == DateTime.now().year ? 'd MMM' : 'dd.MM.yy';
+    return DateFormat(pattern, 'ru_RU').format(local);
+  }
+
+  String _linksCountLabel(int n) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return 'ССЫЛКА';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return 'ССЫЛКИ';
+    }
+    return 'ССЫЛОК';
+  }
+
+  /// Строки файлов и ссылок мельче системных 17/15 — в них длинные
+  /// имена и адреса, которые иначе сразу обрезаются.
+  static const _listTitleStyle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+  );
+  static const _listSubtitleStyle = TextStyle(fontSize: 13);
+
+  Widget _glassSection({
+    required List<Widget> children,
+    EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(16, 20, 16, 0),
+  }) {
+    return AppGlassSection(margin: margin, children: children);
   }
 
   Widget _iconBadge(IconData icon, Color color) {
@@ -759,12 +781,16 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final selfId = _service.selfUserId;
+    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: groupedBg,
       navigationBar: CupertinoNavigationBar(
         middle: const Text('Настройки чата'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        // Полупрозрачная — содержимое уходит под размытую шапку.
+        backgroundColor: groupedBg.withValues(alpha: 0.7),
         border: null,
       ),
       child: DefaultTextStyle(
@@ -774,198 +800,217 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 16,
         ),
-        child: SafeArea(
-          child: _busy
-              ? const Center(child: CupertinoActivityIndicator(radius: 14))
-              : ListView(
-                  padding: const EdgeInsets.only(top: 20, bottom: 32),
-                  children: [
-                    Center(
-                      child: GestureDetector(
-                        onTap: _canManage && _chat.isGroup ? _editChat : null,
-                        child: ChatAvatar(chat: _chat, radius: 40),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Center(
-                      child: Text(
-                        _chat.title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: CupertinoColors.label,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    if (_chat.description != null &&
-                        _chat.description!.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
-                        child: Text(
-                          _chat.description!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: CupertinoColors.secondaryLabel,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _QuickActionButton(
-                              icon: CupertinoIcons.phone_fill,
-                              label: 'Звонок',
-                              color: CupertinoColors.systemGreen,
-                              onTap: _call,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _QuickActionButton(
-                              icon: _chat.isFavorite
-                                  ? CupertinoIcons.star_fill
-                                  : CupertinoIcons.star,
-                              label: 'Избранное',
-                              color: CupertinoColors.systemYellow,
-                              active: _chat.isFavorite,
-                              onTap: () => _service.toggleFavorite(_chat.id),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _QuickActionButton(
-                              icon: _chat.isMuted
-                                  ? CupertinoIcons.bell_slash_fill
-                                  : CupertinoIcons.bell_fill,
-                              label: 'Звук',
-                              color: CupertinoColors.systemGrey,
-                              active: _chat.isMuted,
-                              onTap: () => _service.toggleMute(_chat.id),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _QuickActionButton(
-                              icon: CupertinoIcons.search,
-                              label: 'Поиск',
-                              color: CupertinoColors.systemBlue,
-                              onTap: _openSearch,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    CupertinoListSection.insetGrouped(
-                      children: [
-                        CupertinoListTile(
-                          leading: _iconBadge(
-                            _chat.isPinned
-                                ? CupertinoIcons.pin_slash
-                                : CupertinoIcons.pin_fill,
-                            CupertinoColors.systemOrange,
-                          ),
-                          title: Text(
-                            _chat.isPinned ? 'Открепить чат' : 'Закрепить чат',
-                          ),
-                          onTap: _togglePin,
-                        ),
-                      ],
-                    ),
-                    _buildGalleryTabs(context),
-                    _buildGalleryContent(context),
-                    if (_canManage && _chat.isGroup)
-                      CupertinoListSection.insetGrouped(
-                        children: [
-                          CupertinoListTile(
-                            leading: _iconBadge(
-                              CupertinoIcons.person_add_solid,
-                              CupertinoColors.systemGreen,
-                            ),
-                            title: const Text('Добавить участников'),
-                            trailing: const CupertinoListTileChevron(),
-                            onTap: _addMembers,
-                          ),
-                        ],
-                      ),
-                    if (_chat.isGroup && _chat.members.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-                        child: Text(
-                          'УЧАСТНИКИ (${_chat.members.length})',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(
-                              context,
-                            ),
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                      CupertinoListSection.insetGrouped(
-                        margin: EdgeInsets.zero,
-                        children: _chat.members.map((m) {
-                          final isCreator = m.userId == _chat.creatorId;
-                          final canRemove =
-                              m.userId == selfId || (_canManage && !isCreator);
-                          final roleLabel = [
-                            if (isCreator) 'Создатель',
-                            if (m.isAdmin && !isCreator) 'Администратор',
-                          ].join(' · ');
-                          return CupertinoListTile(
-                            leading: MemberAvatar(
-                              displayName: m.displayName,
-                              avatarUrl: m.avatarUrl,
-                              radius: 18,
-                            ),
-                            title: Text(m.displayName),
-                            subtitle: roleLabel.isEmpty
-                                ? null
-                                : Text(roleLabel),
-                            trailing: canRemove
-                                ? GestureDetector(
-                                    onTap: () => _removeMember(m),
-                                    child: Icon(
-                                      m.userId == selfId
-                                          ? CupertinoIcons.square_arrow_right
-                                          : CupertinoIcons.minus_circle,
-                                      color: CupertinoColors.systemRed,
-                                    ),
-                                  )
-                                : null,
-                          );
-                        }).toList(),
-                      ),
+        child: Stack(
+          children: [
+            // Мягкое цветное пятно за шапкой: стеклу есть что размывать,
+            // иначе на ровном сером оно выглядит как обычная карточка.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 420,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.22),
+                      AppColors.primary.withValues(alpha: 0.08),
+                      groupedBg.withValues(alpha: 0),
                     ],
-                    if (_canManage && _chat.isGroup) ...[
-                      const SizedBox(height: 20),
-                      CupertinoListSection.insetGrouped(
-                        children: [
-                          CupertinoListTile(
-                            leading: _iconBadge(
-                              CupertinoIcons.delete_solid,
-                              CupertinoColors.systemRed,
-                            ),
-                            title: const Text(
-                              'Удалить чат',
-                              style: TextStyle(
-                                color: CupertinoColors.systemRed,
-                              ),
-                            ),
-                            onTap: _deleteChat,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
+              ),
+            ),
+            if (_busy)
+              const Center(child: CupertinoActivityIndicator(radius: 14))
+            else
+              Builder(
+                // Свой context — под скаффолдом, где в MediaQuery уже учтена
+                // высота полупрозрачной шапки.
+                builder: (context) => ListView(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.paddingOf(context).top + 20,
+                    bottom: MediaQuery.paddingOf(context).bottom + 32,
+                  ),
+                  children: _buildContent(context, selfId),
+                ),
+              ),
+          ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildContent(BuildContext context, int? selfId) {
+    return [
+      Center(
+        child: GestureDetector(
+          onTap: _canManage && _chat.isGroup ? _editChat : null,
+          child: ChatAvatar(chat: _chat, radius: 44),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Text(
+          _chat.title,
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: CupertinoColors.label.resolveFrom(context),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+      if (_chat.description != null && _chat.description!.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
+          child: Text(
+            _chat.description!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+          ),
+        ),
+      const SizedBox(height: 20),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: AppGlassActionButton(
+                icon: CupertinoIcons.phone_fill,
+                label: 'Звонок',
+                onTap: _call,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AppGlassActionButton(
+                icon: _chat.isFavorite
+                    ? CupertinoIcons.star_fill
+                    : CupertinoIcons.star,
+                label: 'Избранное',
+                onTap: () => _service.toggleFavorite(_chat.id),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AppGlassActionButton(
+                icon: _chat.isMuted
+                    ? CupertinoIcons.bell_slash_fill
+                    : CupertinoIcons.bell_fill,
+                label: _chat.isMuted ? 'Без звука' : 'Звук',
+                onTap: () => _service.toggleMute(_chat.id),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AppGlassActionButton(
+                icon: CupertinoIcons.search,
+                label: 'Поиск',
+                onTap: _openSearch,
+              ),
+            ),
+          ],
+        ),
+      ),
+      _glassSection(
+        children: [
+          CupertinoListTile(
+            leading: _iconBadge(
+              _chat.isPinned
+                  ? CupertinoIcons.pin_slash
+                  : CupertinoIcons.pin_fill,
+              CupertinoColors.systemOrange,
+            ),
+            title: Text(_chat.isPinned ? 'Открепить чат' : 'Закрепить чат'),
+            onTap: _togglePin,
+          ),
+        ],
+      ),
+      _buildGalleryTabs(context),
+      _buildGalleryContent(context),
+      if (_canManage && _chat.isGroup)
+        _glassSection(
+          children: [
+            CupertinoListTile(
+              leading: _iconBadge(
+                CupertinoIcons.person_add_solid,
+                CupertinoColors.systemGreen,
+              ),
+              title: const Text('Добавить участников'),
+              trailing: const CupertinoListTileChevron(),
+              onTap: _addMembers,
+            ),
+          ],
+        ),
+      if (_chat.isGroup && _chat.members.isNotEmpty) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+          child: Text(
+            'УЧАСТНИКИ (${_chat.members.length})',
+            style: TextStyle(
+              fontSize: 13,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+        _glassSection(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          children: _chat.members.map((m) {
+            final isCreator = m.userId == _chat.creatorId;
+            final canRemove = m.userId == selfId || (_canManage && !isCreator);
+            final roleLabel = [
+              if (isCreator) 'Создатель',
+              if (m.isAdmin && !isCreator) 'Администратор',
+            ].join(' · ');
+            return CupertinoListTile(
+              leading: MemberAvatar(
+                displayName: m.displayName,
+                avatarUrl: m.avatarUrl,
+                radius: 18,
+              ),
+              title: Text(m.displayName),
+              subtitle: roleLabel.isEmpty ? null : Text(roleLabel),
+              trailing: canRemove
+                  ? GestureDetector(
+                      onTap: () => _removeMember(m),
+                      child: Icon(
+                        m.userId == selfId
+                            ? CupertinoIcons.square_arrow_right
+                            : CupertinoIcons.minus_circle,
+                        color: CupertinoColors.systemRed,
+                      ),
+                    )
+                  : null,
+            );
+          }).toList(),
+        ),
+      ],
+      if (_canManage && _chat.isGroup)
+        _glassSection(
+          margin: const EdgeInsets.fromLTRB(16, 28, 16, 0),
+          children: [
+            CupertinoListTile(
+              leading: _iconBadge(
+                CupertinoIcons.delete_solid,
+                CupertinoColors.systemRed,
+              ),
+              title: const Text(
+                'Удалить чат',
+                style: TextStyle(color: CupertinoColors.systemRed),
+              ),
+              onTap: _deleteChat,
+            ),
+          ],
+        ),
+    ];
   }
 }
 
@@ -1016,7 +1061,7 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
                       trailing: checked
                           ? const Icon(
                               CupertinoIcons.checkmark_circle_fill,
-                              color: CupertinoColors.activeBlue,
+                              color: AppColors.primary,
                             )
                           : const Icon(
                               CupertinoIcons.circle,
@@ -1048,56 +1093,6 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
                 child: const Text('Добавить'),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionButton extends StatelessWidget {
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            height: 56,
-            decoration: BoxDecoration(
-              color: active
-                  ? color.withValues(alpha: 0.15)
-                  : CupertinoColors.systemGrey5.resolveFrom(context),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: CupertinoColors.label.resolveFrom(context),
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

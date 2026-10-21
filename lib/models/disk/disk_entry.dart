@@ -69,21 +69,36 @@ class DiskListing {
 
   bool get isEmpty => folders.isEmpty && files.isEmpty;
 
-  factory DiskListing.fromJson(Map<String, dynamic> json) {
+  /// [folder] — запрошенная папка в виде `DiskRepository.toApiPath`.
+  /// `files/list` кладёт её саму в `folders` рядом с детьми; её убираем по
+  /// совпадению пути, а не «первую по счёту», чтобы смена порядка в ответе
+  /// не спрятала настоящую папку. [normalize] приводит пути к одному виду.
+  factory DiskListing.fromJson(
+    Map<String, dynamic> json, {
+    String folder = '',
+    String Function(String path)? normalize,
+  }) {
     final rawFolders = json['folders'];
     final rawFiles = json['files'];
 
-    // Первая папка в ответе — это сама запрошенная (текущая) папка,
-    // а не её ребёнок, поэтому пропускаем самый первый элемент списка.
     final folders = rawFolders is List
         ? rawFolders
               .whereType<Map>()
               .map((e) => DiskFolder.fromJson(Map<String, dynamic>.from(e)))
               .toList(growable: false)
         : <DiskFolder>[];
-    final trimmedFolders = folders.isEmpty
-        ? folders
-        : folders.sublist(1);
+
+    String key(String path) =>
+        (normalize?.call(path) ?? path).replaceAll(RegExp(r'^/+|/+$'), '');
+    final self = key(folder);
+    final children = folders.where((f) => key(f.path) != self).toList();
+    // Пути не совпали ни с одной папкой (сервер отдал их в другом виде) —
+    // остаётся прежнее, проверенное на живых данных поведение: первая папка
+    // в ответе — сама запрошенная.
+    final trimmedFolders =
+        children.length == folders.length && folders.isNotEmpty
+        ? folders.sublist(1)
+        : children;
 
     final files = rawFiles is List
         ? rawFiles

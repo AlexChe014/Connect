@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 
 import '../config/app_theme.dart';
 
@@ -16,7 +15,7 @@ class AppLoadingIndicator extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: const CircularProgressIndicator(strokeWidth: 2.5),
+        child: CupertinoActivityIndicator(radius: size / 2),
       ),
     );
   }

@@ -1,22 +1,19 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import '../config/app_theme.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
 import '../utils/app_feedback.dart';
 import '../utils/html_text_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
-import '../widgets/app_network_image.dart';
-import '../widgets/chat_avatar.dart';
 import '../widgets/menu_button.dart';
+import '../widgets/news_glass.dart';
 import '../widgets/news_people_sheet.dart';
 import '../widgets/news_reactions.dart';
 import 'news_create_screen.dart';
@@ -195,10 +192,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
   }
 
-  String _formatDate(DateTime date) {
-    return DateFormat("d MMMM y 'г.'", 'ru_RU').format(date);
-  }
-
   void _updateItem(String newsId, NewsItem Function(NewsItem item) mutate) {
     final idx = _news.indexWhere((n) => n.id == newsId);
     if (idx < 0) return;
@@ -271,7 +264,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   Widget _buildSliverBody() {
     if (_isInitialLoading) {
       return SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         sliver: SliverList.builder(
           itemCount: 3,
           itemBuilder: (context, index) => const _NewsCardSkeleton(),
@@ -288,11 +281,15 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        MediaQuery.paddingOf(context).bottom + 24,
+      ),
       sliver: SliverList.separated(
         itemCount: _news.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (context, index) =>
-            const SizedBox(height: AppSpacing.lg),
+        separatorBuilder: (context, index) => const SizedBox(height: 14),
         itemBuilder: (context, index) {
           if (index >= _news.length) {
             return const Padding(
@@ -307,7 +304,6 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
             onVisibilityChanged: (info) => _onCardVisibilityChanged(news, info),
             child: _NewsCard(
               news: news,
-              dateLabel: _formatDate(news.date),
               onOpen: () => _openDetail(news),
               reactionInFlight: _reactionInFlight.contains(news.id),
               onToggleReaction: (emoji) => _toggleReaction(news, emoji),
@@ -325,199 +321,51 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final label = CupertinoColors.label.resolveFrom(context);
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: SafeArea(
-        top: false,
-        bottom: false,
-        child: RefreshIndicator(
-          onRefresh: _loadFirstPage,
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              CupertinoSliverNavigationBar(
-                largeTitle: const Text('Лента'),
-                leading: const MenuButton(),
-                backgroundColor: CupertinoColors.systemGroupedBackground
-                    .withValues(alpha: 0.9),
-                border: null,
-                trailing: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  onPressed: _openCreate,
-                  child: const Icon(CupertinoIcons.square_pencil, size: 26),
-                ),
-              ),
-              _buildSliverBody(),
-            ],
-          ),
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: label,
+          fontSize: 15,
         ),
-      ),
-    );
-  }
-}
-
-class _NewsCard extends StatelessWidget {
-  final NewsItem news;
-  final String dateLabel;
-  final VoidCallback onOpen;
-  final bool reactionInFlight;
-  final void Function(String emoji) onToggleReaction;
-  final VoidCallback onShowViewers;
-
-  const _NewsCard({
-    required this.news,
-    required this.dateLabel,
-    required this.onOpen,
-    required this.reactionInFlight,
-    required this.onToggleReaction,
-    required this.onShowViewers,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage = news.imageUrl != null && news.imageUrl!.trim().isNotEmpty;
-
-    return DefaultTextStyle(
-      style: TextStyle(
-        fontFamily: '.SF Pro Text',
-        decoration: TextDecoration.none,
-        color: CupertinoColors.label.resolveFrom(context),
-        fontSize: 15,
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          color: CupertinoColors.systemBackground.resolveFrom(context),
-          boxShadow: AppColors.cardPhotoShadow,
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            GestureDetector(
-              onTap: onOpen,
-              behavior: HitTestBehavior.opaque,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (hasImage)
-                    AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ImageFiltered(
-                            imageFilter: ImageFilter.blur(
-                              sigmaX: 24,
-                              sigmaY: 24,
-                            ),
-                            child: AppNetworkImage(
-                              url: news.imageUrl,
-                              width: double.infinity,
-                              height: double.infinity,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          ColoredBox(
-                            color: Colors.black.withValues(alpha: 0.18),
-                          ),
-                          AppNetworkImage(
-                            url: news.imageUrl,
-                            width: double.infinity,
-                            height: double.infinity,
-                            fit: BoxFit.contain,
-                          ),
-                        ],
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: _loadFirstPage,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    CupertinoSliverNavigationBar(
+                      largeTitle: const Text('Лента'),
+                      leading: const MenuButton(),
+                      // Прозрачная: под шапкой остаётся системное размытие,
+                      // а заливка дала бы на цветном пятне видимую границу.
+                      backgroundColor: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context)
+                          .withValues(alpha: 0),
+                      automaticBackgroundVisibility: false,
+                      border: null,
+                      trailing: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        onPressed: _openCreate,
+                        child: Icon(
+                          CupertinoIcons.square_pencil,
+                          size: 26,
+                          color: label,
+                        ),
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg,
-                      AppSpacing.lg,
-                      AppSpacing.lg,
-                      0,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            if (news.author != null) ...[
-                              _AuthorChip(
-                                authorName: news.author!.fullName,
-                                avatarUrl: news.author!.avatarUrl,
-                              ),
-                              const SizedBox(width: 10),
-                            ],
-                            Icon(
-                              CupertinoIcons.calendar,
-                              size: 13,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              dateLabel,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: CupertinoColors.secondaryLabel
-                                    .resolveFrom(context),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          news.title,
-                          style: const TextStyle(
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                            height: 1.25,
-                          ),
-                        ),
-                        if (news.contentHtml.trim().isNotEmpty ||
-                            news.content.trim().isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          _ExpandableSummary(
-                            text: news.contentHtml.trim().isNotEmpty
-                                ? news.contentHtml
-                                : news.content,
-                            fontSize: 15,
-                            color: CupertinoColors.label.resolveFrom(context),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: NewsReactionsBar(
-                      news: news,
-                      isLoading: reactionInFlight,
-                      onToggle: onToggleReaction,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  _StatChip(
-                    icon: CupertinoIcons.chat_bubble,
-                    onTap: onOpen,
-                  ),
-                  const SizedBox(width: 12),
-                  _StatChip(
-                    icon: CupertinoIcons.eye,
-                    label: '${news.viewsCount}',
-                    onTap: onShowViewers,
-                  ),
-                ],
+                    _buildSliverBody(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -527,43 +375,154 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
+/// Пост в ленте: автор и дата, заголовок, начало текста, фото, файлы,
+/// внизу реакции и счётчики. Тап по верхней части открывает пост.
+class _NewsCard extends StatelessWidget {
+  const _NewsCard({
+    required this.news,
+    required this.onOpen,
+    required this.reactionInFlight,
+    required this.onToggleReaction,
+    required this.onShowViewers,
+  });
+
+  final NewsItem news;
+  final VoidCallback onOpen;
+  final bool reactionInFlight;
+  final void Function(String emoji) onToggleReaction;
+  final VoidCallback onShowViewers;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final summary = HtmlTextUtils.toParagraphText(
+      news.contentHtml.trim().isNotEmpty ? news.contentHtml : news.content,
+    );
+    final imageUrl = news.imageUrl?.trim() ?? '';
+
+    return AppFlatGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GestureDetector(
+            onTap: onOpen,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  NewsAuthorLine(news: news),
+                  const SizedBox(height: 12),
+                  Text(
+                    news.title,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  if (summary.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _ExpandableSummary(text: summary),
+                  ],
+                  if (imageUrl.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    NewsCoverImage(
+                      url: imageUrl,
+                      moreCount: news.imageUrls.length - 1,
+                    ),
+                  ],
+                  if (news.documents.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.paperclip,
+                          size: 15,
+                          color: secondary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            news.documents.length == 1
+                                ? news.documents.first.name
+                                : '${news.documents.first.name} '
+                                      'и ещё ${news.documents.length - 1}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13, color: secondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: NewsReactionsBar(
+                    news: news,
+                    isLoading: reactionInFlight,
+                    onToggle: onToggleReaction,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                NewsStatChip(icon: CupertinoIcons.chat_bubble, onTap: onOpen),
+                NewsStatChip(
+                  icon: CupertinoIcons.eye,
+                  label: '${news.viewsCount}',
+                  onTap: onShowViewers,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Превью текста новости в 3 строки — если текст в них не помещается,
 /// показывает под ним подпись «Читать полностью» (сам тап обрабатывает
 /// карточка целиком, у подписи нет своего onTap).
 class _ExpandableSummary extends StatelessWidget {
-  const _ExpandableSummary({
-    required this.text,
-    required this.fontSize,
-    required this.color,
-  });
+  const _ExpandableSummary({required this.text});
 
   final String text;
-  final double fontSize;
-  final Color color;
 
   static const _maxLines = 3;
 
   @override
   Widget build(BuildContext context) {
-    final plain = HtmlTextUtils.looksLikeHtml(text)
-        ? HtmlTextUtils.toPlainText(text)
-        : text;
-    final style = TextStyle(color: color, fontSize: fontSize, height: 1.35);
+    final style = TextStyle(
+      color: CupertinoColors.label.resolveFrom(context),
+      fontSize: 15,
+      height: 1.35,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final painter = TextPainter(
-          text: TextSpan(text: plain, style: style),
+          text: TextSpan(text: text, style: style),
           maxLines: _maxLines,
           textDirection: Directionality.of(context),
         )..layout(maxWidth: constraints.maxWidth);
         final isTruncated = painter.didExceedMaxLines;
+        painter.dispose();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              plain,
+              text,
               maxLines: _maxLines,
               overflow: TextOverflow.ellipsis,
               style: style,
@@ -573,9 +532,9 @@ class _ExpandableSummary extends StatelessWidget {
               Text(
                 'Читать полностью',
                 style: TextStyle(
-                  fontSize: fontSize - 2,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: CupertinoColors.activeBlue.resolveFrom(context),
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
               ),
             ],
@@ -592,103 +551,36 @@ class _NewsCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: CupertinoColors.systemBackground.resolveFrom(context),
-        boxShadow: AppColors.cardPhotoShadow,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const AspectRatio(
-            aspectRatio: 16 / 9,
-            child: AppSkeletonBox(borderRadius: 0),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: AppFlatGlassCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
               children: [
-                AppSkeletonBox(width: 160, height: 12, borderRadius: 6),
-                const SizedBox(height: AppSpacing.md),
-                const AppSkeletonBox(height: 16, borderRadius: 6),
-                const SizedBox(height: AppSpacing.sm),
-                AppSkeletonBox(
-                  width: MediaQuery.sizeOf(context).width * 0.6,
-                  height: 16,
-                  borderRadius: 6,
-                ),
+                AppSkeletonBox(width: 36, height: 36, borderRadius: 18),
+                SizedBox(width: 10),
+                AppSkeletonBox(width: 140, height: 12, borderRadius: 6),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, this.label, this.onTap});
-
-  final IconData icon;
-  final String? label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
-    final child = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          if (label != null) ...[
-            const SizedBox(width: 6),
-            Text(label!, style: TextStyle(fontSize: 13, color: color)),
-          ],
-        ],
-      ),
-    );
-
-    if (onTap == null) return child;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: child,
-    );
-  }
-}
-
-class _AuthorChip extends StatelessWidget {
-  const _AuthorChip({required this.authorName, required this.avatarUrl});
-
-  final String authorName;
-  final String? avatarUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        MemberAvatar(displayName: authorName, avatarUrl: avatarUrl, radius: 10),
-        const SizedBox(width: 6),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 160),
-          child: Text(
-            authorName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            const SizedBox(height: 14),
+            const AppSkeletonBox(height: 16, borderRadius: 6),
+            const SizedBox(height: 8),
+            AppSkeletonBox(
+              width: MediaQuery.sizeOf(context).width * 0.6,
+              height: 16,
+              borderRadius: 6,
             ),
-          ),
+            const SizedBox(height: 14),
+            const AspectRatio(
+              aspectRatio: 16 / 9,
+              child: AppSkeletonBox(borderRadius: 16),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -7,10 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-final _urlRegExp = RegExp(
-  r'(https?:\/\/[^\s<>"\)]+)',
-  caseSensitive: false,
-);
+final _urlRegExp = RegExp(r'(https?:\/\/[^\s<>"\)]+)', caseSensitive: false);
 
 /// Текст сообщения чата: plain text / HTML; URL кликабельны.
 class ChatMessageText extends StatefulWidget {
@@ -21,6 +18,7 @@ class ChatMessageText extends StatefulWidget {
     this.fontSize = 15,
     this.maxLines,
     this.overflow,
+    this.paragraphSpacing = 6,
   });
 
   final String text;
@@ -28,6 +26,9 @@ class ChatMessageText extends StatefulWidget {
   final double fontSize;
   final int? maxLines;
   final TextOverflow? overflow;
+
+  /// Отступ после абзаца `<p>` в HTML-тексте.
+  final double paragraphSpacing;
 
   @override
   State<ChatMessageText> createState() => _ChatMessageTextState();
@@ -72,7 +73,8 @@ class _ChatMessageTextState extends State<ChatMessageText> {
     final trimmed = widget.text.trim();
     if (trimmed.isEmpty) return const SizedBox.shrink();
 
-    final effectiveColor = widget.color ??
+    final effectiveColor =
+        widget.color ??
         DefaultTextStyle.of(context).style.color ??
         Colors.black;
 
@@ -128,7 +130,7 @@ class _ChatMessageTextState extends State<ChatMessageText> {
           lineHeight: LineHeight.number(1.35),
         ),
         'p': Style(
-          margin: Margins.only(bottom: 6),
+          margin: Margins.only(bottom: widget.paragraphSpacing),
           padding: HtmlPaddings.zero,
         ),
         'div': Style(margin: Margins.zero, padding: HtmlPaddings.zero),

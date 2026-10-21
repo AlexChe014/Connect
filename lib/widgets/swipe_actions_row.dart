@@ -29,6 +29,12 @@ class SwipeGroupController {
     if (_openId == id) _openId = null;
   }
 
+  /// Закрывает открытую строку — например, перед переходом на другой экран.
+  void closeAll() {
+    final open = _openId;
+    if (open != null) _closers[open]?.call();
+  }
+
   void _notifyOpened(String id) {
     if (_openId == id) return;
     final previous = _openId;
@@ -47,14 +53,14 @@ class SwipeActionsRow extends StatefulWidget {
     required this.child,
     required this.actions,
     required this.groupController,
-    this.borderRadius = 12,
+    this.borderRadius = const BorderRadius.all(Radius.circular(12)),
   });
 
   final String id;
   final Widget child;
   final List<SwipeAction> actions;
   final SwipeGroupController groupController;
-  final double borderRadius;
+  final BorderRadius borderRadius;
 
   @override
   State<SwipeActionsRow> createState() => _SwipeActionsRowState();
@@ -128,7 +134,7 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
     if (widget.actions.isEmpty) return widget.child;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(widget.borderRadius),
+      borderRadius: widget.borderRadius,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onHorizontalDragUpdate: _onDragUpdate,
@@ -138,42 +144,55 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
           builder: (context, _) {
             return Stack(
               children: [
-                Positioned.fill(
-                  child: Row(
-                    children: [
-                      const Spacer(),
-                      for (final action in widget.actions)
-                        GestureDetector(
-                          onTap: () {
-                            _close();
-                            action.onTap();
-                          },
-                          child: Container(
-                            width: _actionWidth,
-                            color: action.color,
-                            alignment: Alignment.center,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  action.icon,
-                                  color: CupertinoColors.white,
-                                  size: 20,
+                // Кнопки рисуются только в открывшейся полосе справа, а не
+                // под всей строкой: строке не нужен непрозрачный фон, и под
+                // ней может просвечивать фон экрана.
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: _controller.value * _maxOffset,
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.centerRight,
+                      minWidth: _maxOffset,
+                      maxWidth: _maxOffset,
+                      child: Row(
+                        children: [
+                          for (final action in widget.actions)
+                            GestureDetector(
+                              onTap: () {
+                                _close();
+                                action.onTap();
+                              },
+                              child: Container(
+                                width: _actionWidth,
+                                color: action.color,
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      action.icon,
+                                      color: CupertinoColors.white,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      action.label,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: CupertinoColors.white,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  action.label,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: CupertinoColors.white,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 Transform.translate(

@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import 'package:connect/config/app_theme.dart';
+
 import 'package:connect/models/bookings/bookable_object.dart';
 import 'package:connect/models/infrastructure/booking_object_type.dart';
 import 'package:connect/models/infrastructure/building.dart';
@@ -12,8 +14,11 @@ import 'package:connect/repositories/infrastructure_repository.dart';
 import 'package:connect/screens/create_booking_screen.dart';
 import 'package:connect/utils/booking_time_utils.dart';
 import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_glass.dart';
+import 'package:connect/widgets/app_icon_badge.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
+import 'package:connect/widgets/booking_glass_form.dart';
 import 'package:connect/widgets/booking_pickers.dart';
 
 class BookingsScreen extends StatefulWidget {
@@ -462,6 +467,12 @@ class _BookingsScreenState extends State<BookingsScreen> {
                         showDragHandle: true,
                         backgroundColor: CupertinoColors.systemGroupedBackground
                             .resolveFrom(context),
+                        clipBehavior: Clip.antiAlias,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(32),
+                          ),
+                        ),
                         builder: (context) {
                           return _EquipmentPickerSheet(
                             equipment: _equipment,
@@ -501,8 +512,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
           sliver: SliverToBoxAdapter(
             child: Text(
               _resultsError!,
-              style: const TextStyle(
-                color: CupertinoColors.systemRed,
+              style: TextStyle(
+                color: CupertinoColors.systemRed.resolveFrom(context),
                 fontSize: 14,
               ),
             ),
@@ -546,48 +557,58 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final label = CupertinoColors.label.resolveFrom(context);
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
           decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
+          color: label,
           fontSize: 16,
         ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator(
-            onRefresh: _isBootLoading ? _bootstrap : _loadResults,
-            child: CustomScrollView(
-              slivers: [
-                const CupertinoSliverNavigationBar(
-                  largeTitle: Text('Бронирование'),
-                  backgroundColor: CupertinoColors.systemGroupedBackground,
-                  border: null,
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: _isBootLoading ? _bootstrap : _loadResults,
+                child: CustomScrollView(
+                  slivers: [
+                    CupertinoSliverNavigationBar(
+                      largeTitle: const Text('Бронирование'),
+                      leading: Navigator.canPop(context)
+                          ? CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              onPressed: () => Navigator.pop(context),
+                              child: Icon(
+                                CupertinoIcons.back,
+                                size: 26,
+                                color: label,
+                              ),
+                            )
+                          : null,
+                      // Прозрачная: под шапкой остаётся системное размытие,
+                      // а заливка дала бы на цветном пятне видимую границу.
+                      backgroundColor: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context)
+                          .withValues(alpha: 0),
+                      automaticBackgroundVisibility: false,
+                      border: null,
+                    ),
+                    ..._buildContentSlivers(context),
+                  ],
                 ),
-                ..._buildContentSlivers(context),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
-}
-
-Widget _iconBadge(IconData icon, Color color) {
-  return Container(
-    width: 29,
-    height: 29,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(7),
-    ),
-    child: Icon(icon, size: 17, color: CupertinoColors.white),
-  );
 }
 
 class _FiltersCard extends StatelessWidget {
@@ -655,20 +676,13 @@ class _FiltersCard extends StatelessWidget {
     required String value,
     required VoidCallback onTap,
   }) {
-    return CupertinoListTile(
-      leading: _iconBadge(icon, color),
-      title: Text(label),
-      additionalInfo: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 150),
-        child: Text(
-          value,
-          textAlign: TextAlign.right,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: CupertinoColors.secondaryLabel),
-        ),
-      ),
-      trailing: const CupertinoListTileChevron(),
+    return BookingPickerRow(
+      icon: icon,
+      color: color,
+      label: label,
+      value: value,
+      valueMaxWidth: 150,
+      fontSize: 15,
       onTap: onTap,
     );
   }
@@ -681,7 +695,7 @@ class _FiltersCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CupertinoListSection.insetGrouped(
+        AppGlassSection(
           margin: EdgeInsets.zero,
           children: [
             _pickerRow(
@@ -740,7 +754,7 @@ class _FiltersCard extends StatelessWidget {
             ),
           ],
         ),
-        CupertinoListSection.insetGrouped(
+        AppGlassSection(
           margin: const EdgeInsets.only(top: 12),
           children: [
             _pickerRow(
@@ -796,15 +810,15 @@ class _FiltersCard extends StatelessWidget {
             ),
           ],
         ),
-        CupertinoListSection.insetGrouped(
+        AppGlassSection(
           margin: const EdgeInsets.only(top: 12),
           children: [
             CupertinoListTile(
-              leading: _iconBadge(
-                CupertinoIcons.person_2_fill,
-                CupertinoColors.systemGreen,
+              leading: const AppIconBadge(
+                icon: CupertinoIcons.person_2_fill,
+                color: CupertinoColors.systemGreen,
               ),
-              title: const Text('Вместимость'),
+              title: const Text('Вместимость', style: TextStyle(fontSize: 15)),
               additionalInfo: ClipRect(
                 child: SizedBox(
                   width: 80,
@@ -814,6 +828,10 @@ class _FiltersCard extends StatelessWidget {
                     textInputAction: TextInputAction.search,
                     textAlign: TextAlign.right,
                     placeholder: 'Напр. 8',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
                     decoration: const BoxDecoration(),
                     padding: EdgeInsets.zero,
                     onSubmitted: onCapacitySubmitted,
@@ -822,11 +840,11 @@ class _FiltersCard extends StatelessWidget {
               ),
             ),
             CupertinoListTile(
-              leading: _iconBadge(
-                CupertinoIcons.slider_horizontal_3,
-                CupertinoColors.systemPurple,
+              leading: const AppIconBadge(
+                icon: CupertinoIcons.slider_horizontal_3,
+                color: CupertinoColors.systemPurple,
               ),
-              title: const Text('Оборудование'),
+              title: const Text('Оборудование', style: TextStyle(fontSize: 15)),
               subtitle: selectedEquipmentIds.isEmpty
                   ? null
                   : Padding(
@@ -843,8 +861,10 @@ class _FiltersCard extends StatelessWidget {
               additionalInfo: selectedEquipmentIds.isEmpty
                   ? Text(
                       equipment.isEmpty ? 'Нет' : 'Выбрать',
-                      style: const TextStyle(
-                        color: CupertinoColors.secondaryLabel,
+                      style: TextStyle(
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     )
                   : null,
@@ -854,12 +874,20 @@ class _FiltersCard extends StatelessWidget {
           ],
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          padding: const EdgeInsets.only(top: 14),
           child: SizedBox(
             width: double.infinity,
-            child: CupertinoButton.filled(
+            child: CupertinoButton(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(16),
               onPressed: () => onApplyPressed(),
-              child: const Text('Показать доступные'),
+              child: const Text(
+                'Показать доступные',
+                style: TextStyle(
+                  color: CupertinoColors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -878,12 +906,15 @@ class _EquipmentChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey5.resolveFrom(context),
+        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         name,
-        style: const TextStyle(fontSize: 12, color: CupertinoColors.label),
+        style: TextStyle(
+          fontSize: 12,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
       ),
     );
   }
@@ -902,14 +933,10 @@ class _FiltersDisclosure extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return AppGlass(
+      borderRadius: BorderRadius.circular(22),
+      shadows: AppGlass.controlShadow,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -918,21 +945,21 @@ class _FiltersDisclosure extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _iconBadge(
-                CupertinoIcons.slider_horizontal_3,
-                CupertinoColors.systemBlue,
+              const AppIconBadge(
+                icon: CupertinoIcons.slider_horizontal_3,
+                color: CupertinoColors.systemBlue,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Фильтры',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -940,9 +967,9 @@ class _FiltersDisclosure extends StatelessWidget {
                       summary,
                       maxLines: isExpanded ? 4 : 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel,
+                        color: secondary,
                         height: 1.25,
                       ),
                     ),
@@ -950,12 +977,14 @@ class _FiltersDisclosure extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Icon(
-                isExpanded
-                    ? CupertinoIcons.chevron_up
-                    : CupertinoIcons.chevron_down,
-                size: 18,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              AnimatedRotation(
+                turns: isExpanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 220),
+                child: Icon(
+                  CupertinoIcons.chevron_down,
+                  size: 18,
+                  color: secondary,
+                ),
               ),
             ],
           ),
@@ -1007,20 +1036,24 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
     final imageUrl = object.previewImageUrl;
     final description = (object.description ?? '').trim();
 
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: CupertinoColors.black.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        // Светлая кромка, как у стеклянных карточек.
+        border: Border.all(
+          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
+        ),
       ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: AppGlass.controlShadow,
+      ),
+      // Скругляем и сам контейнер: одного ClipRRect на iOS не хватало,
+      // нижний градиент вылезал квадратными углами.
       clipBehavior: Clip.antiAlias,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(22),
         child: GestureDetector(
           onTap: widget.onTap,
           child: Stack(
@@ -1044,12 +1077,15 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
                   behavior: HitTestBehavior.opaque,
                   onTap: _toggleFavorite,
                   child: Container(
-                    width: 30,
-                    height: 30,
+                    width: 32,
+                    height: 32,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.35),
                       shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.35),
+                      ),
                     ),
                     child: Icon(
                       _isFavorite
@@ -1079,7 +1115,7 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 28, 10, 10),
+                    padding: const EdgeInsets.fromLTRB(12, 28, 12, 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
@@ -1155,33 +1191,34 @@ class _EquipmentPickerSheetState extends State<_EquipmentPickerSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Padding(
-                padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+                padding: EdgeInsets.fromLTRB(20, 4, 20, 4),
                 child: Text(
                   'Оборудование',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    decoration: TextDecoration.none,
-                    color: CupertinoColors.label,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
               if (widget.equipment.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   child: Text(
                     'В выбранном офисе нет доступного оборудования',
                     style: TextStyle(
                       fontSize: 15,
-                      decoration: TextDecoration.none,
-                      color: CupertinoColors.secondaryLabel,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                   ),
                 )
               else
                 Flexible(
                   child: SingleChildScrollView(
-                    child: CupertinoListSection.insetGrouped(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: AppGlassSection(
+                      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       children: widget.equipment.map((e) {
                         final checked = _working.contains(e.id);
                         return CupertinoListTile(
@@ -1189,7 +1226,7 @@ class _EquipmentPickerSheetState extends State<_EquipmentPickerSheet> {
                           trailing: checked
                               ? const Icon(
                                   CupertinoIcons.check_mark,
-                                  color: CupertinoColors.activeBlue,
+                                  color: AppColors.primary,
                                 )
                               : null,
                           onTap: () {
@@ -1212,14 +1249,33 @@ class _EquipmentPickerSheetState extends State<_EquipmentPickerSheet> {
                   children: [
                     Expanded(
                       child: CupertinoButton(
-                        onPressed: () => setState(_working.clear),
-                        child: const Text('Сбросить'),
+                        onPressed: _working.isEmpty
+                            ? null
+                            : () => setState(_working.clear),
+                        child: Text(
+                          'Сбросить',
+                          style: TextStyle(
+                            color: _working.isEmpty
+                                ? CupertinoColors.tertiaryLabel.resolveFrom(
+                                    context,
+                                  )
+                                : CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ),
                       ),
                     ),
                     Expanded(
-                      child: CupertinoButton.filled(
+                      child: CupertinoButton(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(16),
                         onPressed: () => Navigator.pop(context, _working),
-                        child: const Text('Готово'),
+                        child: const Text(
+                          'Готово',
+                          style: TextStyle(
+                            color: CupertinoColors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ],

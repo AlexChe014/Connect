@@ -17,18 +17,22 @@ abstract final class AppColors {
   static const outlineStrong = Color(0xFFD1D5DB);
   static const error = Color(0xFFDC2626);
 
+  /// Свои сообщения в чате и кнопка отправки — единственный цветной
+  /// акцент в переписке: сразу видно, где ваши сообщения.
+  static const outgoingBubble = primary;
+
   static const double radius = 12;
   static const double buttonRadius = 12;
 
   /// Мягкая тень для карточек с фото (комнаты, новости) — там плоский
   /// стиль (elevation 0 + outline-бордер) выглядит невыразительно.
   static List<BoxShadow> get cardPhotoShadow => [
-        BoxShadow(
-          color: onSurface.withValues(alpha: 0.08),
-          blurRadius: 16,
-          offset: const Offset(0, 6),
-        ),
-      ];
+    BoxShadow(
+      color: onSurface.withValues(alpha: 0.08),
+      blurRadius: 16,
+      offset: const Offset(0, 6),
+    ),
+  ];
 }
 
 /// Единая шкала отступов, чтобы padding/gap не подбирались на глаз по экрану.
@@ -98,6 +102,21 @@ abstract final class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
       canvasColor: AppColors.background,
+      // Крупные заголовки экранов (CupertinoSliverNavigationBar): системные
+      // 34 pt выглядели слишком громоздко рядом с карточками — чуть меньше.
+      cupertinoOverrideTheme: const CupertinoThemeData(
+        textTheme: CupertinoTextThemeData(
+          primaryColor: AppColors.primary,
+          navLargeTitleTextStyle: TextStyle(
+            inherit: false,
+            fontFamily: 'CupertinoSystemDisplay',
+            fontSize: 30,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.36,
+            color: CupertinoColors.label,
+          ),
+        ),
+      ),
       textTheme: const TextTheme(
         headlineSmall: TextStyle(
           color: AppColors.onSurface,
@@ -123,7 +142,11 @@ abstract final class AppTheme {
           fontWeight: FontWeight.w600,
           height: 1.3,
         ),
-        bodyLarge: TextStyle(color: AppColors.onSurface, fontSize: 16, height: 1.4),
+        bodyLarge: TextStyle(
+          color: AppColors.onSurface,
+          fontSize: 16,
+          height: 1.4,
+        ),
         bodyMedium: TextStyle(color: AppColors.onSurface, height: 1.4),
         bodySmall: TextStyle(color: AppColors.onSurfaceVariant, height: 1.4),
         labelMedium: TextStyle(color: AppColors.onSurfaceVariant),
@@ -147,32 +170,12 @@ abstract final class AppTheme {
         foregroundColor: AppColors.onSurface,
         surfaceTintColor: Colors.transparent,
         systemOverlayStyle: systemUiOverlay,
-        shape: Border(
-          bottom: BorderSide(color: AppColors.outline, width: 1),
-        ),
+        shape: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
         titleTextStyle: TextStyle(
           color: AppColors.onSurface,
           fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        height: 64,
-        backgroundColor: AppColors.surfaceElevated,
-        surfaceTintColor: Colors.transparent,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.12),
-        overlayColor: WidgetStatePropertyAll(Colors.transparent),
-        elevation: 0,
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppColors.primary, size: 24);
-          }
-          return const IconThemeData(
-            color: AppColors.onSurfaceVariant,
-            size: 24,
-          );
-        }),
-        labelTextStyle: WidgetStateProperty.all(const TextStyle(fontSize: 0)),
       ),
       drawerTheme: const DrawerThemeData(
         backgroundColor: AppColors.surface,
@@ -202,7 +205,10 @@ abstract final class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         labelStyle: const TextStyle(color: AppColors.onSurfaceVariant),
         hintStyle: const TextStyle(color: AppColors.onSurfaceVariant),
         border: inputBorder(),
@@ -330,11 +336,21 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
       ),
+      // Плавающая тёмная капсула над нижним меню. Отступ снизу держит её
+      // выше таб-бара, поля ввода чата и кнопок «домой»/«написать».
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.onSurface,
-        contentTextStyle: const TextStyle(color: AppColors.onPrimary),
-        shape: RoundedRectangleBorder(borderRadius: borderRadius),
+        backgroundColor: const Color(0xF2232326),
+        contentTextStyle: const TextStyle(
+          fontFamily: '.SF Pro Text',
+          fontSize: 15,
+          height: 1.3,
+          color: AppColors.onPrimary,
+        ),
+        actionTextColor: const Color(0xFF5AA9FF),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         behavior: SnackBarBehavior.floating,
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 84),
       ),
       datePickerTheme: DatePickerThemeData(
         backgroundColor: AppColors.surface,

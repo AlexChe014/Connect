@@ -26,6 +26,7 @@ import 'screens/global_search_screen.dart';
 import 'screens/bonus_program_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
+import 'widgets/app_glass.dart';
 import 'config/branding.dart';
 import 'models/chat.dart';
 import 'repositories/profile_repository.dart';
@@ -143,13 +144,14 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
           // и диалоги приложения построены на Cupertino-виджетах без Material,
           // поэтому здесь задаётся собственный DefaultTextStyle на уровне всего
           // Navigator — это покрывает и showDialog/showCupertinoDialog/шторки.
+          final textStyle = TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          );
           return DefaultTextStyle(
-            style: TextStyle(
-              fontFamily: '.SF Pro Text',
-              decoration: TextDecoration.none,
-              color: CupertinoColors.label.resolveFrom(context),
-              fontSize: 16,
-            ),
+            style: textStyle,
             // Тап в любом месте вне текстового поля (в т.ч. в открытых поверх
             // экранов шторках вроде выбора сотрудника на «Диске») должен
             // закрывать клавиатуру — иначе после ввода текста её нечем убрать.
@@ -160,7 +162,18 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
               child: Stack(
                 children: [
-                  child!,
+                  // Корневой Scaffold над Navigator: ScaffoldMessenger
+                  // показывает SnackBar только в самом верхнем Scaffold, и
+                  // без этой обёртки им был Scaffold главного экрана —
+                  // на экранах, открытых поверх него, SnackBar рисовался
+                  // под ними и был не виден.
+                  // Material внутри Scaffold сбрасывает DefaultTextStyle на
+                  // тему — возвращаем стиль приложения.
+                  Scaffold(
+                    backgroundColor: Colors.transparent,
+                    resizeToAvoidBottomInset: false,
+                    body: DefaultTextStyle(style: textStyle, child: child!),
+                  ),
                   const HomeShortcutButton(),
                   const VpnBanner(),
                 ],
@@ -333,192 +346,211 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     return Scaffold(
       key: _scaffoldKey,
-      drawerScrimColor: Colors.transparent,
+      // Тот же серый, что у вкладок: плавающее меню лежит на нём.
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
+      drawerScrimColor: Colors.black.withValues(alpha: 0.05),
+      // При открытом меню тело тянется под (спрятанный) таббар: размытие
+      // ложится на весь экран одним слоем, без шва над зоной таббара.
+      // Под размытием перекладка контента не видна.
+      extendBody: _isDrawerOpen,
       onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
-        backgroundColor: AppColors.surfaceElevated,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
         child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              _DrawerHeaderCard(
-                displayName: _drawerDisplayName,
-                position: _drawerPosition,
-                avatarUrl: _drawerAvatarUrl,
-                onProfileTap: () {
-                  Navigator.pop(context);
-                  _openProfile();
-                },
-              ),
-              const SizedBox(height: 10),
-              _DrawerMenuCard(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 0, 8),
+            child: AppGlass(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.search,
-                    label: 'Поиск',
-                    selected: false,
-                    onTap: () {
+                  _DrawerHeaderCard(
+                    displayName: _drawerDisplayName,
+                    position: _drawerPosition,
+                    avatarUrl: _drawerAvatarUrl,
+                    onProfileTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const GlobalSearchScreen(),
-                        ),
-                      );
+                      _openProfile();
                     },
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.news,
-                    label: 'Лента',
-                    selected: !_isProfileOpen && _currentIndex == 0,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 0);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.calendar,
-                    label: 'Календарь',
-                    selected: !_isProfileOpen && _currentIndex == 1,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 1);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.chat_bubble_2,
-                    label: 'Чаты',
-                    selected: !_isProfileOpen && _currentIndex == 2,
-                    badgeLabel: _unreadChatsBadge,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 2);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.star,
-                    label: 'Избранное',
-                    selected: !_isProfileOpen && _currentIndex == 3,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 3);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.videocam,
-                    label: 'Коннектор',
-                    selected: !_isProfileOpen && _currentIndex == 4,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 4);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _DrawerMenuCard(
-                children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.person_2,
-                    label: 'Сотрудники',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const EmployeesScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.bookmark,
-                    label: 'Бронирования',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const BookingsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.mail,
-                    label: 'Почта',
-                    selected: false,
-                    badgeCount: MailUnreadService.instance.unreadCount,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context)
-                          .push(
+                  const _DrawerDivider(),
+                  _DrawerMenuCard(
+                    children: [
+                      _DrawerItem(
+                        icon: CupertinoIcons.search,
+                        label: 'Поиск',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
                             CupertinoPageRoute(
-                              builder: (_) => const MailScreen(),
+                              builder: (_) => const GlobalSearchScreen(),
                             ),
-                          )
-                          .then((_) => MailUnreadService.instance.refresh());
-                    },
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.news,
+                        label: 'Лента',
+                        selected: !_isProfileOpen && _currentIndex == 0,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 0);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.calendar,
+                        label: 'Календарь',
+                        selected: !_isProfileOpen && _currentIndex == 1,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 1);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.chat_bubble_2,
+                        label: 'Чаты',
+                        selected: !_isProfileOpen && _currentIndex == 2,
+                        badgeLabel: _unreadChatsBadge,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 2);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.star,
+                        label: 'Избранное',
+                        selected: !_isProfileOpen && _currentIndex == 3,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 3);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.videocam,
+                        label: 'Коннектор',
+                        selected: !_isProfileOpen && _currentIndex == 4,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 4);
+                        },
+                      ),
+                    ],
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.doc_text,
-                    label: 'Согласование',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const DocumentsSigningScreen(),
-                        ),
-                      );
-                    },
+                  const _DrawerDivider(),
+                  _DrawerMenuCard(
+                    children: [
+                      _DrawerItem(
+                        icon: CupertinoIcons.person_2,
+                        label: 'Сотрудники',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const EmployeesScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.bookmark,
+                        label: 'Бронирования',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const BookingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.envelope,
+                        label: 'Почта',
+                        selected: false,
+                        badgeCount: MailUnreadService.instance.unreadCount,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context)
+                              .push(
+                                CupertinoPageRoute(
+                                  builder: (_) => const MailScreen(),
+                                ),
+                              )
+                              .then(
+                                (_) => MailUnreadService.instance.refresh(),
+                              );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.doc_text,
+                        label: 'Согласование',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const DocumentsSigningScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.folder,
+                        label: 'Диск',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const DiskScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.gift,
+                        label: 'Бонусная программа',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const BonusProgramScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.folder,
-                    label: 'Диск',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(builder: (_) => const DiskScreen()),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.gift,
-                    label: 'Бонусная программа',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const BonusProgramScreen(),
-                        ),
-                      );
-                    },
+                  const _DrawerDivider(),
+                  _DrawerMenuCard(
+                    children: [
+                      _DrawerItem(
+                        icon: CupertinoIcons.book,
+                        label: 'База знаний',
+                        selected: false,
+                        isExternal: true,
+                        onTap: () {
+                          Navigator.pop(context);
+                          launchUrl(
+                            Uri.parse(
+                              'https://support.xon-connect.ru/books/rukovodstvo-polzovatelia-xonconnect/page/avtorizaciia',
+                            ),
+                            mode: LaunchMode.externalApplication,
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              _DrawerMenuCard(
-                children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.book,
-                    label: 'База знаний',
-                    selected: false,
-                    isExternal: true,
-                    onTap: () {
-                      Navigator.pop(context);
-                      launchUrl(
-                        Uri.parse(
-                          'https://support.xon-connect.ru/books/rukovodstvo-polzovatelia-xonconnect/page/avtorizaciia',
-                        ),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -541,65 +573,253 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               },
             ),
           ),
-          if (_isDrawerOpen)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: Container(color: Colors.black.withValues(alpha: 0.05)),
-                ),
-              ),
-            ),
+          if (_isDrawerOpen) const _DrawerBackdrop(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          HapticFeedback.selectionClick();
-          setState(() => _currentIndex = index);
-        },
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.news),
-            selectedIcon: Icon(CupertinoIcons.news_solid),
-            label: 'Лента',
+      // При открытом меню таббар прячем: иначе он выглядит активным,
+      // хотя тап по нему только закрывает меню.
+      bottomNavigationBar: IgnorePointer(
+        ignoring: _isDrawerOpen,
+        child: AnimatedOpacity(
+          opacity: _isDrawerOpen ? 0 : 1,
+          duration: const Duration(milliseconds: 200),
+          child: _FloatingTabBar(
+            currentIndex: _currentIndex,
+            onSelect: (index) {
+              HapticFeedback.selectionClick();
+              setState(() => _currentIndex = index);
+            },
+            items: [
+              const _TabItem(
+                icon: CupertinoIcons.news,
+                activeIcon: CupertinoIcons.news_solid,
+                label: 'Лента',
+              ),
+              const _TabItem(
+                icon: CupertinoIcons.calendar,
+                activeIcon: CupertinoIcons.calendar,
+                label: 'Календарь',
+              ),
+              _TabItem(
+                icon: CupertinoIcons.chat_bubble_2,
+                activeIcon: CupertinoIcons.chat_bubble_2_fill,
+                label: 'Чаты',
+                badge: _unreadChatsCount > 0 ? _unreadChatsBadge : null,
+              ),
+              const _TabItem(
+                icon: CupertinoIcons.star,
+                activeIcon: CupertinoIcons.star_fill,
+                label: 'Избранное',
+              ),
+              const _TabItem(
+                icon: CupertinoIcons.videocam,
+                activeIcon: CupertinoIcons.videocam_fill,
+                label: 'Коннектор',
+              ),
+            ],
           ),
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.calendar),
-            label: 'Календарь',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: _unreadChatsCount > 0,
-              label: Text(_unreadChatsBadge),
-              child: const Icon(CupertinoIcons.chat_bubble_2),
-            ),
-            selectedIcon: Badge(
-              isLabelVisible: _unreadChatsCount > 0,
-              label: Text(_unreadChatsBadge),
-              child: const Icon(CupertinoIcons.chat_bubble_2_fill),
-            ),
-            label: 'Чаты',
-          ),
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.star),
-            selectedIcon: Icon(CupertinoIcons.star_fill),
-            label: 'Избранное',
-          ),
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.videocam),
-            selectedIcon: Icon(CupertinoIcons.videocam_fill),
-            label: 'Коннектор',
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Карточка-шапка меню: лого приложения + профиль текущего пользователя.
-/// Белый фон карточки совпадает с фоном лого — благодаря этому у логотипа
-/// больше нет шва с серой подложкой меню.
+/// Размытие под открытым боковым меню.
+class _DrawerBackdrop extends StatelessWidget {
+  const _DrawerBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabItem {
+  const _TabItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    this.badge,
+  });
+
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+
+  /// Подпись красного бейджа (`3`, `99+`); `null` — без бейджа.
+  final String? badge;
+}
+
+/// Нижнее меню — плавающая белая капсула над серым фоном вкладок,
+/// активный пункт подсвечен мягкой подложкой цвета бренда.
+class _FloatingTabBar extends StatelessWidget {
+  const _FloatingTabBar({
+    required this.currentIndex,
+    required this.onSelect,
+    required this.items,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final List<_TabItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    // Капсула частично заходит в зону home indicator, как системный
+    // таб-бар iOS, но не ближе 12pt к краю на устройствах без неё.
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final bottom = safeBottom > 0 ? (safeBottom - 10).clamp(12.0, 40.0) : 12.0;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 6, 16, bottom),
+      child: Container(
+        height: 62,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
+          ),
+          borderRadius: BorderRadius.circular(31),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < items.length; i++)
+              Expanded(
+                child: _TabButton(
+                  item: items[i],
+                  selected: i == currentIndex,
+                  onTap: () => onSelect(i),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  const _TabButton({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _TabItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected
+        ? AppColors.primary
+        : CupertinoColors.secondaryLabel.resolveFrom(context);
+    final badge = item.badge;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.1)
+                : const Color(0x00000000),
+            borderRadius: BorderRadius.circular(27),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    selected ? item.activeIcon : item.icon,
+                    size: 23,
+                    color: color,
+                  ),
+                  if (badge != null)
+                    Positioned(
+                      top: -5,
+                      left: 15,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 18),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemRed,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: CupertinoColors
+                                .secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          badge,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                            color: CupertinoColors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: TextStyle(
+                  fontFamily: '.SF Pro Text',
+                  fontSize: 10.5,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Шапка меню: лого приложения + профиль текущего пользователя.
+/// Лежит прямо на стеклянной панели, без своей карточки.
 class _DrawerHeaderCard extends StatelessWidget {
   const _DrawerHeaderCard({
     required this.displayName,
@@ -616,79 +836,45 @@ class _DrawerHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.onSurface.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      clipBehavior: Clip.antiAlias,
+      decoration: const BoxDecoration(),
       child: Column(
         children: [
-          BrandingLoginLogo(height: 32),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.outline),
-          const SizedBox(height: 14),
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onProfileTap,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    MemberAvatar(
-                      displayName: displayName,
-                      avatarUrl: avatarUrl,
-                      radius: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          if ((position ?? '').isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              position!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      CupertinoIcons.chevron_right,
-                      size: 16,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: BrandingLoginLogo(height: 26),
+          ),
+          Container(
+            height: 0.5,
+            margin: const EdgeInsets.only(left: 16),
+            color: CupertinoColors.separator.resolveFrom(context),
+          ),
+          CupertinoListTile(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leadingSize: 40,
+            leading: MemberAvatar(
+              displayName: displayName,
+              avatarUrl: avatarUrl,
+              radius: 20,
             ),
+            title: Text(
+              displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            subtitle: (position ?? '').isNotEmpty
+                ? Text(
+                    position!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  )
+                : null,
+            backgroundColor: const Color(0x00000000),
+            trailing: const CupertinoListTileChevron(),
+            onTap: onProfileTap,
           ),
         ],
       ),
@@ -696,8 +882,21 @@ class _DrawerHeaderCard extends StatelessWidget {
   }
 }
 
-/// Сгруппированный список пунктов меню в виде белой карточки с обводкой —
-/// вместо серого фона меню "просвечивающего" между пунктами.
+/// Тонкий разделитель между группами пунктов меню.
+class _DrawerDivider extends StatelessWidget {
+  const _DrawerDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      color: CupertinoColors.separator.resolveFrom(context),
+    );
+  }
+}
+
+/// Группа пунктов меню.
 class _DrawerMenuCard extends StatelessWidget {
   const _DrawerMenuCard({required this.children});
 
@@ -705,23 +904,7 @@ class _DrawerMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outline),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: AppColors.outline),
-            children[i],
-          ],
-        ],
-      ),
-    );
+    return Column(children: children);
   }
 }
 
@@ -742,7 +925,7 @@ class _DrawerItem extends StatelessWidget {
   final VoidCallback onTap;
 
   /// `true` — пункт открывает внешнюю ссылку, а не раздел приложения:
-  /// вместо синей заливки показывает иконку внешней ссылки.
+  /// справа показывается иконка внешней ссылки.
   final bool isExternal;
 
   /// Число непрочитанного для этого раздела — 0 скрывает бейдж.
@@ -753,33 +936,66 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = selected ? AppColors.primary : AppColors.onSurface;
     final text = badgeLabel ?? (badgeCount > 99 ? '99+' : '$badgeCount');
     final showBadge =
         (badgeLabel != null && badgeLabel!.isNotEmpty) || badgeCount > 0;
-    return Material(
-      color: selected
-          ? AppColors.primary.withValues(alpha: 0.1)
-          : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final labelColor = CupertinoColors.label.resolveFrom(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        pressedOpacity: 0.55,
+        onPressed: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          // Выбранный пункт — светлая «стеклянная» капсула, без цвета.
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: selected
+                ? (isDark ? const Color(0x24FFFFFF) : const Color(0xE6FFFFFF))
+                : const Color(0x00FFFFFF),
+            border: Border.all(
+              color: selected
+                  ? (isDark ? const Color(0x1FFFFFFF) : const Color(0x14000000))
+                  : const Color(0x00FFFFFF),
+              width: 0.5,
+            ),
+            boxShadow: selected && !isDark
+                ? const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
           child: Row(
             children: [
-              Icon(icon, size: 20, color: tint),
+              SizedBox(
+                width: 24,
+                child: Icon(icon, size: 19, color: labelColor),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 15,
-                    color: tint,
+                    letterSpacing: -0.2,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: labelColor,
                   ),
                 ),
               ),
-              if (showBadge) ...[
+              if (showBadge)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 7,
@@ -798,13 +1014,11 @@ class _DrawerItem extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-              ],
               if (isExternal)
                 Icon(
-                  CupertinoIcons.arrow_up_right_square,
-                  size: 18,
-                  color: AppColors.onSurfaceVariant,
+                  CupertinoIcons.arrow_up_right,
+                  size: 15,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
                 ),
             ],
           ),

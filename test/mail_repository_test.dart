@@ -99,33 +99,52 @@ void main() {
     },
   );
 
+  Future<List<String>> sendFrom7({required int defaultId}) async {
+    final paths = <String>[];
+    await http.runWithClient(
+      () async {
+        await repository.sendMail(
+          const SendMailRequest(
+            connectionId: 7,
+            to: 'a@b.ru',
+            subject: 'Subject',
+            body: 'Message',
+          ),
+        );
+      },
+      () => MockClient((request) async {
+        final path = request.url.path;
+        paths.add(path);
+        if (path.endsWith('/smtp/get/sendable')) {
+          return response([
+            {'id': 3, 'email': 'main@b.ru', 'is_default': defaultId == 3},
+            {'id': 7, 'email': 'second@b.ru', 'is_default': defaultId == 7},
+          ]);
+        }
+        if (path.contains('/smtp/set/')) return response({'id': 7});
+        expect(request.body, contains('Message'));
+        return response(true);
+      }),
+    );
+    return paths;
+  }
+
   test(
-    'send selects intended SMTP connection before sending multipart',
+    'send selects intended SMTP connection and restores the previous default',
     () async {
-      final paths = <String>[];
-      await http.runWithClient(
-        () async {
-          await repository.sendMail(
-            const SendMailRequest(
-              connectionId: 7,
-              to: 'a@b.ru',
-              subject: 'Subject',
-              body: 'Message',
-            ),
-          );
-        },
-        () => MockClient((request) async {
-          paths.add(request.url.path);
-          if (request.url.path.endsWith('/smtp/set/7')) {
-            return response({'id': 7});
-          }
-          expect(request.body, contains('Message'));
-          return response(true);
-        }),
-      );
-      expect(paths.length, 2);
-      expect(paths.first, endsWith('/smtp/set/7'));
-      expect(paths.last, endsWith('/smtp/send'));
+      final paths = await sendFrom7(defaultId: 3);
+      expect(paths, hasLength(4));
+      expect(paths[0], endsWith('/smtp/get/sendable'));
+      expect(paths[1], endsWith('/smtp/set/7'));
+      expect(paths[2], endsWith('/smtp/send'));
+      expect(paths[3], endsWith('/smtp/set/3'));
     },
   );
+
+  test('send from the default connection does not switch it', () async {
+    final paths = await sendFrom7(defaultId: 7);
+    expect(paths, hasLength(2));
+    expect(paths.first, endsWith('/smtp/get/sendable'));
+    expect(paths.last, endsWith('/smtp/send'));
+  });
 }

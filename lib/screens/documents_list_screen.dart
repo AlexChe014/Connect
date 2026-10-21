@@ -2,13 +2,17 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show RefreshIndicator, ScaffoldMessenger, SnackBar;
 
+import '../config/app_theme.dart';
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../services/document_pending_service.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/booking_glass_form.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import 'document_detail_screen.dart';
 
@@ -357,41 +361,55 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     }
   }
 
+  /// Плавающая стеклянная панель массового действия над списком.
   Widget _buildSelectionBar() {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGroupedBackground.resolveFrom(context),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-          ),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: CupertinoButton(
-                  color: CupertinoColors.systemGrey5.resolveFrom(context),
-                  onPressed: _isSubmitting ? null : _clearSelection,
-                  child: const Text('Отмена'),
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: AppGlass(
+          borderRadius: BorderRadius.circular(26),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: CupertinoButton(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    borderRadius: BorderRadius.circular(20),
+                    onPressed: _isSubmitting ? null : _clearSelection,
+                    child: Text(
+                      'Отмена',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: CupertinoButton.filled(
-                  onPressed: _isSubmitting ? null : _bulkAccept,
-                  child: _isSubmitting
-                      ? const CupertinoActivityIndicator(
-                          color: CupertinoColors.white,
-                        )
-                      : Text('$_acceptActionLabel (${_selectedGuids.length})'),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: CupertinoButton(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(20),
+                    onPressed: _isSubmitting ? null : _bulkAccept,
+                    child: _isSubmitting
+                        ? const CupertinoActivityIndicator(
+                            color: CupertinoColors.white,
+                          )
+                        : Text(
+                            '$_acceptActionLabel (${_selectedGuids.length})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: CupertinoColors.white,
+                            ),
+                          ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -400,47 +418,80 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
+    final label = CupertinoColors.label.resolveFrom(context);
+
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: groupedBg,
       navigationBar: CupertinoNavigationBar(
         middle: Text(
           _selectionMode
               ? 'Выбрано: ${_selectedGuids.length}'
               : widget.service.displayName,
         ),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        // Прозрачная: под шапкой остаётся системное размытие, а заливка
+        // дала бы на цветном пятне видимую границу.
+        backgroundColor: groupedBg.withValues(alpha: 0),
+        automaticBackgroundVisibility: false,
         border: null,
-        leading: _selectionMode
-            ? CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: _isSubmitting ? null : _clearSelection,
-                child: const Icon(CupertinoIcons.clear, size: 24),
-              )
-            : null,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: _selectionMode
+              ? (_isSubmitting ? null : _clearSelection)
+              : () => Navigator.pop(context),
+          child: Icon(
+            _selectionMode ? CupertinoIcons.xmark : CupertinoIcons.back,
+            size: _selectionMode ? 22 : 26,
+            color: label,
+          ),
+        ),
       ),
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
           decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
+          color: label,
           fontSize: 16,
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(child: _buildBody()),
-              if (_selectionMode) _buildSelectionBar(),
-            ],
-          ),
+        child: Stack(
+          children: [
+            const AppGlassGlow(height: 360),
+            // Свой context — под скаффолдом, где в MediaQuery уже учтена
+            // высота полупрозрачной шапки.
+            Builder(builder: _buildBody),
+            if (_selectionMode)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _buildSelectionBar(),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
+    final padding = MediaQuery.paddingOf(context);
+
     if (_isLoading) {
-      return const AppSkeletonList(count: 8);
+      return CustomScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        slivers: [
+          AppGlassSliverList(
+            itemCount: 6,
+            padding: EdgeInsets.fromLTRB(16, padding.top + 12, 16, 24),
+            itemBuilder: (context, index) => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: AppSkeletonListTile(),
+            ),
+          ),
+        ],
+      );
     }
 
     if (_errorMessage != null) {
@@ -453,7 +504,8 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     }
 
     if (_documents.isEmpty) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
+        edgeOffset: padding.top,
         onRefresh: () => _loadDocuments(),
         child: AppEmptyState(
           icon: CupertinoIcons.tray,
@@ -464,36 +516,69 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
+      edgeOffset: padding.top,
       onRefresh: () => _loadDocuments(),
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        itemCount: _documents.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final document = _documents[index];
-          final guid = DocumentPayloadUtils.guid(document);
-          final title =
-              DocumentPayloadUtils.datalist(document) ??
-              DocumentPayloadUtils.title(document);
-          final selected = guid != null && _selectedGuids.contains(guid);
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(child: SizedBox(height: padding.top)),
+          SliverToBoxAdapter(
+            child: AppGlassSectionLabel(
+              _selectionMode
+                  ? 'Отметьте документы'
+                  : 'Документов: ${_documents.length}',
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+            ),
+          ),
+          AppGlassSliverList(
+            itemCount: _documents.length,
+            // Поле 16 + значок 29 + зазор 12.
+            separatorIndent: 57,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemBuilder: (context, index) {
+              final document = _documents[index];
+              final guid = DocumentPayloadUtils.guid(document);
+              final title =
+                  DocumentPayloadUtils.datalist(document) ??
+                  DocumentPayloadUtils.title(document);
+              final selected = guid != null && _selectedGuids.contains(guid);
 
-          return _DocumentTile(
-            title: title,
-            selectionMode: _selectionMode,
-            selected: selected,
-            onTap: () => _openDocument(document),
-            onLongPress: () => _enterSelectionMode(document),
-          );
-        },
+              return _DocumentRow(
+                title: title,
+                isSigning: widget.service.isSigningService,
+                selectionMode: _selectionMode,
+                selected: selected,
+                onTap: () => _openDocument(document),
+                onLongPress: () => _enterSelectionMode(document),
+              );
+            },
+          ),
+          if (!_selectionMode)
+            const SliverToBoxAdapter(
+              child: BookingFootnote(
+                'Удерживайте документ, чтобы выбрать несколько '
+                'и обработать их разом.',
+              ),
+            ),
+          // Под плавающей панелью выбора последняя строка не прячется.
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: padding.bottom + (_selectionMode ? 96 : 32),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _DocumentTile extends StatelessWidget {
-  const _DocumentTile({
+/// Строка документа на стеклянном списке. В режиме выбора вместо
+/// значка — отметка, шеврон прячется.
+class _DocumentRow extends StatelessWidget {
+  const _DocumentRow({
     required this.title,
+    required this.isSigning,
     required this.selectionMode,
     required this.selected,
     required this.onTap,
@@ -501,6 +586,7 @@ class _DocumentTile extends StatelessWidget {
   });
 
   final String title;
+  final bool isSigning;
   final bool selectionMode;
   final bool selected;
   final VoidCallback onTap;
@@ -508,50 +594,57 @@ class _DocumentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: ColoredBox(
         color: selected
-            ? CupertinoColors.activeBlue.withValues(alpha: 0.1)
-            : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-                context,
-              ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        onLongPress: onLongPress,
+            ? AppColors.primary.withValues(alpha: 0.08)
+            : const Color(0x00000000),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
           child: Row(
             children: [
-              if (selectionMode) ...[
-                Icon(
-                  selected
-                      ? CupertinoIcons.checkmark_circle_fill
-                      : CupertinoIcons.circle,
-                  color: selected
-                      ? CupertinoColors.activeBlue
-                      : CupertinoColors.systemGrey3.resolveFrom(context),
-                ),
-                const SizedBox(width: 12),
-              ],
+              SizedBox(
+                width: 29,
+                height: 29,
+                child: selectionMode
+                    ? Icon(
+                        selected
+                            ? CupertinoIcons.checkmark_circle_fill
+                            : CupertinoIcons.circle,
+                        size: 26,
+                        color: selected
+                            ? AppColors.primary
+                            : CupertinoColors.systemGrey3.resolveFrom(context),
+                      )
+                    : AppIconBadge(
+                        icon: CupertinoIcons.doc_text_fill,
+                        color: isSigning
+                            ? CupertinoColors.systemBlue
+                            : CupertinoColors.systemGreen,
+                      ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: CupertinoColors.label,
+                    height: 1.3,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
               ),
-              if (!selectionMode)
+              if (!selectionMode) ...[
+                const SizedBox(width: 8),
                 Icon(
                   CupertinoIcons.chevron_forward,
                   size: 16,
                   color: CupertinoColors.tertiaryLabel.resolveFrom(context),
                 ),
+              ],
             ],
           ),
         ),

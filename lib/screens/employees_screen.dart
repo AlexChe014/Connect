@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/chat_service.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
-import '../widgets/chat_avatar.dart';
+import '../widgets/employee_row.dart';
 import 'employee_detail_screen.dart';
 
 class EmployeesScreen extends StatefulWidget {
@@ -206,13 +206,9 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   Widget _buildResultsSliver() {
     if (_isInitialLoading) {
-      return SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        sliver: SliverList.separated(
-          itemCount: 6,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) => const AppSkeletonCardTile(),
-        ),
+      return AppGlassSliverList(
+        itemCount: 8,
+        itemBuilder: (context, index) => const AppSkeletonListTile(),
       );
     }
 
@@ -225,195 +221,107 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       );
     }
 
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      sliver: SliverList.separated(
-        itemCount: _items.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          if (index >= _items.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CupertinoActivityIndicator()),
+    return SliverMainAxisGroup(
+      slivers: [
+        AppGlassSliverList(
+          separatorIndent: EmployeeRow.separatorIndent,
+          padding: EdgeInsets.fromLTRB(16, 4, 16, _isLoadingMore ? 0 : 24),
+          itemCount: _items.length,
+          itemBuilder: (context, index) {
+            final user = _items[index];
+            return EmployeeRow(
+              user: user,
+              onTap: () => _openDetail(user),
+              trailing: EmployeeRowButton(
+                icon: CupertinoIcons.bubble_left,
+                onPressed: () => _openChat(user),
+              ),
             );
-          }
-
-          final user = _items[index];
-          return _EmployeeTile(
-            user: user,
-            onTap: () => _openDetail(user),
-            onChat: () => _openChat(user),
-          );
-        },
-      ),
+          },
+        ),
+        if (_isLoadingMore)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CupertinoActivityIndicator()),
+            ),
+          ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final label = CupertinoColors.label.resolveFrom(context);
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
           decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
+          color: label,
           fontSize: 16,
         ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator(
-            onRefresh: () async {
-              _debounce?.cancel();
-              _appliedQ = _qController.text.trim();
-              await _loadFirstPage();
-            },
-            child: CustomScrollView(
-              controller: _scrollController,
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('Сотрудники'),
-                  leading: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    onPressed: () => Navigator.pop(context),
-                    child: const Icon(CupertinoIcons.back, size: 26),
-                  ),
-                  backgroundColor: CupertinoColors.systemGroupedBackground,
-                  border: null,
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    child: CupertinoSearchTextField(
-                      controller: _qController,
-                      placeholder: 'Фамилия, имя, отчество или почта',
-                      onSubmitted: (_) {
-                        _debounce?.cancel();
-                        _appliedQ = _qController.text.trim();
-                        _loadFirstPage();
-                      },
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: () async {
+                  _debounce?.cancel();
+                  _appliedQ = _qController.text.trim();
+                  await _loadFirstPage();
+                },
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    CupertinoSliverNavigationBar(
+                      largeTitle: const Text('Сотрудники'),
+                      leading: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        onPressed: () => Navigator.pop(context),
+                        child: Icon(
+                          CupertinoIcons.back,
+                          size: 26,
+                          color: label,
+                        ),
+                      ),
+                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
+                      // дала бы на цветном пятне видимую границу.
+                      backgroundColor: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context)
+                          .withValues(alpha: 0),
+                      automaticBackgroundVisibility: false,
+                      border: null,
                     ),
-                  ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: AppGlass(
+                          borderRadius: BorderRadius.circular(12),
+                          shadows: AppGlass.controlShadow,
+                          child: CupertinoSearchTextField(
+                            controller: _qController,
+                            backgroundColor: const Color(0x00000000),
+                            placeholder: 'Фамилия, имя, отчество или почта',
+                            onSubmitted: (_) {
+                              _debounce?.cancel();
+                              _appliedQ = _qController.text.trim();
+                              _loadFirstPage();
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    _buildResultsSliver(),
+                  ],
                 ),
-                _buildResultsSliver(),
-              ],
+              ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmployeeTile extends StatelessWidget {
-  const _EmployeeTile({
-    required this.user,
-    required this.onTap,
-    required this.onChat,
-  });
-
-  final StaffUser user;
-  final VoidCallback onTap;
-  final VoidCallback onChat;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  MemberAvatar(
-                    displayName: user.fullName,
-                    avatarUrl: user.avatarUrl,
-                    radius: 24,
-                  ),
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: user.isOnline
-                            ? const Color(0xFF34C759)
-                            : AppColors.outlineStrong,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: CupertinoColors
-                              .secondarySystemGroupedBackground
-                              .resolveFrom(context),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (user.isBirthdayToday)
-                    Positioned(
-                      left: -4,
-                      bottom: -4,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors
-                              .secondarySystemGroupedBackground
-                              .resolveFrom(context),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Text('🎂', style: TextStyle(fontSize: 13)),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  user.fullName,
-                  style: TextStyle(
-                    fontFamily: '.SF Pro Text',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label.resolveFrom(context),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: onChat,
-                child: const Icon(
-                  CupertinoIcons.bubble_left,
-                  size: 22,
-                  color: CupertinoColors.systemBlue,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                CupertinoIcons.chevron_forward,
-                size: 16,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              ),
-            ],
-          ),
+          ],
         ),
       ),
     );

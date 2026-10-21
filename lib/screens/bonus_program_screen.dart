@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show RefreshIndicator;
 
-import '../config/app_icons.dart';
 import '../models/bonus_program/point_balance.dart';
 import '../models/bonus_program/roulette_config.dart';
 import '../repositories/bonus_program_repository.dart';
@@ -99,7 +98,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -119,7 +118,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
             children: [
               Expanded(
                 child: _BonusFeatureCard(
-                  icon: AppIcons.bonusHistory,
+                  icon: CupertinoIcons.clock_fill,
                   title: 'История баллов',
                   subtitle: 'Начисления и списания',
                   colors: const [Color(0xFF36D1DC), Color(0xFF5B86E5)],
@@ -133,7 +132,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: _BonusFeatureCard(
-                  icon: AppIcons.bonusTransfer,
+                  icon: CupertinoIcons.arrow_right_arrow_left,
                   title: 'Перевести баллы',
                   subtitle: 'Поделитесь с коллегой',
                   colors: const [Color(0xFF8E54E9), Color(0xFF4776E6)],
@@ -151,7 +150,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
             children: [
               Expanded(
                 child: _BonusFeatureCard(
-                  icon: AppIcons.bonusShop,
+                  icon: CupertinoIcons.gift_fill,
                   title: 'Магазин',
                   subtitle: 'Обменяйте баллы на призы',
                   colors: const [Color(0xFFFF5F6D), Color(0xFFFFC371)],
@@ -165,7 +164,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: _BonusFeatureCard(
-                  icon: AppIcons.bonusWheel,
+                  icon: CupertinoIcons.dial_fill,
                   title: 'Колесо фортуны',
                   subtitle: 'Испытайте удачу',
                   colors: const [Color(0xFFF6D365), Color(0xFFFDA085)],
@@ -180,7 +179,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
           ),
           const SizedBox(height: 12),
           _BonusWideCard(
-            icon: AppIcons.bonusTrophy,
+            icon: CupertinoIcons.rosette,
             title: 'Форма достижений',
             subtitle: 'Заявка на бонусные баллы',
             colors: const [Color(0xFF11998E), Color(0xFF38EF7D)],
@@ -228,7 +227,7 @@ class _BalanceCard extends StatelessWidget {
             right: -22,
             top: -26,
             child: Icon(
-              AppIcons.bonusSparkles,
+              CupertinoIcons.sparkles,
               size: 120,
               color: CupertinoColors.white.withValues(alpha: 0.12),
             ),
@@ -276,7 +275,7 @@ class _BalanceCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  AppIcons.bonusWallet,
+                  CupertinoIcons.creditcard_fill,
                   color: CupertinoColors.white,
                   size: 24,
                 ),

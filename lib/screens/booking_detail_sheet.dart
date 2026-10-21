@@ -1,16 +1,22 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme.dart';
 import '../models/bookings/booking_detail.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/connector_repository.dart';
 import '../services/api_client.dart';
+import '../utils/booking_time_utils.dart';
 import '../utils/connector_launch.dart';
 import '../utils/connector_url_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/booking_glass_form.dart';
 import '../widgets/booking_pickers.dart';
 import '../widgets/chat_avatar.dart';
 import 'edit_booking_screen.dart';
@@ -26,8 +32,17 @@ class BookingDetailSheet extends StatefulWidget {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      useSafeArea: true,
+      // Ручка рисуется внутри шторки: системная лежит на отдельной
+      // полосе, и цветное пятно под ней обрывалось ровной границей.
+      showDragHandle: false,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -163,16 +178,14 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     }
   }
 
-  String _formatHm(DateTime d) {
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
-  }
-
-  String _formatDate(DateTime d) {
-    final dd = d.day.toString().padLeft(2, '0');
-    final mm = d.month.toString().padLeft(2, '0');
-    return '$dd.$mm.${d.year}';
+  String _formatWhen(BookingDetail d) {
+    final day = DateFormat('EEEE, d MMMM', 'ru_RU').format(d.datetimeStart);
+    final capitalized = day.isEmpty
+        ? day
+        : day[0].toUpperCase() + day.substring(1);
+    return '$capitalized · '
+        '${BookingTimeUtils.formatHm(d.datetimeStart)}–'
+        '${BookingTimeUtils.formatHm(d.datetimeEnd)}';
   }
 
   /// Возвращает описание, если это ссылка на встречу (http/https), иначе null.
@@ -208,16 +221,39 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 29,
-      height: 29,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(7),
+  /// Строка деталей: мельче строк форм (15 вместо 17) — это справка
+  /// под заголовком, она не должна спорить с темой встречи.
+  Widget _detailTile({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+    VoidCallback? onTap,
+  }) {
+    return CupertinoListTile(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 14, 8),
+      leading: AppIconBadge(icon: icon, color: color),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 15,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
       ),
-      child: Icon(icon, size: 17, color: CupertinoColors.white),
+      additionalInfo: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 200),
+        child: Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 15,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
+      ),
+      trailing: onTap == null ? null : const CupertinoListTileChevron(),
+      onTap: onTap,
     );
   }
 
@@ -227,101 +263,214 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     required String label,
     required String value,
   }) {
-    return CupertinoListTile(
-      leading: _iconBadge(icon, color),
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 13,
-          color: CupertinoColors.secondaryLabel,
-        ),
-      ),
-      additionalInfo: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 180),
-        child: Text(
-          value,
-          textAlign: TextAlign.right,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-  Widget _textRow({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required String value,
-  }) {
-    return CupertinoListTile(
-      leading: _iconBadge(icon, color),
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 13,
-          color: CupertinoColors.secondaryLabel,
-        ),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          value,
-          // CupertinoListTile форсирует subtitle в 1 строку с "…", если не
-          // переопределить maxLines явно — длинное описание иначе обрежется
-          // после первого же слова.
-          maxLines: 20,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: CupertinoColors.label),
-        ),
-      ),
-    );
+    return _detailTile(icon: icon, color: color, label: label, value: value);
   }
 
   Widget _linkRow(String url) {
-    final host = Uri.tryParse(url)?.host;
-    return CupertinoListTile(
-      leading: _iconBadge(
-        CupertinoIcons.video_camera_solid,
-        CupertinoColors.systemBlue,
-      ),
-      title: const Text(
-        'Ссылка на встречу',
-        style: TextStyle(fontSize: 13, color: CupertinoColors.secondaryLabel),
-      ),
-      subtitle: (host == null || host.isEmpty)
-          ? null
-          : Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                host,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: CupertinoColors.label),
-              ),
-            ),
-      trailing: const CupertinoListTileChevron(),
+    final host = Uri.tryParse(url)?.host ?? '';
+    return _detailTile(
+      icon: CupertinoIcons.link,
+      color: CupertinoColors.systemBlue,
+      label: 'Ссылка',
+      value: host.isEmpty ? 'Открыть' : host,
       onTap: () => _openLink(url),
     );
   }
 
-  Widget _participantsSection(List<StaffUser> users) {
-    if (users.isEmpty) return const SizedBox.shrink();
+  List<Widget> _participantsSection(List<StaffUser> users) {
+    if (users.isEmpty) return const [];
 
-    return CupertinoListSection.insetGrouped(
-      header: const Text('Участники'),
-      children: users.map((user) {
-        return CupertinoListTile(
-          leading: MemberAvatar(
-            displayName: user.fullName,
-            avatarUrl: user.avatarUrl,
-            radius: 16,
+    return [
+      AppGlassSectionLabel('Участники (${users.length})'),
+      AppGlassSection(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        children: users.map((user) {
+          return CupertinoListTile(
+            leading: MemberAvatar(
+              displayName: user.fullName,
+              avatarUrl: user.avatarUrl,
+              radius: 16,
+            ),
+            title: Text(
+              user.fullName,
+              style: TextStyle(
+                fontSize: 15,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            subtitle: (user.email ?? '').isNotEmpty
+                ? Text(user.email!, style: const TextStyle(fontSize: 12))
+                : null,
+          );
+        }).toList(),
+      ),
+    ];
+  }
+
+  /// Ссылка на встречу: отдельное поле или описание, целиком состоящее
+  /// из URL (так её сохраняют старые брони).
+  String? _meetingLink(BookingDetail detail) {
+    final link = (detail.link ?? '').trim();
+    if (link.isNotEmpty) return link;
+    return _meetingLinkOrNull((detail.description ?? '').trim());
+  }
+
+  Widget _buildHeader(BookingDetail detail) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+    // «Повторяется» не дублируем — повторение есть строкой в деталях.
+    final chips = <Widget>[
+      if (detail.isPassed)
+        const _HeaderChip(icon: CupertinoIcons.checkmark_alt, text: 'Прошла'),
+      if (detail.isPrivate)
+        const _HeaderChip(icon: CupertinoIcons.lock_fill, text: 'Приватная'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 16, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  detail.theme,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                    color: label,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _formatWhen(detail),
+                  style: TextStyle(fontSize: 15, color: secondary),
+                ),
+                if (chips.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 6, runSpacing: 6, children: chips),
+                ],
+              ],
+            ),
           ),
-          title: Text(user.fullName),
-          subtitle: (user.email ?? '').isNotEmpty ? Text(user.email!) : null,
-        );
-      }).toList(),
+          // Прошедшую бронь менять нельзя — кнопку не показываем вовсе,
+          // а не выводим серой.
+          if (!detail.isPassed) ...[
+            const SizedBox(width: 12),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              minimumSize: Size.zero,
+              color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+              borderRadius: BorderRadius.circular(18),
+              onPressed: _openEdit,
+              child: Text(
+                'Изменить',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: label,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
+  }
+
+  /// Подключение — единственное действие, ради которого карточку
+  /// открывают перед встречей, поэтому крупная синяя кнопка.
+  List<Widget> _buildJoinButton(BookingDetail detail, String? meetingLink) {
+    // Опоздавшим нужно подключаться до окончания встречи, а сервер
+    // помечает is_passed уже после её начала.
+    if (meetingLink == null || !DateTime.now().isBefore(detail.datetimeEnd)) {
+      return const [];
+    }
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        child: CupertinoButton(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(16),
+          onPressed: () => _openLink(meetingLink),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.video_camera_solid,
+                size: 20,
+                color: CupertinoColors.white,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Подключиться',
+                style: TextStyle(
+                  color: CupertinoColors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _buildDetails(BookingDetail detail) {
+    final description = (detail.description ?? '').trim();
+    final link = (detail.link ?? '').trim();
+    final descriptionIsLink =
+        description.isNotEmpty && _meetingLinkOrNull(description) != null;
+
+    final rows = <Widget>[
+      if (detail.displayObjectName.trim().isNotEmpty)
+        _valueRow(
+          icon: CupertinoIcons.location_solid,
+          color: CupertinoColors.systemRed,
+          label: 'Место',
+          value: detail.displayObjectName,
+        ),
+      if (detail.isRecurring) ...[
+        _valueRow(
+          icon: CupertinoIcons.repeat,
+          color: CupertinoColors.systemPurple,
+          label: 'Повтор',
+          value: detail.recurring?.label(detail.datetimeStart) ?? 'Да',
+        ),
+        if (detail.recurring?.endDateLabel case final endDate?)
+          _valueRow(
+            icon: CupertinoIcons.calendar,
+            color: CupertinoColors.systemPurple,
+            label: 'До',
+            value: endDate,
+          ),
+      ],
+      if (link.isNotEmpty)
+        _linkRow(link)
+      else if (descriptionIsLink)
+        _linkRow(description),
+    ];
+
+    return [
+      if (rows.isNotEmpty) AppGlassSection(children: rows),
+      if (description.isNotEmpty && !descriptionIsLink) ...[
+        const AppGlassSectionLabel('Описание'),
+        BookingGlassCard(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Text(
+            description,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.35,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+        ),
+      ],
+    ];
   }
 
   @override
@@ -329,145 +478,125 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     final detail = _detail;
     final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
 
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: AppLoadingIndicator(size: 32),
-                )
-              else if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: AppEmptyState(
-                    icon: Icons.error_outline,
-                    message: _error!,
-                    onRetry: _load,
-                  ),
-                )
-              else if (detail != null) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-                  child: Text(
-                    detail.theme,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: CupertinoColors.label,
-                    ),
-                  ),
+    return DefaultTextStyle(
+      style: TextStyle(
+        fontFamily: '.SF Pro Text',
+        decoration: TextDecoration.none,
+        color: CupertinoColors.label.resolveFrom(context),
+        fontSize: 16,
+      ),
+      child: Stack(
+        children: [
+          const AppGlassGlow(height: 300),
+          // Positioned, а не Align: Align растягивается на всю высоту,
+          // и шторка вместе с ним уезжала под статус-бар.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 36,
+                height: 5,
+                margin: const EdgeInsets.only(top: 8),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                  borderRadius: BorderRadius.circular(3),
                 ),
-                CupertinoListSection.insetGrouped(
+              ),
+            ),
+          ),
+          SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(top: 30, bottom: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _textRow(
-                      icon: CupertinoIcons.clock_fill,
-                      color: CupertinoColors.systemOrange,
-                      label: 'Дата и время',
-                      value:
-                          '${_formatDate(detail.datetimeStart)}, '
-                          '${_formatHm(detail.datetimeStart)}—${_formatHm(detail.datetimeEnd)}',
-                    ),
-                    _textRow(
-                      icon: CupertinoIcons.location_solid,
-                      color: CupertinoColors.systemRed,
-                      label: 'Объект',
-                      value: detail.displayObjectName,
-                    ),
-                    if (detail.isPrivate)
-                      _valueRow(
-                        icon: CupertinoIcons.lock_fill,
-                        color: CupertinoColors.systemGrey,
-                        label: 'Доступ',
-                        value: 'Приватное',
-                      ),
-                    if (detail.isRecurring) ...[
-                      _valueRow(
-                        icon: CupertinoIcons.repeat,
-                        color: CupertinoColors.systemPurple,
-                        label: 'Повторение',
-                        value:
-                            detail.recurring?.label(detail.datetimeStart) ??
-                            'Да',
-                      ),
-                      if (detail.recurring?.endDateLabel case final endDate?)
-                        _valueRow(
-                          icon: CupertinoIcons.calendar,
-                          color: CupertinoColors.systemPurple,
-                          label: 'Повторять до',
-                          value: endDate,
+                    if (_isLoading)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: AppLoadingIndicator(size: 32),
+                      )
+                    else if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: AppEmptyState(
+                          icon: CupertinoIcons.exclamationmark_circle,
+                          message: _error!,
+                          onRetry: _load,
+                        ),
+                      )
+                    else if (detail != null) ...[
+                      _buildHeader(detail),
+                      ..._buildJoinButton(detail, _meetingLink(detail)),
+                      ..._buildDetails(detail),
+                      ..._participantsSection(detail.participants),
+                      if (!detail.isPassed)
+                        AppGlassSection(
+                          margin: const EdgeInsets.fromLTRB(16, 28, 16, 0),
+                          children: [
+                            CupertinoListTile(
+                              title: Center(
+                                child: _isDeleting
+                                    ? const CupertinoActivityIndicator()
+                                    : Text(
+                                        'Удалить бронь',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: CupertinoColors.systemRed
+                                              .resolveFrom(context),
+                                        ),
+                                      ),
+                              ),
+                              onTap: _isDeleting ? null : _delete,
+                            ),
+                          ],
                         ),
                     ],
-                    if ((detail.description ?? '').trim().isNotEmpty)
-                      if (_meetingLinkOrNull(detail.description!.trim())
-                          case final link?)
-                        _linkRow(link)
-                      else
-                        _textRow(
-                          icon: CupertinoIcons.doc_text_fill,
-                          color: CupertinoColors.systemGrey,
-                          label: 'Описание',
-                          value: detail.description!.trim(),
-                        ),
-                    if ((detail.link ?? '').trim().isNotEmpty)
-                      _linkRow(detail.link!.trim()),
                   ],
                 ),
-                _participantsSection(detail.participants),
-                CupertinoListSection.insetGrouped(
-                  children: [
-                    CupertinoListTile(
-                      leading: _iconBadge(
-                        CupertinoIcons.pencil,
-                        detail.isPassed
-                            ? CupertinoColors.systemGrey
-                            : CupertinoColors.systemBlue,
-                      ),
-                      title: Text(
-                        'Изменить',
-                        style: TextStyle(
-                          color: detail.isPassed
-                              ? CupertinoColors.systemGrey
-                              : CupertinoColors.systemBlue,
-                        ),
-                      ),
-                      trailing: detail.isPassed
-                          ? null
-                          : const CupertinoListTileChevron(),
-                      onTap: detail.isPassed ? null : _openEdit,
-                    ),
-                    CupertinoListTile(
-                      leading: _iconBadge(
-                        CupertinoIcons.delete_solid,
-                        detail.isPassed
-                            ? CupertinoColors.systemGrey
-                            : CupertinoColors.systemRed,
-                      ),
-                      title: Text(
-                        'Удалить',
-                        style: TextStyle(
-                          color: detail.isPassed
-                              ? CupertinoColors.systemGrey
-                              : CupertinoColors.systemRed,
-                        ),
-                      ),
-                      trailing: _isDeleting
-                          ? const CupertinoActivityIndicator()
-                          : null,
-                      onTap: detail.isPassed || _isDeleting ? null : _delete,
-                    ),
-                  ],
-                ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Метка состояния под заголовком: прошла, приватная, повторяется.
+class _HeaderChip extends StatelessWidget {
+  const _HeaderChip({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: secondary),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: secondary,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -8,9 +11,53 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../models/mail/mail_message.dart';
 
 class MailBodyContent extends StatefulWidget {
-  const MailBodyContent({super.key, required this.message});
+  const MailBodyContent({
+    super.key,
+    required this.message,
+    this.loadAttachment,
+  });
 
   final MailMessage message;
+
+  /// Скачивает вложение — для встроенных картинок (`<img src="cid:...">`:
+  /// логотипы, подписи Outlook). Без него такие картинки остаются битыми.
+  final Future<Uint8List> Function(MailAttachment attachment)? loadAttachment;
+
+  static final _cidPattern = RegExp(
+    r'''cid:([^"'\s)>]+)''',
+    caseSensitive: false,
+  );
+
+  /// Вложение, на которое ссылается `cid:` из HTML: по Content-ID, а если
+  /// сервер его не отдаёт — по имени файла (Outlook пишет
+  /// `cid:image001.png@01DC...`, а вложение называется `image001.png`).
+  static MailAttachment? _attachmentForCid(
+    String cid,
+    List<MailAttachment> attachments,
+  ) {
+    final id = Uri.decodeComponent(cid).toLowerCase();
+    final name = id.split('@').first;
+    for (final a in attachments) {
+      if (a.contentId?.toLowerCase() == id) return a;
+    }
+    for (final a in attachments) {
+      final file = a.filename.toLowerCase();
+      if (file == id || file == name) return a;
+    }
+    return null;
+  }
+
+  /// Вложения, которые показываются внутри текста письма, — экрану их не
+  /// нужно дублировать в списке «Вложения». Сравнивать по `id` нельзя:
+  /// сервер его не отдаёт, у всех вложений он 0.
+  static Set<MailAttachment> inlineAttachments(MailMessage message) {
+    final html = message.htmlContent;
+    if (html == null) return const {};
+    return Set.identity()..addAll([
+      for (final match in _cidPattern.allMatches(html))
+        ?_attachmentForCid(match.group(1)!, message.attachments),
+    ]);
+  }
 
   /// Письмо будет показано в WebView (а не обычным текстом) — экрану это
   /// нужно знать, чтобы не добавлять вокруг HTML ещё один внутренний отступ.
@@ -32,6 +79,10 @@ class _MailBodyContentState extends State<MailBodyContent> {
 
   WebViewController? _controller;
   double _contentHeight = _initialHeight;
+
+  /// Номер загрузки: ответ на устаревший запрос картинок не должен
+  /// подменить письмо, если его успели заменить.
+  int _loadToken = 0;
 
   @override
   void initState() {
@@ -63,8 +114,67 @@ class _MailBodyContentState extends State<MailBodyContent> {
       ..addJavaScriptChannel(_heightChannel, onMessageReceived: _onHeight)
       ..setNavigationDelegate(
         NavigationDelegate(onNavigationRequest: _onNavigationRequest),
-      )
-      ..loadHtmlString(_prepareHtml(html));
+      );
+    unawaited(_load(html));
+  }
+
+  Future<void> _load(String html) async {
+    final token = ++_loadToken;
+    final controller = _controller;
+    final resolved = await _inlineCidImages(html);
+    if (!mounted || token != _loadToken || controller != _controller) return;
+    await controller?.loadHtmlString(_prepareHtml(resolved));
+  }
+
+  /// Подставляет встроенные картинки data-URI. Не дольше нескольких
+  /// секунд: медленное вложение не должно задерживать текст письма.
+  Future<String> _inlineCidImages(String html) async {
+    final load = widget.loadAttachment;
+    if (load == null || !html.toLowerCase().contains('cid:')) return html;
+    final cids = MailBodyContent._cidPattern
+        .allMatches(html)
+        .map((m) => m.group(1)!)
+        .toSet();
+    final replacements = <String, String>{};
+    await Future.wait(
+      cids.map((cid) async {
+        final attachment = MailBodyContent._attachmentForCid(
+          cid,
+          widget.message.attachments,
+        );
+        if (attachment == null) return;
+        try {
+          final bytes = await load(
+            attachment,
+          ).timeout(const Duration(seconds: 8));
+          final mime =
+              attachment.mimeType ?? _mimeFromName(attachment.filename);
+          replacements[cid] = 'data:$mime;base64,${base64Encode(bytes)}';
+        } catch (_) {
+          // Картинка останется битой — как и раньше, но текст не пострадает.
+        }
+      }),
+    );
+    var result = html;
+    replacements.forEach((cid, dataUri) {
+      result = result.replaceAll(
+        RegExp('cid:${RegExp.escape(cid)}', caseSensitive: false),
+        dataUri,
+      );
+    });
+    return result;
+  }
+
+  static String _mimeFromName(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    return switch (ext) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      'svg' => 'image/svg+xml',
+      'bmp' => 'image/bmp',
+      _ => 'image/png',
+    };
   }
 
   void _onHeight(JavaScriptMessage message) {

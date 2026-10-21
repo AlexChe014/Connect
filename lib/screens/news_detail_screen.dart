@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../config/app_theme.dart';
@@ -14,11 +12,12 @@ import '../repositories/news_repository.dart';
 import '../services/auth_service.dart';
 import '../services/paginated.dart';
 import '../utils/app_feedback.dart';
-import '../widgets/app_empty_state.dart';
+import '../utils/html_text_utils.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
-import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/chat_message_text.dart';
+import '../widgets/news_glass.dart';
 import '../widgets/news_people_sheet.dart';
 import '../widgets/news_reactions.dart';
 import 'news_image_viewer_screen.dart';
@@ -65,10 +64,6 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
       ..dispose();
     _commentController.dispose();
     super.dispose();
-  }
-
-  String _formatDate(DateTime date) {
-    return DateFormat("d MMMM y 'г.'", 'ru_RU').format(date);
   }
 
   Future<void> _refreshNews() async {
@@ -324,22 +319,209 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     }
   }
 
+  void _openPhotos(List<String> urls, int index) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).push<void>(
+      CupertinoPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) =>
+            NewsImageViewerScreen(imageUrls: urls, initialIndex: index),
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _buildPost(BuildContext context) {
+    final photos = _news.imageUrls.isNotEmpty
+        ? _news.imageUrls
+        : [?_news.imageUrl];
+    final body = HtmlTextUtils.compactParagraphs(
+      _news.contentHtml.trim().isNotEmpty ? _news.contentHtml : _news.content,
+    );
+
+    return AppFlatGlassCard(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          NewsAuthorLine(news: _news, avatarRadius: 20),
+          const SizedBox(height: 14),
+          Text(
+            _news.title,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              height: 1.25,
+              letterSpacing: -0.3,
+            ),
+          ),
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            NewsPhotoGallery(
+              urls: photos,
+              onOpen: (index) => _openPhotos(photos, index),
+            ),
+          ],
+          if (body.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            ChatMessageText(
+              text: body,
+              fontSize: 16,
+              paragraphSpacing: 12,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ],
+          if (_news.documents.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Column(
+                  children: [
+                    for (final document in _news.documents)
+                      NewsDocumentRow(
+                        document: document,
+                        onError: _showMessage,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Container(
+            height: 0.5,
+            color: CupertinoColors.separator.resolveFrom(context),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: NewsReactionsBar(
+                  news: _news,
+                  isLoading: _reactionInFlight,
+                  onToggle: _toggleReaction,
+                ),
+              ),
+              const SizedBox(width: 8),
+              NewsStatChip(
+                icon: CupertinoIcons.eye,
+                label: '${_news.viewsCount}',
+                onTap: () => NewsPeopleSheet.show(
+                  context,
+                  newsId: _news.id,
+                  kind: NewsPeopleKind.viewers,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildComments(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 24, 4, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            const Text(
+              'Комментарии',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            if (!_commentsLoading && _comments.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Text(
+                '${_comments.length}${_commentsNextUrl != null ? '+' : ''}',
+                style: TextStyle(fontSize: 17, color: secondary),
+              ),
+            ],
+          ],
+        ),
+      ),
+      if (_commentsLoading)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: AppLoadingIndicator(),
+        )
+      else if (_comments.isEmpty)
+        AppFlatGlassCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+          child: Column(
+            children: [
+              Icon(CupertinoIcons.chat_bubble_2, size: 30, color: secondary),
+              const SizedBox(height: 8),
+              Text(
+                'Пока нет комментариев',
+                style: TextStyle(fontSize: 15, color: secondary),
+              ),
+            ],
+          ),
+        )
+      else
+        AppFlatGlassCard(
+          child: Column(
+            children: [
+              for (var i = 0; i < _comments.length; i++) ...[
+                if (i > 0)
+                  Container(
+                    height: 0.5,
+                    margin: const EdgeInsets.only(left: 58),
+                    color: CupertinoColors.separator.resolveFrom(context),
+                  ),
+                _CommentTile(
+                  comment: _comments[i],
+                  isDeleting: _deletingCommentIds.contains(_comments[i].id),
+                  canDelete: _canDeleteComment(_comments[i]),
+                  onDelete: () => _deleteComment(_comments[i]),
+                ),
+              ],
+            ],
+          ),
+        ),
+      if (_commentsLoadingMore)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 16),
+          child: AppLoadingIndicator(size: 20),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasImage =
-        _news.imageUrl != null && _news.imageUrl!.trim().isNotEmpty;
+    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
+    final label = CupertinoColors.label.resolveFrom(context);
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: groupedBg,
       navigationBar: CupertinoNavigationBar(
         middle: const Text('Новость'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        // Прозрачная: под шапкой остаётся системное размытие, а заливка
+        // дала бы на цветном пятне видимую границу.
+        backgroundColor: groupedBg.withValues(alpha: 0),
+        automaticBackgroundVisibility: false,
         border: null,
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
           minimumSize: Size.zero,
-          onPressed: () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
+          onPressed: () => Navigator.maybePop(context),
+          child: Icon(CupertinoIcons.back, size: 26, color: label),
         ),
         trailing: _canDeletePost()
             ? CupertinoButton(
@@ -348,7 +530,11 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 onPressed: _isDeletingPost ? null : _showPostActions,
                 child: _isDeletingPost
                     ? const CupertinoActivityIndicator()
-                    : const Icon(CupertinoIcons.ellipsis_circle, size: 26),
+                    : Icon(
+                        CupertinoIcons.ellipsis_circle,
+                        size: 26,
+                        color: label,
+                      ),
               )
             : null,
       ),
@@ -356,210 +542,61 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
         style: TextStyle(
           fontFamily: '.SF Pro Text',
           decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
+          color: label,
           fontSize: 16,
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    await Future.wait([_refreshNews(), _loadComments()]);
-                  },
-                  child: ListView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    children: [
-                      VisibilityDetector(
-                        key: Key('news-detail-${_news.id}'),
-                        onVisibilityChanged: _onNewsFullyVisible,
-                        child: Container(
-                          padding: const EdgeInsets.all(AppSpacing.lg),
-                          decoration: BoxDecoration(
-                            color: CupertinoColors.systemBackground.resolveFrom(
-                              context,
-                            ),
-                            borderRadius: BorderRadius.circular(18),
-                            boxShadow: AppColors.cardPhotoShadow,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_news.author != null) ...[
-                                _AuthorHeader(
-                                  authorName: _news.author!.fullName,
-                                  avatarUrl: _news.author!.avatarUrl,
-                                ),
-                                const SizedBox(height: 10),
-                              ],
-                              Text(
-                                _formatDate(_news.date),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: CupertinoColors.secondaryLabel
-                                      .resolveFrom(context),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _news.title,
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.25,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              if (hasImage) ...[
-                                Semantics(
-                                  button: true,
-                                  label: 'Открыть изображение',
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      FocusManager.instance.primaryFocus
-                                          ?.unfocus();
-                                      Navigator.of(context).push<void>(
-                                        CupertinoPageRoute<void>(
-                                          builder: (_) => NewsImageViewerScreen(
-                                            imageUrl: _news.imageUrl!,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(14),
-                                      child: AspectRatio(
-                                        aspectRatio: 16 / 9,
-                                        // Фото целиком (contain) + блюр-копия того же
-                                        // снимка по краям — портретные фото не
-                                        // обрезаются, но карточка остаётся 16:9.
-                                        child: Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            ImageFiltered(
-                                              imageFilter: ImageFilter.blur(
-                                                sigmaX: 24,
-                                                sigmaY: 24,
-                                              ),
-                                              child: AppNetworkImage(
-                                                url: _news.imageUrl,
-                                                width: double.infinity,
-                                                height: double.infinity,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                            ColoredBox(
-                                              color: Colors.black.withValues(
-                                                alpha: 0.18,
-                                              ),
-                                            ),
-                                            AppNetworkImage(
-                                              url: _news.imageUrl,
-                                              width: double.infinity,
-                                              height: double.infinity,
-                                              fit: BoxFit.contain,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                              ],
-                              if (_news.contentHtml.trim().isNotEmpty ||
-                                  _news.content.trim().isNotEmpty)
-                                ChatMessageText(
-                                  text: _news.contentHtml.trim().isNotEmpty
-                                      ? _news.contentHtml
-                                      : _news.content,
-                                  fontSize: 16,
-                                  color: CupertinoColors.label.resolveFrom(
-                                    context,
-                                  ),
-                                ),
-                              const SizedBox(height: 20),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: NewsReactionsBar(
-                                      news: _news,
-                                      isLoading: _reactionInFlight,
-                                      onToggle: _toggleReaction,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _StatChip(
-                                    icon: CupertinoIcons.eye,
-                                    label: '${_news.viewsCount}',
-                                    onTap: () => NewsPeopleSheet.show(
-                                      context,
-                                      newsId: _news.id,
-                                      kind: NewsPeopleKind.viewers,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        'Комментарии',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_commentsLoading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: AppLoadingIndicator(),
-                        )
-                      else if (_comments.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: AppEmptyState(
-                            message: 'Пока нет комментариев',
-                          ),
-                        )
-                      else
-                        ..._comments.map(
-                          (c) => _CommentTile(
-                            comment: c,
-                            dateLabel: _formatDate(c.date),
-                            canDelete: _canDeleteComment(c),
-                            onDelete: () => _deleteComment(c),
-                          ),
-                        ),
-                      if (_commentsLoadingMore)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: AppLoadingIndicator(size: 20),
-                        ),
-                    ],
+        child: Stack(
+          children: [
+            const AppGlassGlow(height: 360),
+            Builder(
+              // Свой context — под скаффолдом, где в MediaQuery уже учтена
+              // высота полупрозрачной шапки.
+              builder: (context) => RefreshIndicator.adaptive(
+                edgeOffset: MediaQuery.paddingOf(context).top,
+                onRefresh: () async {
+                  await Future.wait([_refreshNews(), _loadComments()]);
+                },
+                child: ListView(
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    MediaQuery.paddingOf(context).top + 8,
+                    16,
+                    _CommentComposer.reservedHeight(context) + 16,
                   ),
+                  children: [
+                    VisibilityDetector(
+                      key: Key('news-detail-${_news.id}'),
+                      onVisibilityChanged: _onNewsFullyVisible,
+                      child: _buildPost(context),
+                    ),
+                    ..._buildComments(context),
+                  ],
                 ),
               ),
-              _CommentInputBar(
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _CommentComposer(
                 controller: _commentController,
                 isSending: _sendingComment,
                 onSend: _sendComment,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _CommentInputBar extends StatelessWidget {
-  const _CommentInputBar({
+/// Поле комментария — плавающие стеклянные капсулы, как ввод в чате.
+class _CommentComposer extends StatelessWidget {
+  const _CommentComposer({
     required this.controller,
     required this.isSending,
     required this.onSend,
@@ -569,80 +606,105 @@ class _CommentInputBar extends StatelessWidget {
   final bool isSending;
   final VoidCallback onSend;
 
+  /// Сколько места снизу занимает однострочное поле с отступами —
+  /// последний комментарий не должен прятаться под стекло.
+  static double reservedHeight(BuildContext context) =>
+      40 + 14 + _bottomInset(context);
+
+  // Над клавиатурой safe area не нужна: CupertinoPageScaffold уже поднял
+  // содержимое, а отступ под «полоску» дал бы зазор над клавишами.
+  static double _bottomInset(BuildContext context) =>
+      MediaQuery.viewInsetsOf(context).bottom > 0
+      ? 8
+      : MediaQuery.paddingOf(context).bottom.clamp(8.0, 40.0);
+
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemBackground.resolveFrom(context),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-          ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 6, 12, _bottomInset(context)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: AppGlass(
+              borderRadius: BorderRadius.circular(20),
+              shadows: AppGlass.controlShadow,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 110),
+                constraints: const BoxConstraints(minHeight: 40),
                 child: CupertinoTextField(
                   controller: controller,
                   minLines: 1,
-                  maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                  placeholder: 'Написать комментарий…',
+                  maxLines: 5,
                   enabled: !isSending,
+                  textCapitalization: TextCapitalization.sentences,
+                  placeholder: 'Комментарий',
+                  decoration: const BoxDecoration(),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
+                    horizontal: 14,
                     vertical: 10,
                   ),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.secondarySystemBackground
-                        .resolveFrom(context),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  onSubmitted: (_) => onSend(),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              onPressed: isSending ? null : onSend,
-              child: isSending
-                  ? const SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: CupertinoActivityIndicator(),
-                    )
-                  : const Icon(CupertinoIcons.arrow_up_circle_fill, size: 30),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) {
+              final canSend = controller.text.trim().isNotEmpty && !isSending;
+              return GestureDetector(
+                onTap: canSend ? onSend : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: canSend
+                        ? AppColors.primary
+                        : CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          ),
+                  ),
+                  child: isSending
+                      ? const CupertinoActivityIndicator(radius: 9)
+                      : Icon(
+                          CupertinoIcons.arrow_up,
+                          size: 20,
+                          color: canSend
+                              ? CupertinoColors.white
+                              : CupertinoColors.tertiaryLabel.resolveFrom(
+                                  context,
+                                ),
+                        ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 }
 
+/// Комментарий: аватар, имя и дата в строку, под ними текст.
+/// Удалить — долгим нажатием или кнопкой «…».
 class _CommentTile extends StatelessWidget {
   const _CommentTile({
     required this.comment,
-    required this.dateLabel,
     this.canDelete = false,
+    this.isDeleting = false,
     this.onDelete,
   });
 
   final NewsComment comment;
-  final String dateLabel;
   final bool canDelete;
+  final bool isDeleting;
   final VoidCallback? onDelete;
 
   void _showActions(BuildContext context) {
-    if (!canDelete) return;
+    if (!canDelete || isDeleting) return;
     showCupertinoModalPopup<void>(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -667,31 +729,26 @@ class _CommentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final author = comment.author;
+    final name = author?.fullName ?? 'Пользователь';
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+    return Opacity(
+      opacity: isDeleting ? 0.4 : 1,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onLongPress: canDelete ? () => _showActions(context) : null,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            MemberAvatar(
-              displayName: author?.fullName ?? 'Пользователь',
-              avatarUrl: author?.avatarUrl,
-              radius: 16,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.secondarySystemGroupedBackground
-                      .resolveFrom(context),
-                  borderRadius: BorderRadius.circular(14),
-                ),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(14, 12, canDelete ? 4 : 14, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              MemberAvatar(
+                displayName: name,
+                avatarUrl: author?.avatarUrl,
+                radius: 16,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -699,101 +756,44 @@ class _CommentTile extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            author?.fullName ?? 'Пользователь',
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 13,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
-                          dateLabel,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(
-                              context,
-                            ),
-                          ),
+                          formatNewsDate(comment.date),
+                          style: TextStyle(fontSize: 12, color: secondary),
                         ),
-                        if (canDelete) ...[
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => _showActions(context),
-                            child: Icon(
-                              CupertinoIcons.ellipsis,
-                              size: 16,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
-                    const SizedBox(height: 3),
-                    Text(comment.text, style: const TextStyle(fontSize: 14)),
+                    const SizedBox(height: 2),
+                    ChatMessageText(text: comment.text, fontSize: 15),
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.label, this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
-    final child = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 13, color: color)),
-        ],
-      ),
-    );
-
-    if (onTap == null) return child;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: child,
-    );
-  }
-}
-
-class _AuthorHeader extends StatelessWidget {
-  const _AuthorHeader({required this.authorName, required this.avatarUrl});
-
-  final String authorName;
-  final String? avatarUrl;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        MemberAvatar(displayName: authorName, avatarUrl: avatarUrl, radius: 16),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            authorName,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              if (canDelete)
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(32, 24),
+                  onPressed: isDeleting ? null : () => _showActions(context),
+                  child: isDeleting
+                      ? const CupertinoActivityIndicator(radius: 8)
+                      : Icon(
+                          CupertinoIcons.ellipsis,
+                          size: 18,
+                          color: secondary,
+                        ),
+                ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }

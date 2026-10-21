@@ -7,6 +7,10 @@ class CreateBookingRequest {
   static const int meetingModelType = 6;
   static const int meetingModelId = 1;
 
+  /// `model_type` переговорной комнаты — только к ней можно заказать
+  /// доп. услуги (чай, кофе и т.п.).
+  static const int meetingRoomModelType = 1;
+
   final String theme;
 
   /// Для онлайн-встреч Коннектора может быть не задан.

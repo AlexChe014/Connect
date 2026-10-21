@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 /// Индикатор доставки/прочтения исходящего сообщения:
-/// одна галочка — доставлено, две синие — прочитано получателем.
+/// одна серая галочка — доставлено, две тёмные — прочитано получателем.
 ///
 /// Используется и в диалоге чата, и в списке чатов — единая реализация,
 /// чтобы вид галочек не расходился между экранами.
@@ -14,7 +14,7 @@ class ReadReceipt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = read
-        ? CupertinoColors.activeBlue
+        ? CupertinoColors.label.resolveFrom(context)
         : CupertinoColors.tertiaryLabel.resolveFrom(context);
 
     if (!read) {

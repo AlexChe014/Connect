@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../config/app_theme.dart';
 
@@ -8,7 +8,7 @@ class AppEmptyState extends StatelessWidget {
   const AppEmptyState({
     super.key,
     required this.message,
-    this.icon = Icons.inbox_outlined,
+    this.icon = CupertinoIcons.tray,
     this.onRetry,
     this.retryLabel = 'Повторить',
     this.scrollable = true,
@@ -61,7 +61,7 @@ class SliverAppEmptyState extends StatelessWidget {
   const SliverAppEmptyState({
     super.key,
     required this.message,
-    this.icon = Icons.inbox_outlined,
+    this.icon = CupertinoIcons.tray,
     this.onRetry,
     this.retryLabel = 'Повторить',
   });
@@ -109,24 +109,38 @@ class _AppEmptyStateContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 40, color: scheme.onSurfaceVariant.withValues(alpha: 0.55)),
+          Icon(
+            icon,
+            size: 48,
+            color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+          ),
           const SizedBox(height: AppSpacing.md),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.35,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
           ),
           if (onRetry != null) ...[
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: Text(retryLabel)),
+            const SizedBox(height: AppSpacing.sm),
+            CupertinoButton(
+              onPressed: onRetry,
+              child: Text(
+                retryLabel,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ],
       ),

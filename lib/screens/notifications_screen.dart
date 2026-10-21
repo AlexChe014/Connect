@@ -203,7 +203,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: SafeArea(
           top: false,
           bottom: false,
-          child: RefreshIndicator(
+          child: RefreshIndicator.adaptive(
             onRefresh: _loadFirstPage,
             child: CustomScrollView(
               controller: _scrollController,

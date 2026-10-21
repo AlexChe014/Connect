@@ -32,11 +32,8 @@ class AchievementTypePickerSheet extends StatefulWidget {
       ),
       builder: (context) {
         final mediaQuery = MediaQuery.of(context);
-        final maxHeight =
-            (mediaQuery.size.height - mediaQuery.padding.top - 24).clamp(
-              200.0,
-              mediaQuery.size.height,
-            );
+        final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top - 24)
+            .clamp(200.0, mediaQuery.size.height);
         final height = (mediaQuery.size.height * 0.7).clamp(0.0, maxHeight);
         return SizedBox(
           height: height,
@@ -100,9 +97,7 @@ class _AchievementTypePickerSheetState
                   ? const Center(
                       child: Text(
                         'Нет доступных достижений',
-                        style: TextStyle(
-                          color: CupertinoColors.secondaryLabel,
-                        ),
+                        style: TextStyle(color: CupertinoColors.secondaryLabel),
                       ),
                     )
                   : ListView.builder(

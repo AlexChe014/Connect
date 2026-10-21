@@ -42,10 +42,7 @@ class _VpnBannerState extends State<VpnBanner> {
             bottom: false,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               color: CupertinoColors.systemOrange,
               child: Row(
                 children: [

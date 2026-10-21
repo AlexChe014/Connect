@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 
+import '../config/app_theme.dart';
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
@@ -8,6 +10,8 @@ import '../services/crash_reporting_service.dart';
 import '../utils/document_file_share.dart';
 import '../utils/document_payload_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 
 class DocumentDetailScreen extends StatefulWidget {
@@ -34,6 +38,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   String? _errorMessage;
   final _commentController = TextEditingController();
   int? _downloadingFileIndex;
+  double _actionBarHeight = 0;
 
   @override
   void initState() {
@@ -261,112 +266,147 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         .toList();
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 29,
-      height: 29,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Icon(icon, size: 17, color: CupertinoColors.white),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final title =
-        DocumentPayloadUtils.datalist(_displayDocument) ??
-        DocumentPayloadUtils.title(_displayDocument);
+    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
+    final label = CupertinoColors.label.resolveFrom(context);
+    final showActions = !_isLoading && _errorMessage == null;
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: groupedBg,
       navigationBar: CupertinoNavigationBar(
-        middle: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        // Прозрачная: под шапкой остаётся системное размытие, а заливка
+        // дала бы на цветном пятне видимую границу.
+        backgroundColor: groupedBg.withValues(alpha: 0),
+        automaticBackgroundVisibility: false,
         border: null,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: () => Navigator.pop(context),
+          child: Icon(CupertinoIcons.back, size: 26, color: label),
+        ),
       ),
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
           decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
+          color: label,
           fontSize: 15,
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(child: _buildBody()),
-              if (!_isLoading && _errorMessage == null) _buildActionBar(),
-            ],
-          ),
+        child: Stack(
+          children: [
+            const AppGlassGlow(height: 360),
+            // Свой context — под скаффолдом, где в MediaQuery уже учтена
+            // высота полупрозрачной шапки.
+            Builder(builder: _buildBody),
+            if (showActions)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _MeasureSize(
+                  onChange: (height) {
+                    if (height != _actionBarHeight) {
+                      setState(() => _actionBarHeight = height);
+                    }
+                  },
+                  child: _buildActionBar(),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
+  /// Стеклянная панель снизу: комментарий и два решения.
   Widget _buildActionBar() {
     final actionLabel = widget.service.isSigningService
         ? 'Подписать'
         : 'Согласовать';
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGroupedBackground.resolveFrom(context),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-          ),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CupertinoTextField(
-                controller: _commentController,
-                placeholder: 'Комментарий (необязательно)',
-                minLines: 1,
-                maxLines: 3,
-                enabled: !_isSubmitting,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: CupertinoButton(
-                      color: CupertinoColors.systemGrey5.resolveFrom(context),
-                      onPressed: _isSubmitting ? null : _reject,
-                      child: const Text(
-                        'Отклонить',
-                        style: TextStyle(color: CupertinoColors.systemRed),
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: AppGlass(
+          borderRadius: BorderRadius.circular(26),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoTextField(
+                  controller: _commentController,
+                  placeholder: 'Комментарий (необязательно)',
+                  minLines: 1,
+                  maxLines: 3,
+                  enabled: !_isSubmitting,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0x1FFFFFFF)
+                        : const Color(0x0F000000),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        borderRadius: BorderRadius.circular(20),
+                        onPressed: _isSubmitting ? null : _reject,
+                        child: Text(
+                          'Отклонить',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: CupertinoColors.systemRed.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: CupertinoButton.filled(
-                      onPressed: _isSubmitting ? null : _accept,
-                      child: _isSubmitting
-                          ? const CupertinoActivityIndicator(
-                              color: CupertinoColors.white,
-                            )
-                          : Text(actionLabel),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: CupertinoButton(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(20),
+                        onPressed: _isSubmitting ? null : _accept,
+                        child: _isSubmitting
+                            ? const CupertinoActivityIndicator(
+                                color: CupertinoColors.white,
+                              )
+                            : Text(
+                                actionLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: CupertinoColors.white,
+                                ),
+                              ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
     if (_isLoading) {
       return const AppPageLoader();
     }
@@ -383,49 +423,34 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     final entries = _summaryEntries(document);
     final sides = _sides(document);
     final files = _files(document);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.only(
+        top: MediaQuery.paddingOf(context).top + 8,
+        // Высота панели действий меняется вместе с полем комментария,
+        // поэтому список отступает от неё по замеру, а не на глаз.
+        bottom: _actionBarHeight + 16,
+      ),
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-              context,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            DocumentPayloadUtils.datalist(document) ??
-                DocumentPayloadUtils.title(document),
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-        ),
+        _buildHeader(document),
         if (entries.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              'ДЕТАЛИ',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          CupertinoListSection.insetGrouped(
-            margin: EdgeInsets.zero,
+          const AppGlassSectionLabel('Детали'),
+          AppGlassSection(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               for (final entry in entries)
                 CupertinoListTile(
+                  padding: const EdgeInsetsDirectional.fromSTEB(
+                    16,
+                    10,
+                    14,
+                    10,
+                  ),
                   title: Text(
                     entry.key,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
+                    style: TextStyle(fontSize: 13, color: secondary),
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -435,7 +460,10 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                       // "…", если не переопределить maxLines явно.
                       maxLines: 20,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: CupertinoColors.label),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
                     ),
                   ),
                 ),
@@ -443,27 +471,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           ),
         ],
         if (sides.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              'СТОРОНЫ',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          CupertinoListSection.insetGrouped(
-            margin: EdgeInsets.zero,
+          const AppGlassSectionLabel('Стороны'),
+          AppGlassSection(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               for (final side in sides)
                 CupertinoListTile(
-                  leading: _iconBadge(
-                    CupertinoIcons.person_2_fill,
-                    CupertinoColors.systemIndigo,
+                  leading: const AppIconBadge(
+                    icon: CupertinoIcons.person_2_fill,
+                    color: CupertinoColors.systemIndigo,
                   ),
                   title: Text(side['partner']?.toString() ?? 'Сторона'),
                   subtitle: (side['value']?.toString() ?? '').isEmpty
@@ -474,27 +490,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           ),
         ],
         if (files.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              'ФАЙЛЫ',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          CupertinoListSection.insetGrouped(
-            margin: EdgeInsets.zero,
+          const AppGlassSectionLabel('Файлы'),
+          AppGlassSection(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               for (final entry in files.asMap().entries)
                 CupertinoListTile(
-                  leading: _iconBadge(
-                    CupertinoIcons.paperclip,
-                    CupertinoColors.systemGrey,
+                  leading: const AppIconBadge(
+                    icon: CupertinoIcons.paperclip,
+                    color: CupertinoColors.systemGrey,
                   ),
                   title: Text(entry.value['namefile']?.toString() ?? 'Файл'),
                   trailing: _downloadingFileIndex == entry.key
@@ -508,27 +512,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
           ),
         ],
         if (_acceptors.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              'СОГЛАСУЮЩИЕ',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          CupertinoListSection.insetGrouped(
-            margin: EdgeInsets.zero,
+          const AppGlassSectionLabel('Согласующие'),
+          AppGlassSection(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             children: [
               for (final acceptor in _acceptors)
                 CupertinoListTile(
-                  leading: _iconBadge(
-                    CupertinoIcons.checkmark_seal_fill,
-                    CupertinoColors.systemGreen,
+                  leading: const AppIconBadge(
+                    icon: CupertinoIcons.checkmark_seal_fill,
+                    color: CupertinoColors.systemGreen,
                   ),
                   title: Text(DocumentPayloadUtils.labelForAcceptor(acceptor)),
                   subtitle: () {
@@ -543,5 +535,98 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         ],
       ],
     );
+  }
+
+  /// Шапка карточки: крупный значок и название документа на стекле.
+  Widget _buildHeader(Map<String, dynamic> document) {
+    final number = DocumentPayloadUtils.number(document)?.trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(22),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  AppIconBadge(
+                    icon: widget.service.isSigningService
+                        ? CupertinoIcons.pencil
+                        : CupertinoIcons.checkmark_seal_fill,
+                    color: widget.service.isSigningService
+                        ? CupertinoColors.systemBlue
+                        : CupertinoColors.systemGreen,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      [
+                        widget.service.displayName,
+                        if (number != null && number.isNotEmpty) '№ $number',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                DocumentPayloadUtils.datalist(document) ??
+                    DocumentPayloadUtils.title(document),
+                style: TextStyle(
+                  fontSize: 20,
+                  height: 1.25,
+                  fontWeight: FontWeight.w700,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Сообщает высоту ребёнка после каждой раскладки — по ней список
+/// отступает от плавающей панели действий.
+class _MeasureSize extends SingleChildRenderObjectWidget {
+  const _MeasureSize({required this.onChange, required super.child});
+
+  final ValueChanged<double> onChange;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasureSize(onChange);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderMeasureSize render) {
+    render.onChange = onChange;
+  }
+}
+
+class _RenderMeasureSize extends RenderProxyBox {
+  _RenderMeasureSize(this.onChange);
+
+  ValueChanged<double> onChange;
+  double? _last;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (height == _last) return;
+    _last = height;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onChange(height));
   }
 }

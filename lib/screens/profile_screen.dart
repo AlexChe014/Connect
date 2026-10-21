@@ -12,10 +12,10 @@ import '../services/chat_realtime_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/user_presence_service.dart';
 import '../utils/media_url_utils.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/chat_avatar.dart';
-import '../widgets/status_bubble.dart';
 import 'booking_detail_sheet.dart';
 import 'notifications_screen.dart';
 
@@ -219,16 +219,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   );
 
   Future<void> _openPrivacyPolicy() async {
-    await launchUrl(
-      _privacyPolicyUri,
-      mode: LaunchMode.externalApplication,
-    );
+    await launchUrl(_privacyPolicyUri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _requestAccountDeletion() async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showCupertinoDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Удаление аккаунта'),
         content: const Text(
           'Аккаунт создаётся и управляется корпоративной IT-службой. '
@@ -236,11 +233,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'в поддержку, обработка занимает до 30 дней.',
         ),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Отмена'),
           ),
-          FilledButton(
+          CupertinoDialogAction(
+            isDefaultAction: true,
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Продолжить'),
           ),
@@ -255,21 +253,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       path: 'support@xondev.ru',
       query:
           'subject=${Uri.encodeComponent('Запрос на удаление аккаунта Connect')}'
-          '&body=${Uri.encodeComponent(
-            'Прошу удалить мой аккаунт и связанные с ним данные в приложении Connect.\n\n'
-            'Учётная запись: $email',
-          )}',
+          '&body=${Uri.encodeComponent('Прошу удалить мой аккаунт и связанные с ним данные в приложении Connect.\n\n'
+          'Учётная запись: $email')}',
     );
     if (!await launchUrl(uri) && mounted) {
-      await showDialog<void>(
+      await showCupertinoDialog<void>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => CupertinoAlertDialog(
           title: const Text('Не удалось открыть почту'),
           content: const Text(
             'Отправьте запрос на удаление аккаунта на support@xondev.ru вручную.',
           ),
           actions: [
-            TextButton(
+            CupertinoDialogAction(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('ОК'),
             ),
@@ -280,17 +276,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
+    final confirm = await showCupertinoDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Выйти'),
         content: const Text('Вы уверены, что хотите выйти из аккаунта?'),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
+            isDefaultAction: true,
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Отмена'),
           ),
-          FilledButton(
+          CupertinoDialogAction(
+            isDestructiveAction: true,
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Выйти'),
           ),
@@ -319,18 +317,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '$hh:$mm';
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 29,
-      height: 29,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Icon(icon, size: 17, color: CupertinoColors.white),
-    );
-  }
+  Widget _iconBadge(IconData icon, Color color) =>
+      AppIconBadge(icon: icon, color: color);
 
   Widget _buildSliverBody(BuildContext context) {
     if (_isLoading) {
@@ -354,56 +342,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final status = _statusLabel;
     final contactTiles = <Widget>[
       if (birthday != null)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.gift_fill,
-            CupertinoColors.systemPink,
-          ),
-          title: const Text('Дата рождения'),
-          additionalInfo: Text(DateFormat('dd.MM.yyyy').format(birthday)),
+        _contactTile(
+          icon: CupertinoIcons.gift_fill,
+          color: CupertinoColors.systemPink,
+          title: 'Дата рождения',
+          value: DateFormat('dd.MM.yyyy').format(birthday),
         ),
       if ((email ?? '').isNotEmpty)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.mail_solid,
-            CupertinoColors.systemBlue,
-          ),
-          title: const Text('Email'),
-          additionalInfo: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(
-              email!,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+        _contactTile(
+          icon: CupertinoIcons.mail_solid,
+          color: CupertinoColors.systemBlue,
+          title: 'Email',
+          value: email!,
         ),
       if ((phone ?? '').isNotEmpty)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.phone_fill,
-            CupertinoColors.systemGreen,
-          ),
-          title: const Text('Телефон'),
-          additionalInfo: Text(phone!),
+        // Номер с добавочным длинный — переносим его, а не обрезаем подпись.
+        _contactTile(
+          icon: CupertinoIcons.phone_fill,
+          color: CupertinoColors.systemGreen,
+          title: 'Телефон',
+          value: phone!,
+          maxLines: 2,
         ),
       if ((department ?? '').isNotEmpty)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.building_2_fill,
-            CupertinoColors.systemIndigo,
-          ),
-          title: const Text('Отдел'),
-          additionalInfo: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(
-              department!,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+        _contactTile(
+          icon: CupertinoIcons.building_2_fill,
+          color: CupertinoColors.systemIndigo,
+          title: 'Отдел',
+          value: department!,
         ),
     ];
 
@@ -416,57 +382,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             displayName: _displayName,
             position: position,
             status: status,
-            isBirthdayToday: birthday != null && _isSameMonthDay(
-              birthday,
-              DateTime.now(),
-            ),
+            isBirthdayToday:
+                birthday != null && _isSameMonthDay(birthday, DateTime.now()),
           ),
           if (contactTiles.isNotEmpty) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 4),
             CupertinoListSection.insetGrouped(
-              header: const Text('Контакты'),
+              header: const Text('Контакты', style: _sectionHeaderStyle),
               children: contactTiles,
             ),
           ],
-          const SizedBox(height: 20),
           CupertinoListSection.insetGrouped(
-            children: [
-              CupertinoListTile(
-                leading: _iconBadge(
-                  CupertinoIcons.bell_fill,
-                  CupertinoColors.systemRed,
-                ),
-                title: const Text('Уведомления'),
-                additionalInfo: _unreadNotifications > 0
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemRed,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _unreadNotifications > 99
-                              ? '99+'
-                              : '$_unreadNotifications',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoColors.white,
-                          ),
-                        ),
-                      )
-                    : null,
-                trailing: const CupertinoListTileChevron(),
-                onTap: _openNotifications,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          CupertinoListSection.insetGrouped(
-            header: const Text('Ближайшие брони'),
+            header: const Text('Ближайшие брони', style: _sectionHeaderStyle),
             children: _bookingsLoading
                 ? [
                     const Padding(
@@ -580,21 +507,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   }).toList(),
           ),
-          const SizedBox(height: 20),
-          CupertinoListSection.insetGrouped(
-            children: [
-              CupertinoListTile(
-                leading: _iconBadge(
-                  CupertinoIcons.doc_text_fill,
-                  CupertinoColors.systemGrey,
-                ),
-                title: const Text('Политика конфиденциальности'),
-                trailing: const CupertinoListTileChevron(),
-                onTap: _openPrivacyPolicy,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
           CupertinoListSection.insetGrouped(
             children: [
               CupertinoListTile(
@@ -609,21 +521,118 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 onTap: _logout,
               ),
-              CupertinoListTile(
-                title: const Center(
+            ],
+          ),
+          _footerLink(
+            'Запросить удаление аккаунта',
+            onPressed: _requestAccountDeletion,
+          ),
+          _footerLink(
+            'Политика конфиденциальности',
+            onPressed: _openPrivacyPolicy,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Заголовки секций: у insetGrouped по умолчанию 20 pt жирным — почти
+  /// как крупный заголовок экрана.
+  static const TextStyle _sectionHeaderStyle = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+  );
+
+  /// Строка «Контактов»: 15 pt вместо системных 17 — данные справочные,
+  /// крупный шрифт делал блок тяжелее карточки с именем.
+  Widget _contactTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String value,
+    int maxLines = 1,
+  }) {
+    return CupertinoListTile(
+      leading: _iconBadge(icon, color),
+      title: Text(title, style: const TextStyle(fontSize: 15)),
+      additionalInfo: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          maxLines: maxLines,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 15),
+        ),
+      ),
+    );
+  }
+
+  /// Неброская ссылка внизу профиля (удаление аккаунта, политика).
+  Widget _footerLink(String label, {required VoidCallback onPressed}) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      minimumSize: const Size(0, 32),
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+  }
+
+  /// Колокольчик в шапке с красным счётчиком непрочитанных уведомлений.
+  Widget _buildNotificationsButton(BuildContext context) {
+    final count = _unreadNotifications;
+    return Semantics(
+      button: true,
+      label: count > 0 ? 'Уведомления, непрочитанных: $count' : 'Уведомления',
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(44, 44),
+        onPressed: _openNotifications,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              CupertinoIcons.bell,
+              size: 26,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+            if (count > 0)
+              Positioned(
+                top: -4,
+                right: -8,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  height: 18,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemRed,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context),
+                      width: 1.5,
+                    ),
+                  ),
                   child: Text(
-                    'Запросить удаление аккаунта',
-                    style: TextStyle(
-                      color: CupertinoColors.systemRed,
+                    count > 99 ? '99+' : '$count',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1,
                       fontWeight: FontWeight.w600,
+                      color: CupertinoColors.white,
                     ),
                   ),
                 ),
-                onTap: _requestAccountDeletion,
               ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -635,7 +644,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: SafeArea(
         top: false,
         bottom: false,
-        child: RefreshIndicator(
+        child: RefreshIndicator.adaptive(
           onRefresh: _loadProfile,
           child: CustomScrollView(
             slivers: [
@@ -643,6 +652,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 largeTitle: const Text('Профиль'),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
                 border: null,
+                trailing: _buildNotificationsButton(context),
               ),
               _buildSliverBody(context),
             ],
@@ -671,17 +681,17 @@ class _ProfileHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
             context,
           ),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Column(
+        child: Row(
           children: [
             Stack(
               clipBehavior: Clip.none,
@@ -689,38 +699,69 @@ class _ProfileHeaderCard extends StatelessWidget {
                 MemberAvatar(
                   displayName: displayName,
                   avatarUrl: avatarUrl,
-                  radius: 44,
+                  radius: 30,
                 ),
-                if (isBirthdayToday) const BirthdayBadge(radius: 44),
+                if (isBirthdayToday) const BirthdayBadge(radius: 30),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              displayName,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: '.SF Pro Text',
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: CupertinoColors.label.resolveFrom(context),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: '.SF Pro Text',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+                  if ((position ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      position!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: '.SF Pro Text',
+                        fontSize: 14,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if ((status ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: CupertinoColors.activeBlue.withValues(
+                          alpha: 0.12,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        status!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: CupertinoColors.activeBlue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            if ((position ?? '').isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                position!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: '.SF Pro Text',
-                  fontSize: 14,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                ),
-              ),
-            ],
-            if ((status ?? '').isNotEmpty) ...[
-              const SizedBox(height: 10),
-              StatusBubble(text: status!),
-            ],
           ],
         ),
       ),
