@@ -414,7 +414,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              _StatChip(
+              NewsStatChip(
                 icon: CupertinoIcons.eye,
                 label: '${_news.viewsCount}',
                 onTap: () => NewsPeopleSheet.show(
@@ -441,7 +441,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           children: [
             const Text(
               'Комментарии',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             if (!_commentsLoading && _comments.isNotEmpty) ...[
               const SizedBox(width: 8),
@@ -793,32 +793,6 @@ class _CommentTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.label, this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = CupertinoColors.secondaryLabel.resolveFrom(context);
-    return CupertinoButton(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      minimumSize: Size.zero,
-      onPressed: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 13, color: color)),
-        ],
       ),
     );
   }

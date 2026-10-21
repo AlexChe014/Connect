@@ -374,7 +374,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CupertinoColors.systemGreen,
           ),
           title: const Text('Телефон'),
-          additionalInfo: Text(phone!),
+          // Номер с добавочным длинный — переносим его, а не обрезаем подпись.
+          additionalInfo: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 200),
+            child: Text(phone!, textAlign: TextAlign.right, maxLines: 2),
+          ),
         ),
       if ((department ?? '').isNotEmpty)
         CupertinoListTile(
@@ -408,60 +412,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 birthday != null && _isSameMonthDay(birthday, DateTime.now()),
           ),
           if (contactTiles.isNotEmpty) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 4),
             CupertinoListSection.insetGrouped(
-              header: const Text('Контакты'),
+              header: const Text('Контакты', style: _sectionHeaderStyle),
               children: contactTiles,
             ),
           ],
-          const SizedBox(height: 20),
           CupertinoListSection.insetGrouped(
-            children: [
-              CupertinoListTile(
-                leading: _iconBadge(
-                  CupertinoIcons.bell_fill,
-                  CupertinoColors.systemRed,
-                ),
-                title: const Text('Уведомления'),
-                additionalInfo: _unreadNotifications > 0
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.systemRed,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _unreadNotifications > 99
-                              ? '99+'
-                              : '$_unreadNotifications',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: CupertinoColors.white,
-                          ),
-                        ),
-                      )
-                    : null,
-                trailing: const CupertinoListTileChevron(),
-                onTap: _openNotifications,
-              ),
-              CupertinoListTile(
-                leading: _iconBadge(
-                  CupertinoIcons.doc_text_fill,
-                  CupertinoColors.systemGrey,
-                ),
-                title: const Text('Политика конфиденциальности'),
-                trailing: const CupertinoListTileChevron(),
-                onTap: _openPrivacyPolicy,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          CupertinoListSection.insetGrouped(
-            header: const Text('Ближайшие брони'),
+            header: const Text('Ближайшие брони', style: _sectionHeaderStyle),
             children: _bookingsLoading
                 ? [
                     const Padding(
@@ -575,7 +533,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   }).toList(),
           ),
-          const SizedBox(height: 20),
           CupertinoListSection.insetGrouped(
             children: [
               CupertinoListTile(
@@ -592,18 +549,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+          _footerLink(
+            'Запросить удаление аккаунта',
             onPressed: _requestAccountDeletion,
-            child: Text(
-              'Запросить удаление аккаунта',
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
+          ),
+          _footerLink(
+            'Политика конфиденциальности',
+            onPressed: _openPrivacyPolicy,
           ),
         ],
+      ),
+    );
+  }
+
+  /// Заголовки секций: у insetGrouped по умолчанию 20 pt жирным — почти
+  /// как крупный заголовок экрана.
+  static const TextStyle _sectionHeaderStyle = TextStyle(
+    fontSize: 18,
+    fontWeight: FontWeight.w700,
+  );
+
+  /// Неброская ссылка внизу профиля (удаление аккаунта, политика).
+  Widget _footerLink(String label, {required VoidCallback onPressed}) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      minimumSize: const Size(0, 32),
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+  }
+
+  /// Колокольчик в шапке с красным счётчиком непрочитанных уведомлений.
+  Widget _buildNotificationsButton(BuildContext context) {
+    final count = _unreadNotifications;
+    return Semantics(
+      button: true,
+      label: count > 0 ? 'Уведомления, непрочитанных: $count' : 'Уведомления',
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(44, 44),
+        onPressed: _openNotifications,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              CupertinoIcons.bell,
+              size: 26,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+            if (count > 0)
+              Positioned(
+                top: -4,
+                right: -8,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  height: 18,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemRed,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    count > 99 ? '99+' : '$count',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -623,6 +653,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 largeTitle: const Text('Профиль'),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
                 border: null,
+                trailing: _buildNotificationsButton(context),
               ),
               _buildSliverBody(context),
             ],

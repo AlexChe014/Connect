@@ -102,6 +102,21 @@ abstract final class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
       canvasColor: AppColors.background,
+      // Крупные заголовки экранов (CupertinoSliverNavigationBar): системные
+      // 34 pt выглядели слишком громоздко рядом с карточками — чуть меньше.
+      cupertinoOverrideTheme: const CupertinoThemeData(
+        textTheme: CupertinoTextThemeData(
+          primaryColor: AppColors.primary,
+          navLargeTitleTextStyle: TextStyle(
+            inherit: false,
+            fontFamily: 'CupertinoSystemDisplay',
+            fontSize: 30,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.36,
+            color: CupertinoColors.label,
+          ),
+        ),
+      ),
       textTheme: const TextTheme(
         headlineSmall: TextStyle(
           color: AppColors.onSurface,

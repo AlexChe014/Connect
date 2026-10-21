@@ -159,12 +159,11 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     if (discard == true && mounted) Navigator.of(context).pop();
   }
 
-  /// Ответ/пересылка с файлами, пока сервер не принимает вложения в
-  /// reply/forward, уходят через общий send — без связи с перепиской.
-  bool get _sendsAsNewLetter =>
-      _attachments.isNotEmpty &&
-      (widget.replyTo != null || widget.forwardOf != null) &&
-      !MailRepository.replyAttachmentsSupported;
+  /// Вложения в ответе/пересылке сервер пока не принимает — до доработки
+  /// бэкенда (replyAttachmentsSupported) кнопку прикрепления не показываем.
+  bool get _canAttach =>
+      (widget.replyTo == null && widget.forwardOf == null) ||
+      MailRepository.replyAttachmentsSupported;
 
   @override
   void dispose() {
@@ -275,10 +274,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           )
           .toList();
       // /mail/smtp/reply/{email} и /mail/smtp/forward/{email} отправляют с
-      // ящика исходного письма и связывают ответ с перепиской. Вложения они
-      // принимают только после доработки бэкенда (replyAttachmentsSupported);
-      // до тех пор письмо с файлами уходит через общий multipart-отправитель.
-      if (replyTo != null && !_sendsAsNewLetter) {
+      // ящика исходного письма и связывают ответ с перепиской.
+      if (replyTo != null) {
         await MailRepository.instance.replyMail(
           ReplyMailRequest(
             messageId: replyTo.id,
@@ -288,7 +285,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             attachments: files,
           ),
         );
-      } else if (forwardOf != null && !_sendsAsNewLetter) {
+      } else if (forwardOf != null) {
         await MailRepository.instance.forwardMail(
           ForwardMailRequest(
             messageId: forwardOf.id,
@@ -487,9 +484,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 15),
             ),
-            subtitle: Text(
-              formatFileSize(_attachments[index].bytes.length),
-            ),
+            subtitle: Text(formatFileSize(_attachments[index].bytes.length)),
             trailing: CupertinoButton(
               padding: EdgeInsets.zero,
               minimumSize: Size.zero,
@@ -540,15 +535,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           _buildHeaderFields(context),
           if (error != null) BookingFootnote(error, isError: true),
           _buildBody(context),
-          _buildAttachments(context),
-          if (_sendsAsNewLetter)
-            BookingFootnote(
-              widget.forwardOf != null
-                  ? 'С вложениями письмо уйдёт новым письмом: файлы исходного '
-                        'письма не будут пересланы.'
-                  : 'С вложениями ответ уйдёт новым письмом, без связи '
-                        'с перепиской.',
-            ),
+          if (_canAttach) _buildAttachments(context),
         ],
       ),
     );

@@ -511,7 +511,7 @@ class MailRepository {
 
   /// Принимают ли `/mail/smtp/reply` и `/mail/smtp/forward` вложения
   /// (multipart `attachments[]`, как `/mail/smtp/send`). Пока сервер их не
-  /// поддерживает, ответ/пересылка с файлами уходит новым письмом — см.
+  /// поддерживает, в ответе/пересылке кнопка «Прикрепить» скрыта — см.
   /// docs/BACKEND_MAIL_FIXES.md, п. 10. Включить после выкладки бэкенда.
   static const bool replyAttachmentsSupported = false;
 
