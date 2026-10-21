@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// Единая точка показа ошибок сети/авторизации пользователю.
@@ -52,13 +53,13 @@ class AppFeedback {
   }) async {
     if (!context.mounted) return;
     final message = messageOf(error, fallback: fallback);
-    await showDialog<void>(
+    await showCupertinoDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => CupertinoAlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(
+          CupertinoDialogAction(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('OK'),
           ),

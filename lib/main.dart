@@ -45,6 +45,7 @@ import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
 import 'utils/media_url_utils.dart';
 import 'utils/user_display_name.dart';
+import 'widgets/app_icon_badge.dart';
 import 'widgets/chat_avatar.dart';
 import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
@@ -143,13 +144,14 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
           // и диалоги приложения построены на Cupertino-виджетах без Material,
           // поэтому здесь задаётся собственный DefaultTextStyle на уровне всего
           // Navigator — это покрывает и showDialog/showCupertinoDialog/шторки.
+          final textStyle = TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          );
           return DefaultTextStyle(
-            style: TextStyle(
-              fontFamily: '.SF Pro Text',
-              decoration: TextDecoration.none,
-              color: CupertinoColors.label.resolveFrom(context),
-              fontSize: 16,
-            ),
+            style: textStyle,
             // Тап в любом месте вне текстового поля (в т.ч. в открытых поверх
             // экранов шторках вроде выбора сотрудника на «Диске») должен
             // закрывать клавиатуру — иначе после ввода текста её нечем убрать.
@@ -160,7 +162,18 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
               child: Stack(
                 children: [
-                  child!,
+                  // Корневой Scaffold над Navigator: ScaffoldMessenger
+                  // показывает SnackBar только в самом верхнем Scaffold, и
+                  // без этой обёртки им был Scaffold главного экрана —
+                  // на экранах, открытых поверх него, SnackBar рисовался
+                  // под ними и был не виден.
+                  // Material внутри Scaffold сбрасывает DefaultTextStyle на
+                  // тему — возвращаем стиль приложения.
+                  Scaffold(
+                    backgroundColor: Colors.transparent,
+                    resizeToAvoidBottomInset: false,
+                    body: DefaultTextStyle(style: textStyle, child: child!),
+                  ),
                   const HomeShortcutButton(),
                   const VpnBanner(),
                 ],
@@ -333,10 +346,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     return Scaffold(
       key: _scaffoldKey,
+      // Тот же серый, что у вкладок: плавающее меню лежит на нём.
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
       drawerScrimColor: Colors.transparent,
       onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
-        backgroundColor: AppColors.surfaceElevated,
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: SafeArea(
           child: ListView(
             padding: EdgeInsets.zero,
@@ -350,11 +369,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                   _openProfile();
                 },
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
               _DrawerMenuCard(
                 children: [
                   _DrawerItem(
                     icon: CupertinoIcons.search,
+                    color: CupertinoColors.systemGrey,
                     label: 'Поиск',
                     selected: false,
                     onTap: () {
@@ -367,7 +387,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.news,
+                    icon: CupertinoIcons.news_solid,
+                    color: CupertinoColors.systemOrange,
                     label: 'Лента',
                     selected: !_isProfileOpen && _currentIndex == 0,
                     onTap: () {
@@ -377,6 +398,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                   ),
                   _DrawerItem(
                     icon: CupertinoIcons.calendar,
+                    color: CupertinoColors.systemRed,
                     label: 'Календарь',
                     selected: !_isProfileOpen && _currentIndex == 1,
                     onTap: () {
@@ -385,7 +407,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.chat_bubble_2,
+                    icon: CupertinoIcons.chat_bubble_2_fill,
+                    color: CupertinoColors.systemGreen,
                     label: 'Чаты',
                     selected: !_isProfileOpen && _currentIndex == 2,
                     badgeLabel: _unreadChatsBadge,
@@ -395,7 +418,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.star,
+                    icon: CupertinoIcons.star_fill,
+                    color: CupertinoColors.systemYellow,
                     label: 'Избранное',
                     selected: !_isProfileOpen && _currentIndex == 3,
                     onTap: () {
@@ -404,7 +428,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.videocam,
+                    icon: CupertinoIcons.videocam_fill,
+                    color: CupertinoColors.systemIndigo,
                     label: 'Коннектор',
                     selected: !_isProfileOpen && _currentIndex == 4,
                     onTap: () {
@@ -414,11 +439,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
               _DrawerMenuCard(
                 children: [
                   _DrawerItem(
-                    icon: CupertinoIcons.person_2,
+                    icon: CupertinoIcons.person_2_fill,
+                    color: CupertinoColors.systemBlue,
                     label: 'Сотрудники',
                     selected: false,
                     onTap: () {
@@ -431,7 +457,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.bookmark,
+                    icon: CupertinoIcons.bookmark_fill,
+                    color: CupertinoColors.systemTeal,
                     label: 'Бронирования',
                     selected: false,
                     onTap: () {
@@ -444,7 +471,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.mail,
+                    icon: CupertinoIcons.mail_solid,
+                    color: CupertinoColors.systemBlue,
                     label: 'Почта',
                     selected: false,
                     badgeCount: MailUnreadService.instance.unreadCount,
@@ -460,7 +488,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.doc_text,
+                    icon: CupertinoIcons.doc_text_fill,
+                    color: CupertinoColors.systemOrange,
                     label: 'Согласование',
                     selected: false,
                     onTap: () {
@@ -473,7 +502,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.folder,
+                    icon: CupertinoIcons.folder_fill,
+                    color: CupertinoColors.systemCyan,
                     label: 'Диск',
                     selected: false,
                     onTap: () {
@@ -484,7 +514,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     },
                   ),
                   _DrawerItem(
-                    icon: CupertinoIcons.gift,
+                    icon: CupertinoIcons.gift_fill,
+                    color: CupertinoColors.systemPink,
                     label: 'Бонусная программа',
                     selected: false,
                     onTap: () {
@@ -498,11 +529,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
               _DrawerMenuCard(
                 children: [
                   _DrawerItem(
-                    icon: CupertinoIcons.book,
+                    icon: CupertinoIcons.book_fill,
+                    color: CupertinoColors.systemBrown,
                     label: 'База знаний',
                     selected: false,
                     isExternal: true,
@@ -552,43 +584,37 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
+      bottomNavigationBar: _FloatingTabBar(
+        currentIndex: _currentIndex,
+        onSelect: (index) {
           HapticFeedback.selectionClick();
           setState(() => _currentIndex = index);
         },
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.news),
-            selectedIcon: Icon(CupertinoIcons.news_solid),
+        items: [
+          const _TabItem(
+            icon: CupertinoIcons.news,
+            activeIcon: CupertinoIcons.news_solid,
             label: 'Лента',
           ),
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.calendar),
+          const _TabItem(
+            icon: CupertinoIcons.calendar,
+            activeIcon: CupertinoIcons.calendar,
             label: 'Календарь',
           ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: _unreadChatsCount > 0,
-              label: Text(_unreadChatsBadge),
-              child: const Icon(CupertinoIcons.chat_bubble_2),
-            ),
-            selectedIcon: Badge(
-              isLabelVisible: _unreadChatsCount > 0,
-              label: Text(_unreadChatsBadge),
-              child: const Icon(CupertinoIcons.chat_bubble_2_fill),
-            ),
+          _TabItem(
+            icon: CupertinoIcons.chat_bubble_2,
+            activeIcon: CupertinoIcons.chat_bubble_2_fill,
             label: 'Чаты',
+            badge: _unreadChatsCount > 0 ? _unreadChatsBadge : null,
           ),
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.star),
-            selectedIcon: Icon(CupertinoIcons.star_fill),
+          const _TabItem(
+            icon: CupertinoIcons.star,
+            activeIcon: CupertinoIcons.star_fill,
             label: 'Избранное',
           ),
-          const NavigationDestination(
-            icon: Icon(CupertinoIcons.videocam),
-            selectedIcon: Icon(CupertinoIcons.videocam_fill),
+          const _TabItem(
+            icon: CupertinoIcons.videocam,
+            activeIcon: CupertinoIcons.videocam_fill,
             label: 'Коннектор',
           ),
         ],
@@ -597,9 +623,185 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 }
 
+class _TabItem {
+  const _TabItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    this.badge,
+  });
+
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+
+  /// Подпись красного бейджа (`3`, `99+`); `null` — без бейджа.
+  final String? badge;
+}
+
+/// Нижнее меню — плавающая белая капсула над серым фоном вкладок,
+/// активный пункт подсвечен мягкой подложкой цвета бренда.
+class _FloatingTabBar extends StatelessWidget {
+  const _FloatingTabBar({
+    required this.currentIndex,
+    required this.onSelect,
+    required this.items,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final List<_TabItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    // Капсула частично заходит в зону home indicator, как системный
+    // таб-бар iOS, но не ближе 12pt к краю на устройствах без неё.
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final bottom = safeBottom > 0 ? (safeBottom - 10).clamp(12.0, 40.0) : 12.0;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 6, 16, bottom),
+      child: Container(
+        height: 62,
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+            context,
+          ),
+          borderRadius: BorderRadius.circular(31),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < items.length; i++)
+              Expanded(
+                child: _TabButton(
+                  item: items[i],
+                  selected: i == currentIndex,
+                  onTap: () => onSelect(i),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  const _TabButton({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _TabItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected
+        ? AppColors.primary
+        : CupertinoColors.secondaryLabel.resolveFrom(context);
+    final badge = item.badge;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: item.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.1)
+                : const Color(0x00000000),
+            borderRadius: BorderRadius.circular(27),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    selected ? item.activeIcon : item.icon,
+                    size: 23,
+                    color: color,
+                  ),
+                  if (badge != null)
+                    Positioned(
+                      top: -5,
+                      left: 15,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 18),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemRed,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(
+                            color: CupertinoColors
+                                .secondarySystemGroupedBackground
+                                .resolveFrom(context),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          badge,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                            color: CupertinoColors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.fade,
+                softWrap: false,
+                style: TextStyle(
+                  fontFamily: '.SF Pro Text',
+                  fontSize: 10.5,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Карточка-шапка меню: лого приложения + профиль текущего пользователя.
-/// Белый фон карточки совпадает с фоном лого — благодаря этому у логотипа
-/// больше нет шва с серой подложкой меню.
+/// Тот же вид, что у inset-grouped секций остальных экранов.
 class _DrawerHeaderCard extends StatelessWidget {
   const _DrawerHeaderCard({
     required this.displayName,
@@ -616,79 +818,44 @@ class _DrawerHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.onSurface.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
+          context,
+        ),
+        borderRadius: BorderRadius.circular(10),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          BrandingLoginLogo(height: 32),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.outline),
-          const SizedBox(height: 14),
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onProfileTap,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    MemberAvatar(
-                      displayName: displayName,
-                      avatarUrl: avatarUrl,
-                      radius: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          if ((position ?? '').isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              position!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: AppColors.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      CupertinoIcons.chevron_right,
-                      size: 16,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: BrandingLoginLogo(height: 30),
+          ),
+          Container(
+            height: 0.5,
+            margin: const EdgeInsets.only(left: 16),
+            color: CupertinoColors.separator.resolveFrom(context),
+          ),
+          CupertinoListTile(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            leadingSize: 44,
+            leading: MemberAvatar(
+              displayName: displayName,
+              avatarUrl: avatarUrl,
+              radius: 22,
             ),
+            title: Text(
+              displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: (position ?? '').isNotEmpty
+                ? Text(position!, maxLines: 1, overflow: TextOverflow.ellipsis)
+                : null,
+            trailing: const CupertinoListTileChevron(),
+            onTap: onProfileTap,
           ),
         ],
       ),
@@ -696,8 +863,7 @@ class _DrawerHeaderCard extends StatelessWidget {
   }
 }
 
-/// Сгруппированный список пунктов меню в виде белой карточки с обводкой —
-/// вместо серого фона меню "просвечивающего" между пунктами.
+/// Группа пунктов меню — стандартная inset-grouped секция iOS.
 class _DrawerMenuCard extends StatelessWidget {
   const _DrawerMenuCard({required this.children});
 
@@ -705,22 +871,10 @@ class _DrawerMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return CupertinoListSection.insetGrouped(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outline),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: AppColors.outline),
-            children[i],
-          ],
-        ],
-      ),
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      children: children,
     );
   }
 }
@@ -728,6 +882,7 @@ class _DrawerMenuCard extends StatelessWidget {
 class _DrawerItem extends StatelessWidget {
   const _DrawerItem({
     required this.icon,
+    required this.color,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -737,12 +892,15 @@ class _DrawerItem extends StatelessWidget {
   });
 
   final IconData icon;
+
+  /// Цвет квадратика под иконкой.
+  final Color color;
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
   /// `true` — пункт открывает внешнюю ссылку, а не раздел приложения:
-  /// вместо синей заливки показывает иконку внешней ссылки.
+  /// справа показывается иконка внешней ссылки.
   final bool isExternal;
 
   /// Число непрочитанного для этого раздела — 0 скрывает бейдж.
@@ -753,63 +911,48 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = selected ? AppColors.primary : AppColors.onSurface;
     final text = badgeLabel ?? (badgeCount > 99 ? '99+' : '$badgeCount');
     final showBadge =
         (badgeLabel != null && badgeLabel!.isNotEmpty) || badgeCount > 0;
-    return Material(
-      color: selected
+    return CupertinoListTile(
+      backgroundColor: selected
           ? AppColors.primary.withValues(alpha: 0.1)
-          : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: tint),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: tint,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  ),
+          : null,
+      leading: AppIconBadge(icon: icon, color: color),
+      title: Text(
+        label,
+        style: selected
+            ? const TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              )
+            : null,
+      ),
+      additionalInfo: showBadge
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemRed,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.white,
                 ),
               ),
-              if (showBadge) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.systemRed,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    text,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              if (isExternal)
-                Icon(
-                  CupertinoIcons.arrow_up_right_square,
-                  size: 18,
-                  color: AppColors.onSurfaceVariant,
-                ),
-            ],
-          ),
-        ),
-      ),
+            )
+          : null,
+      trailing: isExternal
+          ? Icon(
+              CupertinoIcons.arrow_up_right_square,
+              size: 18,
+              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+            )
+          : null,
+      onTap: onTap,
     );
   }
 }

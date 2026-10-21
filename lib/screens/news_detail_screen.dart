@@ -363,7 +363,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           child: Column(
             children: [
               Expanded(
-                child: RefreshIndicator(
+                child: RefreshIndicator.adaptive(
                   onRefresh: () async {
                     await Future.wait([_refreshNews(), _loadComments()]);
                   },

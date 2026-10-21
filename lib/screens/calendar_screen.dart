@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../config/app_icons.dart';
 import '../models/bookings/create_booking_request.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
@@ -357,7 +356,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         child: SizedBox(
           height: 220,
           child: AppEmptyState(
-            icon: Icons.error_outline,
+            icon: CupertinoIcons.exclamationmark_circle,
             message: _error!,
             onRetry: _bootstrap,
           ),
@@ -370,7 +369,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       return const SliverToBoxAdapter(
         child: SizedBox(
           height: 160,
-          child: AppEmptyState(icon: AppIcons.date, message: 'Выберите день'),
+          child: AppEmptyState(icon: CupertinoIcons.calendar, message: 'Выберите день'),
         ),
       );
     }
@@ -387,7 +386,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           child: SizedBox(
             height: 140,
             child: AppEmptyState(
-              icon: AppIcons.date,
+              icon: CupertinoIcons.calendar,
               message: 'На этот день событий нет',
             ),
           ),
@@ -546,7 +545,7 @@ class _EventTile extends StatelessWidget {
                       width: 29,
                       height: 29,
                       borderRadius: 7,
-                      errorIcon: AppIcons.locationPin,
+                      errorIcon: CupertinoIcons.location_solid,
                     )
                   : iconBadge(
                       CupertinoIcons.location_solid,

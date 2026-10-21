@@ -347,7 +347,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: AppEmptyState(
-                    icon: Icons.error_outline,
+                    icon: CupertinoIcons.exclamationmark_circle,
                     message: _error!,
                     onRetry: _load,
                   ),

@@ -453,7 +453,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     }
 
     if (_documents.isEmpty) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: () => _loadDocuments(),
         child: AppEmptyState(
           icon: CupertinoIcons.tray,
@@ -464,7 +464,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: () => _loadDocuments(),
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

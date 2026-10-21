@@ -251,7 +251,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
         child: SafeArea(
           top: false,
           bottom: false,
-          child: RefreshIndicator(
+          child: RefreshIndicator.adaptive(
             onRefresh: _load,
             child: CustomScrollView(
               slivers: [

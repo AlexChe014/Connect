@@ -558,7 +558,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
         child: SafeArea(
           top: false,
           bottom: false,
-          child: RefreshIndicator(
+          child: RefreshIndicator.adaptive(
             onRefresh: _isBootLoading ? _bootstrap : _loadResults,
             child: CustomScrollView(
               slivers: [

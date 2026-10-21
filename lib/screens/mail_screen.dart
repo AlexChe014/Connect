@@ -211,7 +211,7 @@ class _MailScreenState extends State<MailScreen> {
           child: SafeArea(
             top: false,
             bottom: false,
-            child: RefreshIndicator(
+            child: RefreshIndicator.adaptive(
               onRefresh: _loadConnections,
               child: CustomScrollView(
                 slivers: [

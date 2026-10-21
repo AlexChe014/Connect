@@ -33,6 +33,11 @@ class CreateBookingScreen extends StatefulWidget {
 
   bool get isMeeting => object == null;
 
+  /// Доп. услуги (чай, кофе и т.п.) заказываются только к переговорной —
+  /// для рабочих мест, локеров, парковок и встреч без объекта их нет.
+  bool get supportsAdditions =>
+      !isMeeting && modelType == CreateBookingRequest.meetingRoomModelType;
+
   @override
   State<CreateBookingScreen> createState() => _CreateBookingScreenState();
 }
@@ -63,13 +68,10 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
   void initState() {
     super.initState();
     _initDateTimeFromInitial();
-    if (widget.isMeeting) {
-      // Дополнения (кейтеринг, оборудование и т.п.) привязаны к
-      // бронированию физического объекта — для встречи без объекта
-      // их не показываем и не загружаем.
-      _additionsLoading = false;
-    } else {
+    if (widget.supportsAdditions) {
       _loadAdditions();
+    } else {
+      _additionsLoading = false;
     }
   }
 
@@ -545,7 +547,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
                   ),
                 ),
               const SizedBox(height: 20),
-              if (!widget.isMeeting)
+              if (widget.supportsAdditions)
                 if (_additionsLoading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),

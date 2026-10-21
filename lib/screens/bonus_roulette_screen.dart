@@ -244,7 +244,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
 
     final config = _config;
     if (config == null || !config.enabled) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: _load,
         child: const AppEmptyState(
           icon: CupertinoIcons.sparkles,

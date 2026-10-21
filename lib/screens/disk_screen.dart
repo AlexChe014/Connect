@@ -410,7 +410,7 @@ class _DiskScreenState extends State<DiskScreen> {
 
     final listing = _listing;
     if (listing == null || listing.isEmpty) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: _load,
         child: const AppEmptyState(
           icon: CupertinoIcons.folder,
@@ -421,7 +421,7 @@ class _DiskScreenState extends State<DiskScreen> {
 
     final rowCount = listing.folders.length + listing.files.length;
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _load,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

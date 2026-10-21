@@ -1,6 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../config/app_icons.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import 'app_loading.dart';
@@ -144,8 +144,8 @@ class _NewsPeopleSheetState extends State<NewsPeopleSheet> {
             backgroundImage: hasAvatar ? NetworkImage(person.avatarUrl!) : null,
             child: hasAvatar
                 ? null
-                : AppIcon(
-                    AppIcons.user,
+                : Icon(
+                    CupertinoIcons.person_fill,
                     size: 20,
                     color: Theme.of(context).colorScheme.onPrimaryContainer,
                   ),

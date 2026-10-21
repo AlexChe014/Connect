@@ -263,7 +263,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         child: SafeArea(
           top: false,
           bottom: false,
-          child: RefreshIndicator(
+          child: RefreshIndicator.adaptive(
             onRefresh: () async {
               _debounce?.cancel();
               _appliedQ = _qController.text.trim();

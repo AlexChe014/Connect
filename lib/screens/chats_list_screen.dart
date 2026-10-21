@@ -328,7 +328,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         child: SafeArea(
           top: false,
           bottom: false,
-          child: RefreshIndicator(
+          child: RefreshIndicator.adaptive(
             onRefresh: _chat.refreshChats,
             child: CustomScrollView(
               slivers: [

@@ -330,7 +330,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
       child: SafeArea(
         top: false,
         bottom: false,
-        child: RefreshIndicator(
+        child: RefreshIndicator.adaptive(
           onRefresh: _loadFirstPage,
           child: CustomScrollView(
             controller: _scrollController,

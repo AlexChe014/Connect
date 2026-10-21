@@ -141,7 +141,7 @@ class _BonusHistoryScreenState extends State<BonusHistoryScreen> {
     }
 
     if (_items.isEmpty) {
-      return RefreshIndicator(
+      return RefreshIndicator.adaptive(
         onRefresh: _loadFirstPage,
         child: const AppEmptyState(
           icon: CupertinoIcons.time,
@@ -150,7 +150,7 @@ class _BonusHistoryScreenState extends State<BonusHistoryScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return RefreshIndicator.adaptive(
       onRefresh: _loadFirstPage,
       child: ListView.separated(
         controller: _scrollController,

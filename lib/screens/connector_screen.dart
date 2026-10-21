@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 
-import '../config/app_icons.dart';
 import '../widgets/menu_button.dart';
 import 'create_instant_meeting_screen.dart';
 import 'schedule_video_meeting_screen.dart';
@@ -99,14 +98,14 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
                 margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 children: [
                   _actionTile(
-                    icon: AppIcons.videoMeeting,
+                    icon: CupertinoIcons.video_camera_solid,
                     color: CupertinoColors.systemBlue,
                     title: 'Создать видеовстречу',
                     subtitle: 'Пригласить участников и сразу начать',
                     onTap: _openCreateInstant,
                   ),
                   _actionTile(
-                    icon: AppIcons.scheduleMeeting,
+                    icon: CupertinoIcons.calendar_badge_plus,
                     color: CupertinoColors.systemOrange,
                     title: 'Запланировать видеовстречу',
                     subtitle: 'Создать запись в календаре с участниками',

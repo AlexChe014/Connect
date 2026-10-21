@@ -308,7 +308,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
         child: SafeArea(
           top: false,
           bottom: false,
-          child: RefreshIndicator(
+          child: RefreshIndicator.adaptive(
             onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),

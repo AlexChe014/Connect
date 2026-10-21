@@ -616,7 +616,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                                   ),
                           ),
                           Expanded(
-                            child: RefreshIndicator(
+                            child: RefreshIndicator.adaptive(
                               onRefresh: () => _loadMessages(forceSync: true),
                               child: NotificationListener<ScrollNotification>(
                                 onNotification: (notification) {

@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../config/app_theme.dart';
 import 'app_loading.dart';
@@ -15,7 +15,7 @@ class AppNetworkImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.borderRadius = 0,
-    this.errorIcon = Icons.image_not_supported_outlined,
+    this.errorIcon = CupertinoIcons.photo,
     this.httpHeaders,
   });
 
