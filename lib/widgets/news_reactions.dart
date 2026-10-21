@@ -112,10 +112,7 @@ class NewsReactionsBar extends StatelessWidget {
 
 /// Пикер реакции. Возвращает выбранный эмодзи (выбор уже активного снимет
 /// реакцию на сервере) или `null`, если пользователь закрыл пикер.
-Future<String?> showNewsReactionPicker(
-  BuildContext context, {
-  String? active,
-}) {
+Future<String?> showNewsReactionPicker(BuildContext context, {String? active}) {
   return showCupertinoModalPopup<String>(
     context: context,
     builder: (context) => CupertinoActionSheet(

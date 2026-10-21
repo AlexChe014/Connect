@@ -97,7 +97,11 @@ class _ConfettiPainter extends CustomPainter {
       canvas.translate(offset.dx, offset.dy);
       canvas.rotate(p.spin * t * pi);
       canvas.drawRect(
-        Rect.fromCenter(center: Offset.zero, width: p.size, height: p.size * 1.6),
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: p.size,
+          height: p.size * 1.6,
+        ),
         Paint()..color = p.color.withValues(alpha: opacity),
       );
       canvas.restore();
@@ -105,5 +109,6 @@ class _ConfettiPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ConfettiPainter oldDelegate) => oldDelegate.t != t;
+  bool shouldRepaint(covariant _ConfettiPainter oldDelegate) =>
+      oldDelegate.t != t;
 }

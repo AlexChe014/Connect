@@ -22,24 +22,6 @@ String chatInitials(Chat c) {
   return parts[0].characters.take(2).toString().toUpperCase();
 }
 
-Color chatAvatarColor(String key) {
-  var h = 0;
-  for (final code in key.codeUnits) {
-    h = (h * 31 + code) & 0x7fffffff;
-  }
-  const palette = <Color>[
-    Color(0xFF5AC8FA),
-    Color(0xFF34C759),
-    Color(0xFFFF9500),
-    Color(0xFFFF2D55),
-    Color(0xFFAF52DE),
-    Color(0xFF5856D6),
-    Color(0xFF64D2FF),
-    Color(0xFFFFCC00),
-  ];
-  return palette[h % palette.length];
-}
-
 String? chatAvatarBestPath(Chat c) {
   final peer = c.peerAvatarPath?.trim();
   if (peer != null && peer.isNotEmpty) return peer;
@@ -56,28 +38,33 @@ String? chatAvatarBestUrl(Chat c) {
   return null;
 }
 
-/// Заглушка из инициалов на цветном фоне (общий фоллбэк для аватаров).
+/// Заглушка из инициалов на сером градиенте — как монограмма
+/// в «Контактах» iOS (общий фоллбэк для аватаров).
 class _InitialsAvatar extends StatelessWidget {
-  const _InitialsAvatar({
-    required this.initials,
-    required this.backgroundColor,
-    required this.radius,
-  });
+  const _InitialsAvatar({required this.initials, required this.radius});
 
   final String initials;
-  final Color backgroundColor;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: backgroundColor,
+    return Container(
+      width: radius * 2,
+      height: radius * 2,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFA5ABB8), Color(0xFF858994)],
+        ),
+      ),
       child: Text(
         initials,
         style: TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           fontSize: radius * 0.75,
           height: 1,
         ),
@@ -118,7 +105,6 @@ class _ChatAvatarState extends State<ChatAvatar> {
 
   Widget _fallback() => _InitialsAvatar(
     initials: chatInitials(widget.chat),
-    backgroundColor: chatAvatarColor(widget.chat.title),
     radius: widget.radius,
   );
 
@@ -164,7 +150,10 @@ class _ChatAvatarState extends State<ChatAvatar> {
     }
     return Stack(
       clipBehavior: Clip.none,
-      children: [avatar, BirthdayBadge(radius: widget.radius)],
+      children: [
+        avatar,
+        BirthdayBadge(radius: widget.radius),
+      ],
     );
   }
 }
@@ -210,11 +199,8 @@ class MemberAvatar extends StatelessWidget {
   final String? avatarUrl;
   final double radius;
 
-  Widget _fallback() => _InitialsAvatar(
-    initials: userInitials(displayName),
-    backgroundColor: chatAvatarColor(displayName),
-    radius: radius,
-  );
+  Widget _fallback() =>
+      _InitialsAvatar(initials: userInitials(displayName), radius: radius);
 
   @override
   Widget build(BuildContext context) {

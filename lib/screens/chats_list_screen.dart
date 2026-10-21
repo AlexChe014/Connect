@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connect/config/app_theme.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
@@ -213,15 +214,20 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.only(top: 4, bottom: 16),
       sliver: SliverList.separated(
         itemCount: filtered.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        separatorBuilder: (context, index) => Container(
+          height: 0.5,
+          margin: const EdgeInsets.only(left: 76),
+          color: CupertinoColors.separator.resolveFrom(context),
+        ),
         itemBuilder: (context, index) {
           final c = filtered[index];
           return SwipeActionsRow(
             id: c.id,
             groupController: _swipeGroup,
+            borderRadius: 0,
             actions: [
               SwipeAction(
                 icon: c.isPinned
@@ -280,9 +286,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context, 'favorite'),
-            child: Text(
-              c.isFavorite ? 'Убрать из избранного' : 'В избранное',
-            ),
+            child: Text(c.isFavorite ? 'Убрать из избранного' : 'В избранное'),
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context, 'mute'),
@@ -317,7 +321,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: CupertinoColors.systemBackground,
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
@@ -335,16 +339,21 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                 CupertinoSliverNavigationBar(
                   largeTitle: const Text('Чаты'),
                   leading: const MenuButton(),
-                  backgroundColor: CupertinoColors.systemGroupedBackground
+                  // Полупрозрачная — список уходит под размытую шапку.
+                  backgroundColor: CupertinoColors.systemBackground
                       .resolveFrom(context)
-                      .withValues(alpha: 1.0),
+                      .withValues(alpha: 0.8),
                   automaticBackgroundVisibility: false,
                   border: null,
                   trailing: CupertinoButton(
                     padding: EdgeInsets.zero,
                     minimumSize: Size.zero,
                     onPressed: _openComposeMenu,
-                    child: const Icon(CupertinoIcons.add_circled, size: 28),
+                    child: Icon(
+                      CupertinoIcons.add_circled,
+                      size: 28,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildSearchAndFilters()),
@@ -703,15 +712,15 @@ class _UnreadBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: muted
             ? CupertinoColors.systemGrey.resolveFrom(context)
-            : const Color(0xFF3390EC),
+            : AppColors.primary,
         borderRadius: const BorderRadius.all(Radius.circular(10)),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: CupertinoColors.white,
+          color: muted ? CupertinoColors.white : AppColors.onPrimary,
           height: 1,
         ),
       ),
@@ -735,12 +744,10 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = selected
-        ? CupertinoColors.activeBlue
-        : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          );
+        ? AppColors.primary
+        : CupertinoColors.tertiarySystemFill.resolveFrom(context);
     final fg = selected
-        ? CupertinoColors.white
+        ? AppColors.onPrimary
         : CupertinoColors.label.resolveFrom(context);
 
     return GestureDetector(
@@ -756,20 +763,14 @@ class _FilterChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(
-                icon,
-                size: 13,
-                color: selected
-                    ? CupertinoColors.white
-                    : CupertinoColors.systemYellow,
-              ),
+              Icon(icon, size: 13, color: fg),
               const SizedBox(width: 5),
             ],
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w600,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: fg,
               ),
             ),
@@ -800,24 +801,19 @@ class _ChatRow extends StatelessWidget {
     final subtitle = hasDraft
         ? draft
         : (chat.lastMessagePreview ??
-            (chat.isGroup && chat.memberNames.isNotEmpty
-                ? chat.memberNames.join(', ')
-                : ''));
+              (chat.isGroup && chat.memberNames.isNotEmpty
+                  ? chat.memberNames.join(', ')
+                  : ''));
 
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return ColoredBox(
+      // Непрозрачный фон закрывает кнопки свайпа под строкой.
+      color: CupertinoColors.systemBackground.resolveFrom(context),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         onLongPress: onLongPress,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -839,10 +835,10 @@ class _ChatRow extends StatelessWidget {
                             context,
                           ),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           CupertinoIcons.star_fill,
-                          size: 12,
-                          color: CupertinoColors.systemYellow,
+                          size: 11,
+                          color: CupertinoColors.label.resolveFrom(context),
                         ),
                       ),
                     ),
@@ -920,7 +916,7 @@ class _ChatRow extends StatelessWidget {
                             Icon(
                               CupertinoIcons.pin_fill,
                               size: 12,
-                              color: CupertinoColors.systemOrange.resolveFrom(
+                              color: CupertinoColors.tertiaryLabel.resolveFrom(
                                 context,
                               ),
                             ),

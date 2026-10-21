@@ -7,10 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-final _urlRegExp = RegExp(
-  r'(https?:\/\/[^\s<>"\)]+)',
-  caseSensitive: false,
-);
+final _urlRegExp = RegExp(r'(https?:\/\/[^\s<>"\)]+)', caseSensitive: false);
 
 /// Текст сообщения чата: plain text / HTML; URL кликабельны.
 class ChatMessageText extends StatefulWidget {
@@ -72,7 +69,8 @@ class _ChatMessageTextState extends State<ChatMessageText> {
     final trimmed = widget.text.trim();
     if (trimmed.isEmpty) return const SizedBox.shrink();
 
-    final effectiveColor = widget.color ??
+    final effectiveColor =
+        widget.color ??
         DefaultTextStyle.of(context).style.color ??
         Colors.black;
 
@@ -127,10 +125,7 @@ class _ChatMessageTextState extends State<ChatMessageText> {
           fontSize: FontSize(widget.fontSize),
           lineHeight: LineHeight.number(1.35),
         ),
-        'p': Style(
-          margin: Margins.only(bottom: 6),
-          padding: HtmlPaddings.zero,
-        ),
+        'p': Style(margin: Margins.only(bottom: 6), padding: HtmlPaddings.zero),
         'div': Style(margin: Margins.zero, padding: HtmlPaddings.zero),
         'a': Style(
           color: effectiveColor,

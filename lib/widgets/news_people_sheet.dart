@@ -9,11 +9,7 @@ enum NewsPeopleKind { likers, viewers }
 
 /// Bottom sheet со списком лайкнувших или посмотревших новость.
 class NewsPeopleSheet extends StatefulWidget {
-  const NewsPeopleSheet({
-    super.key,
-    required this.newsId,
-    required this.kind,
-  });
+  const NewsPeopleSheet({super.key, required this.newsId, required this.kind});
 
   final String newsId;
   final NewsPeopleKind kind;
@@ -86,9 +82,9 @@ class _NewsPeopleSheetState extends State<NewsPeopleSheet> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Text(
             _title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
         const Divider(height: 1),
@@ -123,8 +119,8 @@ class _NewsPeopleSheetState extends State<NewsPeopleSheet> {
               ? 'Пока никто не лайкнул'
               : 'Пока никто не посмотрел',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }

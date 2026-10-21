@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../services/app_navigation_service.dart';
 import '../services/root_stack_observer.dart';
@@ -29,13 +30,28 @@ class HomeShortcutButton extends StatelessWidget {
   /// ChatConversationScreen), держат её скрытой всё время, пока они
   /// смонтированы. Безопасно вызывать вложенно и звать колбэк повторно.
   static VoidCallback suppress() {
-    _suppressCount.value++;
+    _changeSuppressCount(1);
     var released = false;
     return () {
       if (released) return;
       released = true;
-      _suppressCount.value--;
+      _changeSuppressCount(-1);
     };
+  }
+
+  /// Экраны зовут [suppress] из `initState`/`dispose`, то есть посреди
+  /// построения дерева, — уведомлять слушателей в этот момент нельзя
+  /// (assert «setState() called during build»), поэтому откладываем
+  /// изменение до конца кадра. Порядок колбэков сохраняется.
+  static void _changeSuppressCount(int delta) {
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback(
+        (_) => _suppressCount.value += delta,
+      );
+    } else {
+      _suppressCount.value += delta;
+    }
   }
 
   @override

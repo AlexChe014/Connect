@@ -116,7 +116,10 @@ class _StaffChip extends StatelessWidget {
               user.fullName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, color: CupertinoColors.label),
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.label,
+              ),
             ),
           ),
           const SizedBox(width: 4),

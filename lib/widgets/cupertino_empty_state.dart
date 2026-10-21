@@ -4,7 +4,11 @@ import 'package:flutter/cupertino.dart';
 /// «Файлы», «Ссылки» в деталях чата, где Material-версия [AppEmptyState] не
 /// подходит по стилю.
 class CupertinoEmptyState extends StatelessWidget {
-  const CupertinoEmptyState({super.key, required this.icon, required this.message});
+  const CupertinoEmptyState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
 
   final IconData icon;
   final String message;

@@ -17,6 +17,10 @@ abstract final class AppColors {
   static const outlineStrong = Color(0xFFD1D5DB);
   static const error = Color(0xFFDC2626);
 
+  /// Свои сообщения в чате и кнопка отправки — единственный цветной
+  /// акцент в переписке: сразу видно, где ваши сообщения.
+  static const outgoingBubble = primary;
+
   static const double radius = 12;
   static const double buttonRadius = 12;
 

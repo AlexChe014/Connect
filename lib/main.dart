@@ -26,6 +26,7 @@ import 'screens/global_search_screen.dart';
 import 'screens/bonus_program_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
+import 'widgets/app_glass.dart';
 import 'config/branding.dart';
 import 'models/chat.dart';
 import 'repositories/profile_repository.dart';
@@ -45,7 +46,6 @@ import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
 import 'utils/media_url_utils.dart';
 import 'utils/user_display_name.dart';
-import 'widgets/app_icon_badge.dart';
 import 'widgets/chat_avatar.dart';
 import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
@@ -353,204 +353,200 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       drawerScrimColor: Colors.transparent,
       onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
         child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              _DrawerHeaderCard(
-                displayName: _drawerDisplayName,
-                position: _drawerPosition,
-                avatarUrl: _drawerAvatarUrl,
-                onProfileTap: () {
-                  Navigator.pop(context);
-                  _openProfile();
-                },
-              ),
-              const SizedBox(height: 20),
-              _DrawerMenuCard(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 0, 8),
+            child: AppGlass(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.search,
-                    color: CupertinoColors.systemGrey,
-                    label: 'Поиск',
-                    selected: false,
-                    onTap: () {
+                  _DrawerHeaderCard(
+                    displayName: _drawerDisplayName,
+                    position: _drawerPosition,
+                    avatarUrl: _drawerAvatarUrl,
+                    onProfileTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const GlobalSearchScreen(),
-                        ),
-                      );
+                      _openProfile();
                     },
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.news_solid,
-                    color: CupertinoColors.systemOrange,
-                    label: 'Лента',
-                    selected: !_isProfileOpen && _currentIndex == 0,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 0);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.calendar,
-                    color: CupertinoColors.systemRed,
-                    label: 'Календарь',
-                    selected: !_isProfileOpen && _currentIndex == 1,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 1);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.chat_bubble_2_fill,
-                    color: CupertinoColors.systemGreen,
-                    label: 'Чаты',
-                    selected: !_isProfileOpen && _currentIndex == 2,
-                    badgeLabel: _unreadChatsBadge,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 2);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.star_fill,
-                    color: CupertinoColors.systemYellow,
-                    label: 'Избранное',
-                    selected: !_isProfileOpen && _currentIndex == 3,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 3);
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.videocam_fill,
-                    color: CupertinoColors.systemIndigo,
-                    label: 'Коннектор',
-                    selected: !_isProfileOpen && _currentIndex == 4,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() => _currentIndex = 4);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _DrawerMenuCard(
-                children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.person_2_fill,
-                    color: CupertinoColors.systemBlue,
-                    label: 'Сотрудники',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const EmployeesScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.bookmark_fill,
-                    color: CupertinoColors.systemTeal,
-                    label: 'Бронирования',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const BookingsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.mail_solid,
-                    color: CupertinoColors.systemBlue,
-                    label: 'Почта',
-                    selected: false,
-                    badgeCount: MailUnreadService.instance.unreadCount,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context)
-                          .push(
+                  const _DrawerDivider(),
+                  _DrawerMenuCard(
+                    children: [
+                      _DrawerItem(
+                        icon: CupertinoIcons.search,
+                        label: 'Поиск',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
                             CupertinoPageRoute(
-                              builder: (_) => const MailScreen(),
+                              builder: (_) => const GlobalSearchScreen(),
                             ),
-                          )
-                          .then((_) => MailUnreadService.instance.refresh());
-                    },
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.news,
+                        label: 'Лента',
+                        selected: !_isProfileOpen && _currentIndex == 0,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 0);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.calendar,
+                        label: 'Календарь',
+                        selected: !_isProfileOpen && _currentIndex == 1,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 1);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.chat_bubble_2,
+                        label: 'Чаты',
+                        selected: !_isProfileOpen && _currentIndex == 2,
+                        badgeLabel: _unreadChatsBadge,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 2);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.star,
+                        label: 'Избранное',
+                        selected: !_isProfileOpen && _currentIndex == 3,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 3);
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.videocam,
+                        label: 'Коннектор',
+                        selected: !_isProfileOpen && _currentIndex == 4,
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _currentIndex = 4);
+                        },
+                      ),
+                    ],
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.doc_text_fill,
-                    color: CupertinoColors.systemOrange,
-                    label: 'Согласование',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const DocumentsSigningScreen(),
-                        ),
-                      );
-                    },
+                  const _DrawerDivider(),
+                  _DrawerMenuCard(
+                    children: [
+                      _DrawerItem(
+                        icon: CupertinoIcons.person_2,
+                        label: 'Сотрудники',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const EmployeesScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.bookmark,
+                        label: 'Бронирования',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const BookingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.envelope,
+                        label: 'Почта',
+                        selected: false,
+                        badgeCount: MailUnreadService.instance.unreadCount,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context)
+                              .push(
+                                CupertinoPageRoute(
+                                  builder: (_) => const MailScreen(),
+                                ),
+                              )
+                              .then(
+                                (_) => MailUnreadService.instance.refresh(),
+                              );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.doc_text,
+                        label: 'Согласование',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const DocumentsSigningScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.folder,
+                        label: 'Диск',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const DiskScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.gift,
+                        label: 'Бонусная программа',
+                        selected: false,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const BonusProgramScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.folder_fill,
-                    color: CupertinoColors.systemCyan,
-                    label: 'Диск',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(builder: (_) => const DiskScreen()),
-                      );
-                    },
-                  ),
-                  _DrawerItem(
-                    icon: CupertinoIcons.gift_fill,
-                    color: CupertinoColors.systemPink,
-                    label: 'Бонусная программа',
-                    selected: false,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        CupertinoPageRoute(
-                          builder: (_) => const BonusProgramScreen(),
-                        ),
-                      );
-                    },
+                  const _DrawerDivider(),
+                  _DrawerMenuCard(
+                    children: [
+                      _DrawerItem(
+                        icon: CupertinoIcons.book,
+                        label: 'База знаний',
+                        selected: false,
+                        isExternal: true,
+                        onTap: () {
+                          Navigator.pop(context);
+                          launchUrl(
+                            Uri.parse(
+                              'https://support.xon-connect.ru/books/rukovodstvo-polzovatelia-xonconnect/page/avtorizaciia',
+                            ),
+                            mode: LaunchMode.externalApplication,
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              _DrawerMenuCard(
-                children: [
-                  _DrawerItem(
-                    icon: CupertinoIcons.book_fill,
-                    color: CupertinoColors.systemBrown,
-                    label: 'База знаний',
-                    selected: false,
-                    isExternal: true,
-                    onTap: () {
-                      Navigator.pop(context);
-                      launchUrl(
-                        Uri.parse(
-                          'https://support.xon-connect.ru/books/rukovodstvo-polzovatelia-xonconnect/page/avtorizaciia',
-                        ),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -800,8 +796,8 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-/// Карточка-шапка меню: лого приложения + профиль текущего пользователя.
-/// Тот же вид, что у inset-grouped секций остальных экранов.
+/// Шапка меню: лого приложения + профиль текущего пользователя.
+/// Лежит прямо на стеклянной панели, без своей карточки.
 class _DrawerHeaderCard extends StatelessWidget {
   const _DrawerHeaderCard({
     required this.displayName,
@@ -818,14 +814,9 @@ class _DrawerHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      margin: const EdgeInsets.symmetric(horizontal: 8),
       clipBehavior: Clip.antiAlias,
+      decoration: const BoxDecoration(),
       child: Column(
         children: [
           Padding(
@@ -854,6 +845,7 @@ class _DrawerHeaderCard extends StatelessWidget {
             subtitle: (position ?? '').isNotEmpty
                 ? Text(position!, maxLines: 1, overflow: TextOverflow.ellipsis)
                 : null,
+            backgroundColor: const Color(0x00000000),
             trailing: const CupertinoListTileChevron(),
             onTap: onProfileTap,
           ),
@@ -863,7 +855,21 @@ class _DrawerHeaderCard extends StatelessWidget {
   }
 }
 
-/// Группа пунктов меню — стандартная inset-grouped секция iOS.
+/// Тонкий разделитель между группами пунктов меню.
+class _DrawerDivider extends StatelessWidget {
+  const _DrawerDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 0.5,
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      color: CupertinoColors.separator.resolveFrom(context),
+    );
+  }
+}
+
+/// Группа пунктов меню.
 class _DrawerMenuCard extends StatelessWidget {
   const _DrawerMenuCard({required this.children});
 
@@ -871,18 +877,13 @@ class _DrawerMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoListSection.insetGrouped(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      children: children,
-    );
+    return Column(children: children);
   }
 }
 
 class _DrawerItem extends StatelessWidget {
   const _DrawerItem({
     required this.icon,
-    required this.color,
     required this.label,
     required this.selected,
     required this.onTap,
@@ -892,9 +893,6 @@ class _DrawerItem extends StatelessWidget {
   });
 
   final IconData icon;
-
-  /// Цвет квадратика под иконкой.
-  final Color color;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -914,45 +912,91 @@ class _DrawerItem extends StatelessWidget {
     final text = badgeLabel ?? (badgeCount > 99 ? '99+' : '$badgeCount');
     final showBadge =
         (badgeLabel != null && badgeLabel!.isNotEmpty) || badgeCount > 0;
-    return CupertinoListTile(
-      backgroundColor: selected
-          ? AppColors.primary.withValues(alpha: 0.1)
-          : null,
-      leading: AppIconBadge(icon: icon, color: color),
-      title: Text(
-        label,
-        style: selected
-            ? const TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w600,
-              )
-            : null,
-      ),
-      additionalInfo: showBadge
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: CupertinoColors.systemRed,
-                borderRadius: BorderRadius.circular(10),
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final labelColor = CupertinoColors.label.resolveFrom(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        pressedOpacity: 0.55,
+        onPressed: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          // Выбранный пункт — светлая «стеклянная» капсула, без цвета.
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: selected
+                ? (isDark ? const Color(0x24FFFFFF) : const Color(0xE6FFFFFF))
+                : const Color(0x00FFFFFF),
+            border: Border.all(
+              color: selected
+                  ? (isDark ? const Color(0x1FFFFFFF) : const Color(0x14000000))
+                  : const Color(0x00FFFFFF),
+              width: 0.5,
+            ),
+            boxShadow: selected && !isDark
+                ? const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 26,
+                child: Icon(icon, size: 21, color: labelColor),
               ),
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.white,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 17,
+                    letterSpacing: -0.4,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    color: labelColor,
+                  ),
                 ),
               ),
-            )
-          : null,
-      trailing: isExternal
-          ? Icon(
-              CupertinoIcons.arrow_up_right_square,
-              size: 18,
-              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-            )
-          : null,
-      onTap: onTap,
+              if (showBadge)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemRed,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    text,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.white,
+                    ),
+                  ),
+                ),
+              if (isExternal)
+                Icon(
+                  CupertinoIcons.arrow_up_right,
+                  size: 15,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

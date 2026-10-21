@@ -18,7 +18,9 @@ import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/html_text_utils.dart';
+import 'package:connect/config/app_theme.dart';
 import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
@@ -28,6 +30,7 @@ import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/material.dart'
     show ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:flutter/services.dart' show HapticFeedback;
@@ -103,6 +106,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   final _listCtrl = ScrollController();
+
   /// Последний построенный `itemBuilder`-ом индекс (в перевёрнутом списке) —
   /// по нему [_scrollToMessage] понимает, в какую сторону листать.
   int _lastBuiltIndex = 0;
@@ -116,6 +120,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   final Map<String, GlobalKey> _messageKeys = {};
   bool _sendingAttachment = false;
   bool _sendingText = false;
+
+  /// Высоты плавающих стеклянных панелей над лентой (поиск, звонок,
+  /// закреп) и под ней (ответ/правка, поле ввода) — на столько лента
+  /// отступает, чтобы крайние сообщения не прятались под стеклом.
+  double _topOverlayHeight = 0;
+  double _bottomOverlayHeight = 0;
 
   void _toggleReaction(ChatMessage m, String emoji) {
     setState(() {
@@ -147,11 +157,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _liveRefresh = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted) return;
       unawaited(
-        _service.loadMessages(
-          widget.chat.id,
-          force: true,
-          showLoading: false,
-        ),
+        _service.loadMessages(widget.chat.id, force: true, showLoading: false),
       );
     });
     final draft = widget.chat.draftText;
@@ -197,11 +203,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(
-        _service.loadMessages(
-          widget.chat.id,
-          force: true,
-          showLoading: false,
-        ),
+        _service.loadMessages(widget.chat.id, force: true, showLoading: false),
       );
     }
   }
@@ -450,15 +452,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     return CupertinoPageScaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground,
       navigationBar: CupertinoNavigationBar(
-        backgroundColor: CupertinoColors.secondarySystemGroupedBackground
+        // Полупрозрачная — сообщения уходят под размытую шапку.
+        backgroundColor: CupertinoColors.systemGroupedBackground
             .resolveFrom(context)
-            .withValues(alpha: 1.0),
-        border: Border(
-          bottom: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-            width: 0.5,
-          ),
-        ),
+            .withValues(alpha: 0.7),
+        automaticBackgroundVisibility: false,
+        border: null,
         middle: GestureDetector(
           onTap: _openSettings,
           child: Row(
@@ -505,9 +504,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             : CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: _startVideoCall,
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.video_camera,
-                  color: CupertinoColors.activeBlue,
+                  color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),
       ),
@@ -518,20 +517,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 15,
         ),
-        child: SafeArea(
-          child: Column(
+        child: Builder(
+          // Свой context — под скаффолдом, где в MediaQuery уже учтена
+          // высота полупрозрачной шапки.
+          builder: (context) => Stack(
             children: [
-              if (_searchActive) _buildSearchBar(context),
-              if (activeCall != null && !_searchActive)
-                ChatActiveCallBanner(
-                  call: activeCall,
-                  isGroup: c.isGroup,
-                  peerName: c.title,
-                  joining: _joiningCall,
-                  onJoin: _joinActiveCall,
-                ),
-              if (!_searchActive) _buildPinnedBar(context),
-              Expanded(
+              Positioned.fill(
                 child: GestureDetector(
                   behavior: HitTestBehavior.translucent,
                   onTap: _focus.unfocus,
@@ -556,7 +547,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                           reverse: true,
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                          padding: EdgeInsets.fromLTRB(
+                            10,
+                            MediaQuery.paddingOf(context).top +
+                                _topOverlayHeight +
+                                10,
+                            10,
+                            _bottomOverlayHeight + 10,
+                          ),
                           itemCount: list.length,
                           itemBuilder: (context, i) {
                             _lastBuiltIndex = i;
@@ -568,7 +566,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                             final next = chronologicalIndex < list.length - 1
                                 ? list[chronologicalIndex + 1]
                                 : null;
-                            final startsNewDay = previous == null ||
+                            final startsNewDay =
+                                previous == null ||
                                 !_sameDay(previous.createdAt, m.createdAt);
                             final showAuthorHeader =
                                 c.isGroup &&
@@ -635,27 +634,72 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         ),
                 ),
               ),
-              if (_editingMessage != null)
-                _EditBanner(
-                  text: _previewSnippet(_editingMessage!),
-                  onClose: _cancelEdit,
-                )
-              else if (_replyingTo != null)
-                _ReplyBanner(
-                  ref: _replyingTo!,
-                  onClose: () => setState(() => _replyingTo = null),
+              Positioned(
+                top: MediaQuery.paddingOf(context).top,
+                left: 0,
+                right: 0,
+                child: _MeasureHeight(
+                  onChange: (h) {
+                    if (mounted && h != _topOverlayHeight) {
+                      setState(() => _topOverlayHeight = h);
+                    }
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_searchActive) _buildSearchBar(context),
+                      if (activeCall != null && !_searchActive)
+                        ChatActiveCallBanner(
+                          call: activeCall,
+                          isGroup: c.isGroup,
+                          peerName: c.title,
+                          joining: _joiningCall,
+                          onJoin: _joinActiveCall,
+                        ),
+                      if (!_searchActive) _buildPinnedBar(context),
+                    ],
+                  ),
                 ),
-              _Composer(
-                textCtrl: _textCtrl,
-                focus: _focus,
-                onSend: _send,
-                onAttach: _openAttachMenu,
-                onStickers:
-                    _editingMessage != null || !ChatStickers.imagesAvailable
-                    ? null
-                    : _openStickerPicker,
-                isEditing: _editingMessage != null,
-                isSendingAttachment: _sendingAttachment,
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _MeasureHeight(
+                  onChange: (h) {
+                    if (mounted && h != _bottomOverlayHeight) {
+                      setState(() => _bottomOverlayHeight = h);
+                    }
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_editingMessage != null)
+                        _EditBanner(
+                          text: _previewSnippet(_editingMessage!),
+                          onClose: _cancelEdit,
+                        )
+                      else if (_replyingTo != null)
+                        _ReplyBanner(
+                          ref: _replyingTo!,
+                          onClose: () => setState(() => _replyingTo = null),
+                        ),
+                      _Composer(
+                        textCtrl: _textCtrl,
+                        focus: _focus,
+                        onSend: _send,
+                        onAttach: _openAttachMenu,
+                        onStickers:
+                            _editingMessage != null ||
+                                !ChatStickers.imagesAvailable
+                            ? null
+                            : _openStickerPicker,
+                        isEditing: _editingMessage != null,
+                        isSendingAttachment: _sendingAttachment,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -697,19 +741,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Widget _buildSearchBar(BuildContext context) {
     final total = _searchMatches.length;
     final pos = total == 0 ? 0 : _searchMatches.length - _searchCursor;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        border: Border(
-          bottom: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-            width: 0.5,
-          ),
-        ),
-      ),
+    return _GlassCapsule(
+      margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
       child: Row(
         children: [
           Expanded(
@@ -977,9 +1011,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     } catch (e) {
       debugPrint('attach: send failed: $e');
       if (!mounted) return;
-      _showSnack(
-        e is ApiException ? e.message : 'Не удалось отправить файл',
-      );
+      _showSnack(e is ApiException ? e.message : 'Не удалось отправить файл');
     } finally {
       if (mounted) setState(() => _sendingAttachment = false);
     }
@@ -1146,25 +1178,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
           _showPinnedList(pinned);
         }
       },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
-          border: Border(
-            bottom: BorderSide(
-              color: CupertinoColors.separator.resolveFrom(context),
-              width: 0.5,
-            ),
-          ),
-        ),
+      child: _GlassCapsule(
+        margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+        padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
         child: Row(
           children: [
-            const Icon(
+            Icon(
               CupertinoIcons.pin_fill,
               size: 16,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.label.resolveFrom(context),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1175,10 +1197,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     pinned.length == 1
                         ? 'Закреплённое сообщение'
                         : 'Закреплено: ${pinned.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.systemOrange,
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
                   Text(
@@ -1292,6 +1314,69 @@ class _ForwardTargetTile extends StatelessWidget {
   }
 }
 
+/// Плавающая стеклянная плашка над/под лентой: закреп, поиск,
+/// ответ и правка — в одном стиле с полем ввода.
+class _GlassCapsule extends StatelessWidget {
+  const _GlassCapsule({
+    required this.margin,
+    required this.padding,
+    required this.child,
+  });
+
+  final EdgeInsetsGeometry margin;
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: margin,
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(18),
+        shadows: AppGlass.controlShadow,
+        child: Padding(padding: padding, child: child),
+      ),
+    );
+  }
+}
+
+/// Сообщает высоту ребёнка после каждой раскладки — по ней лента
+/// отступает от плавающих панелей сверху и снизу.
+class _MeasureHeight extends SingleChildRenderObjectWidget {
+  const _MeasureHeight({required this.onChange, required super.child});
+
+  final ValueChanged<double> onChange;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasureHeight(onChange);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMeasureHeight renderObject,
+  ) {
+    renderObject.onChange = onChange;
+  }
+}
+
+class _RenderMeasureHeight extends RenderProxyBox {
+  _RenderMeasureHeight(this.onChange);
+
+  ValueChanged<double> onChange;
+  double? _lastHeight;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (height == _lastHeight) return;
+    _lastHeight = height;
+    // setState во время раскладки нельзя — отдаём высоту после кадра.
+    WidgetsBinding.instance.addPostFrameCallback((_) => onChange(height));
+  }
+}
+
 class _ReplyBanner extends StatelessWidget {
   const _ReplyBanner({required this.ref, required this.onClose});
 
@@ -1300,65 +1385,54 @@ class _ReplyBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
+    return _GlassCapsule(
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+      padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 34,
+            decoration: BoxDecoration(
+              color: CupertinoColors.label.resolveFrom(context),
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              width: 3,
-              height: 34,
-              decoration: BoxDecoration(
-                color: CupertinoColors.activeBlue,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    ref.authorName,
-                    style: const TextStyle(
-                      color: CupertinoColors.activeBlue,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  ref.authorName,
+                  style: TextStyle(
+                    color: CupertinoColors.label.resolveFrom(context),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
-                  Text(
-                    ref.textPreview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
+                ),
+                Text(
+                  ref.textPreview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            GestureDetector(
-              onTap: onClose,
-              child: Icon(
-                CupertinoIcons.xmark_circle_fill,
-                size: 20,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              ),
+          ),
+          GestureDetector(
+            onTap: onClose,
+            child: Icon(
+              CupertinoIcons.xmark_circle_fill,
+              size: 20,
+              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1372,62 +1446,51 @@ class _EditBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
+    return _GlassCapsule(
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+      padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+      child: Row(
+        children: [
+          Icon(
+            CupertinoIcons.pencil,
+            size: 18,
+            color: CupertinoColors.label.resolveFrom(context),
           ),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            const Icon(
-              CupertinoIcons.pencil,
-              size: 18,
-              color: CupertinoColors.activeBlue,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Изменить сообщение',
-                    style: TextStyle(
-                      color: CupertinoColors.activeBlue,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Изменить сообщение',
+                  style: TextStyle(
+                    color: CupertinoColors.label.resolveFrom(context),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
                   ),
-                  Text(
-                    text,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
+                ),
+                Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: CupertinoColors.secondaryLabel,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            GestureDetector(
-              onTap: onClose,
-              child: Icon(
-                CupertinoIcons.xmark_circle_fill,
-                size: 20,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              ),
+          ),
+          GestureDetector(
+            onTap: onClose,
+            child: Icon(
+              CupertinoIcons.xmark_circle_fill,
+              size: 20,
+              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1456,43 +1519,38 @@ class _Composer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGroupedBackground.resolveFrom(context),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-          ),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 8, 10, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              CupertinoButton(
-                padding: const EdgeInsets.all(6),
-                minimumSize: Size.zero,
+    final iconColor = CupertinoColors.label.resolveFrom(context);
+    // Плавающие стеклянные капсулы над фоном чата, как в iOS 26.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            AppGlass(
+              borderRadius: BorderRadius.circular(20),
+              shadows: AppGlass.controlShadow,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size.square(40),
                 onPressed: isSendingAttachment ? null : onAttach,
                 child: isSendingAttachment
-                    ? const CupertinoActivityIndicator(radius: 10)
+                    ? const CupertinoActivityIndicator(radius: 9)
                     : Icon(
                         CupertinoIcons.paperclip,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
-                          context,
-                        ),
+                        size: 21,
+                        color: iconColor,
                       ),
               ),
-              Expanded(
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 36),
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.secondarySystemGroupedBackground
-                        .resolveFrom(context),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AppGlass(
+                borderRadius: BorderRadius.circular(20),
+                shadows: AppGlass.controlShadow,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 40),
                   child: CupertinoTextField(
                     controller: textCtrl,
                     focusNode: focus,
@@ -1503,13 +1561,13 @@ class _Composer extends StatelessWidget {
                     decoration: const BoxDecoration(),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
-                      vertical: 8,
+                      vertical: 10,
                     ),
                     onSubmitted: (_) => onSend(),
                     suffix: onStickers == null
                         ? null
                         : CupertinoButton(
-                            padding: const EdgeInsets.fromLTRB(4, 6, 10, 6),
+                            padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
                             minimumSize: Size.zero,
                             onPressed: onStickers,
                             child: Icon(
@@ -1523,29 +1581,41 @@ class _Composer extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
-              ListenableBuilder(
-                listenable: textCtrl,
-                builder: (context, _) {
-                  final hasText = textCtrl.text.trim().isNotEmpty;
-                  return CupertinoButton(
-                    padding: const EdgeInsets.all(6),
-                    minimumSize: Size.zero,
-                    onPressed: hasText ? onSend : null,
+            ),
+            const SizedBox(width: 8),
+            ListenableBuilder(
+              listenable: textCtrl,
+              builder: (context, _) {
+                final hasText = textCtrl.text.trim().isNotEmpty;
+                return GestureDetector(
+                  onTap: hasText ? onSend : null,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: hasText
+                          ? AppColors.outgoingBubble
+                          : CupertinoColors.tertiarySystemFill.resolveFrom(
+                              context,
+                            ),
+                    ),
                     child: Icon(
                       isEditing
-                          ? CupertinoIcons.checkmark_circle_fill
-                          : CupertinoIcons.arrow_up_circle_fill,
-                      size: 30,
+                          ? CupertinoIcons.checkmark
+                          : CupertinoIcons.arrow_up,
+                      size: 20,
                       color: hasText
-                          ? CupertinoColors.activeBlue
-                          : CupertinoColors.systemGrey3.resolveFrom(context),
+                          ? CupertinoColors.white
+                          : CupertinoColors.tertiaryLabel.resolveFrom(context),
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -1625,22 +1695,15 @@ class _MessageTile extends StatelessWidget {
     if (m.attachmentKind == ChatAttachmentKind.image &&
         m.localMediaPath != null &&
         !kIsWeb) {
-      return [
-        _ChatImage(localPath: m.localMediaPath, radius: radius),
-      ];
+      return [_ChatImage(localPath: m.localMediaPath, radius: radius)];
     }
     if (m.attachmentKind == ChatAttachmentKind.image &&
         m.remoteMediaUrl != null) {
-      return [
-        _ChatImage(url: m.remoteMediaUrl, radius: radius),
-      ];
+      return [_ChatImage(url: m.remoteMediaUrl, radius: radius)];
     }
     if (m.attachmentKind == ChatAttachmentKind.image && kIsWeb) {
       return [
-        const Padding(
-          padding: EdgeInsets.all(8),
-          child: Text('(изображение)'),
-        ),
+        const Padding(padding: EdgeInsets.all(8), child: Text('(изображение)')),
       ];
     }
     if (m.attachmentKind == ChatAttachmentKind.video ||
@@ -1695,7 +1758,9 @@ class _MessageTile extends StatelessWidget {
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     color: active
-                        ? CupertinoColors.activeBlue.withValues(alpha: 0.15)
+                        ? CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          )
                         : null,
                     shape: BoxShape.circle,
                   ),
@@ -1802,9 +1867,7 @@ class _MessageTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontStyle: FontStyle.italic,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(
-                      context,
-                    ),
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -1818,12 +1881,18 @@ class _MessageTile extends StatelessWidget {
         ? CrossAxisAlignment.end
         : CrossAxisAlignment.start;
     final bubble = m.isOutgoing
-        ? CupertinoColors.activeBlue
+        ? AppColors.outgoingBubble
         : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
     // Стикер рисуется без пузыря — цитата и подписи над ним на фоне чата.
     final onBubble = m.isOutgoing && !m.isSticker
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
+    final attachments = _buildAttachments(context, onBubble);
+    final hasAboveText =
+        m.forwardOf != null ||
+        m.replyTo != null ||
+        m.isPinned ||
+        attachments.isNotEmpty;
 
     return _wrapHighlight(
       context,
@@ -1852,8 +1921,10 @@ class _MessageTile extends StatelessWidget {
                       ],
                       Text(
                         m.authorName,
-                        style: const TextStyle(
-                          color: CupertinoColors.activeBlue,
+                        style: TextStyle(
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1944,10 +2015,14 @@ class _MessageTile extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                              ..._buildAttachments(context, onBubble),
+                              ...attachments,
                               if (m.text != null && m.text!.trim().isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 4),
+                                  // Отступ только под цитатой/вложением —
+                                  // иначе над текстом поле больше, чем под ним.
+                                  padding: EdgeInsets.only(
+                                    top: hasAboveText ? 4 : 0,
+                                  ),
                                   child: ChatMessageText(
                                     text: m.text!,
                                     color: onBubble,
@@ -2139,7 +2214,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
                   CupertinoIcons.arrowshape_turn_up_left_fill,
                   size: 18,
                   color: _armed
-                      ? CupertinoColors.activeBlue
+                      ? CupertinoColors.label.resolveFrom(context)
                       : CupertinoColors.systemGrey,
                 ),
               ),
@@ -2153,7 +2228,6 @@ class _SwipeToReplyState extends State<_SwipeToReply>
     );
   }
 }
-
 
 class _ForwardBlock extends StatelessWidget {
   const _ForwardBlock({required this.ref, required this.onBubble});
@@ -2170,8 +2244,8 @@ class _ForwardBlock extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: onBubble.withValues(alpha: 0.12),
-          border: const Border(
-            left: BorderSide(color: CupertinoColors.systemPurple, width: 3),
+          border: Border(
+            left: BorderSide(color: onBubble.withValues(alpha: 0.5), width: 3),
           ),
           borderRadius: BorderRadius.circular(6),
         ),
@@ -2210,15 +2284,11 @@ class _ReplyBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = isOutgoing
-        ? CupertinoColors.white
-        : CupertinoColors.activeBlue;
-    final fill = isOutgoing
-        ? CupertinoColors.white.withValues(alpha: 0.22)
-        : CupertinoColors.activeBlue.withValues(alpha: 0.12);
     final textColor = isOutgoing
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
+    final accent = textColor;
+    final fill = textColor.withValues(alpha: isOutgoing ? 0.16 : 0.06);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -2588,18 +2658,18 @@ class _DaySeparator extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        child: AppGlass(
+          borderRadius: BorderRadius.circular(12),
+          shadows: null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
             ),
           ),
         ),
