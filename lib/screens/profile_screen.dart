@@ -342,60 +342,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final status = _statusLabel;
     final contactTiles = <Widget>[
       if (birthday != null)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.gift_fill,
-            CupertinoColors.systemPink,
-          ),
-          title: const Text('Дата рождения'),
-          additionalInfo: Text(DateFormat('dd.MM.yyyy').format(birthday)),
+        _contactTile(
+          icon: CupertinoIcons.gift_fill,
+          color: CupertinoColors.systemPink,
+          title: 'Дата рождения',
+          value: DateFormat('dd.MM.yyyy').format(birthday),
         ),
       if ((email ?? '').isNotEmpty)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.mail_solid,
-            CupertinoColors.systemBlue,
-          ),
-          title: const Text('Email'),
-          additionalInfo: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(
-              email!,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+        _contactTile(
+          icon: CupertinoIcons.mail_solid,
+          color: CupertinoColors.systemBlue,
+          title: 'Email',
+          value: email!,
         ),
       if ((phone ?? '').isNotEmpty)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.phone_fill,
-            CupertinoColors.systemGreen,
-          ),
-          title: const Text('Телефон'),
-          // Номер с добавочным длинный — переносим его, а не обрезаем подпись.
-          additionalInfo: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
-            child: Text(phone!, textAlign: TextAlign.right, maxLines: 2),
-          ),
+        // Номер с добавочным длинный — переносим его, а не обрезаем подпись.
+        _contactTile(
+          icon: CupertinoIcons.phone_fill,
+          color: CupertinoColors.systemGreen,
+          title: 'Телефон',
+          value: phone!,
+          maxLines: 2,
         ),
       if ((department ?? '').isNotEmpty)
-        CupertinoListTile(
-          leading: _iconBadge(
-            CupertinoIcons.building_2_fill,
-            CupertinoColors.systemIndigo,
-          ),
-          title: const Text('Отдел'),
-          additionalInfo: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
-            child: Text(
-              department!,
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+        _contactTile(
+          icon: CupertinoIcons.building_2_fill,
+          color: CupertinoColors.systemIndigo,
+          title: 'Отдел',
+          value: department!,
         ),
     ];
 
@@ -568,6 +542,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     fontSize: 18,
     fontWeight: FontWeight.w700,
   );
+
+  /// Строка «Контактов»: 15 pt вместо системных 17 — данные справочные,
+  /// крупный шрифт делал блок тяжелее карточки с именем.
+  Widget _contactTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String value,
+    int maxLines = 1,
+  }) {
+    return CupertinoListTile(
+      leading: _iconBadge(icon, color),
+      title: Text(title, style: const TextStyle(fontSize: 15)),
+      additionalInfo: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 220),
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          maxLines: maxLines,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 15),
+        ),
+      ),
+    );
+  }
 
   /// Неброская ссылка внизу профиля (удаление аккаунта, политика).
   Widget _footerLink(String label, {required VoidCallback onPressed}) {
