@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-/// Одно уведомление в ленте (`GET /notifications`). `type` и `data`
+/// Одно уведомление в ленте (`GET /user/notifications/get`). `type` и `data`
 /// повторяют формат push-payload (см. `NotificationTopics`), поэтому тап
 /// по элементу ленты и тап по push ведут по одной и той же логике
 /// (`AppNavigationService.openFromData`).
@@ -36,16 +36,19 @@ class NotificationItem {
       module: json['module']?.toString(),
       title: (json['title'] ?? '').toString(),
       body: (json['body'] ?? json['message'] ?? json['text'] ?? '').toString(),
-      isRead: _parseBool(json['is_read'], defaultValue: false),
+      isRead: json.containsKey('read_at')
+          ? _parseDate(json['read_at']) != null
+          : _parseBool(json['is_read'], defaultValue: false),
       createdAt: _parseDate(json['created_at']),
       data: _parseData(json['data']),
     );
   }
 
+  /// `type`/`module` уведомления важнее одноимённых полей в `data`.
   Map<String, dynamic> toNavigationData() => {
+        ...data,
         'type': type,
         if (module != null && module!.isNotEmpty) 'module': module,
-        ...data,
         'data': data,
       };
 

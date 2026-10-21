@@ -120,6 +120,33 @@ abstract final class NotificationTopics {
     return t.startsWith('survey') || m == 'survey' || m == 'surveys';
   }
 
+  /// Бонусная программа: заявки, модерация, переводы баллов
+  /// (`bonus_program_*`). Только для иконки в ленте и навигации.
+  static const bonusProgram = NotificationTopic(
+    id: 'bonus_program',
+    type: 'bonus_program',
+    title: 'Бонусная программа',
+    description: 'Заявки и переводы баллов',
+    dataFields: [],
+    icon: CupertinoIcons.gift_fill,
+    color: CupertinoColors.systemYellow,
+  );
+
+  /// Новое сообщение по тикету поддержки (`ticket_message`). Раздела
+  /// поддержки в приложении нет — только иконка в ленте.
+  static const supportTicket = NotificationTopic(
+    id: 'support_ticket',
+    type: 'ticket_message',
+    title: 'Поддержка',
+    description: 'Ответы по обращениям',
+    dataFields: ['ticket_id'],
+    icon: CupertinoIcons.question_circle_fill,
+    color: CupertinoColors.systemTeal,
+  );
+
+  static bool isBonusType(String? type) =>
+      type != null && type.startsWith('bonus_program_');
+
   static const all = <NotificationTopic>[
     feedPost,
     documentApproval,
@@ -147,6 +174,15 @@ abstract final class NotificationTopics {
       return meetingInvite;
     }
     if (isSurveyType(type)) return survey;
+    if (isBonusType(type)) return bonusProgram;
+    switch (type) {
+      case 'new_emails':
+        return mailNew;
+      case 'document_changes':
+        return documentApproval;
+      case 'ticket_message':
+        return supportTicket;
+    }
     for (final topic in all) {
       if (topic.type == type) return topic;
     }
