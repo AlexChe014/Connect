@@ -9,7 +9,10 @@ class HtmlTextUtils {
     if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype')) {
       return true;
     }
-    return RegExp(r'<\s*\/?[a-zA-Z][^>]*>', caseSensitive: false).hasMatch(value);
+    return RegExp(
+      r'<\s*\/?[a-zA-Z][^>]*>',
+      caseSensitive: false,
+    ).hasMatch(value);
   }
 
   /// HTML → однострочный/многострочный plain text для превью и сниппетов.
@@ -35,6 +38,55 @@ class HtmlTextUtils {
         )
         .replaceAll(RegExp(r'<[^>]*>'), ' ');
     return _normalizeWhitespace(decodeEntities(text));
+  }
+
+  /// Пустой абзац, которым веб-редактор (Quill) отмечает пустую строку:
+  /// `<p><br></p>`, `<p>&nbsp;</p>`.
+  static final _emptyParagraph = RegExp(
+    r'<p(?:\s[^>]*)?>(?:\s|&nbsp;|&#160;| |<br\s*/?>)*</p>',
+    caseSensitive: false,
+  );
+
+  /// Хвост абзаца из `<br>` и неразрывных пробелов перед `</p>`.
+  static final _paragraphTail = RegExp(
+    r'(?:\s|&nbsp;|&#160;| |<br\s*/?>)+(?=</p>)',
+    caseSensitive: false,
+  );
+
+  /// HTML поста для показа: без пустых абзацев. flutter_html рисует
+  /// `<p><br></p>` в две строки и добавляет отступы абзаца — между
+  /// абзацами выходило три пустые строки. Расстояние между абзацами
+  /// задаёт стиль `p`.
+  static String compactParagraphs(String html) {
+    return html
+        .replaceAll(_emptyParagraph, '')
+        .replaceAll(_paragraphTail, '')
+        .trim();
+  }
+
+  /// HTML → текст с переносом между абзацами — для превью поста.
+  /// [toPlainText] склеивает `<p>А</p><p>Б</p>` в «АБ».
+  static String toParagraphText(String html) {
+    final trimmed = html.trim();
+    if (!looksLikeHtml(trimmed)) return decodeEntities(trimmed);
+    final withBreaks = compactParagraphs(trimmed)
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(
+          RegExp(r'</(p|div|li|h[1-6]|blockquote)>', caseSensitive: false),
+          '\n',
+        );
+    String text;
+    try {
+      text = html_parser.parse(withBreaks).body?.text ?? '';
+    } catch (_) {
+      text = decodeEntities(withBreaks.replaceAll(RegExp(r'<[^>]*>'), ''));
+    }
+    return text
+        .replaceAll(' ', ' ')
+        .replaceAll(RegExp(r'[ \t]+'), ' ')
+        .replaceAll(RegExp(r' *\n *'), '\n')
+        .replaceAll(RegExp(r'\n{2,}'), '\n')
+        .trim();
   }
 
   static String decodeEntities(String value) {

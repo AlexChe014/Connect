@@ -11,6 +11,7 @@ import '../repositories/mail_repository.dart';
 import '../repositories/users_repository.dart';
 import '../services/chat_service.dart';
 import '../services/disk_search_service.dart';
+import '../utils/file_size_format.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
@@ -437,12 +438,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       leading: Icon(
         hit.isFolder ? CupertinoIcons.folder_fill : CupertinoIcons.doc_fill,
         color: hit.isFolder
-            ? CupertinoColors.systemYellow
-            : CupertinoColors.systemBlue,
+            ? CupertinoColors.systemBlue
+            : CupertinoColors.systemGrey,
       ),
       title: Text(hit.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: !hit.isFolder && hit.size != null
-          ? Text(_formatDiskSize(hit.size!))
+          ? Text(formatFileSize(hit.size!))
           : null,
       trailing: const Icon(
         CupertinoIcons.chevron_forward,
@@ -454,15 +455,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           builder: (_) => DiskScreen(
             path: hit.isFolder ? hit.path : hit.parentPath,
             title: hit.isFolder ? hit.name : null,
+            highlightName: hit.isFolder ? null : hit.name,
           ),
         ),
       ),
     );
-  }
-
-  static String _formatDiskSize(int bytes) {
-    if (bytes < 1024) return '$bytes Б';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} КБ';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
   }
 }

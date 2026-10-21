@@ -350,7 +350,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
         context,
       ),
-      drawerScrimColor: Colors.transparent,
+      drawerScrimColor: Colors.black.withValues(alpha: 0.05),
+      // При открытом меню тело тянется под (спрятанный) таббар: размытие
+      // ложится на весь экран одним слоем, без шва над зоной таббара.
+      // Под размытием перекладка контента не видна.
+      extendBody: _isDrawerOpen,
       onDrawerChanged: (isOpened) => setState(() => _isDrawerOpen = isOpened),
       drawer: Drawer(
         backgroundColor: Colors.transparent,
@@ -569,51 +573,69 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               },
             ),
           ),
-          if (_isDrawerOpen)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: Container(color: Colors.black.withValues(alpha: 0.05)),
-                ),
-              ),
-            ),
+          if (_isDrawerOpen) const _DrawerBackdrop(),
         ],
       ),
-      bottomNavigationBar: _FloatingTabBar(
-        currentIndex: _currentIndex,
-        onSelect: (index) {
-          HapticFeedback.selectionClick();
-          setState(() => _currentIndex = index);
-        },
-        items: [
-          const _TabItem(
-            icon: CupertinoIcons.news,
-            activeIcon: CupertinoIcons.news_solid,
-            label: 'Лента',
+      // При открытом меню таббар прячем: иначе он выглядит активным,
+      // хотя тап по нему только закрывает меню.
+      bottomNavigationBar: IgnorePointer(
+        ignoring: _isDrawerOpen,
+        child: AnimatedOpacity(
+          opacity: _isDrawerOpen ? 0 : 1,
+          duration: const Duration(milliseconds: 200),
+          child: _FloatingTabBar(
+            currentIndex: _currentIndex,
+            onSelect: (index) {
+              HapticFeedback.selectionClick();
+              setState(() => _currentIndex = index);
+            },
+            items: [
+              const _TabItem(
+                icon: CupertinoIcons.news,
+                activeIcon: CupertinoIcons.news_solid,
+                label: 'Лента',
+              ),
+              const _TabItem(
+                icon: CupertinoIcons.calendar,
+                activeIcon: CupertinoIcons.calendar,
+                label: 'Календарь',
+              ),
+              _TabItem(
+                icon: CupertinoIcons.chat_bubble_2,
+                activeIcon: CupertinoIcons.chat_bubble_2_fill,
+                label: 'Чаты',
+                badge: _unreadChatsCount > 0 ? _unreadChatsBadge : null,
+              ),
+              const _TabItem(
+                icon: CupertinoIcons.star,
+                activeIcon: CupertinoIcons.star_fill,
+                label: 'Избранное',
+              ),
+              const _TabItem(
+                icon: CupertinoIcons.videocam,
+                activeIcon: CupertinoIcons.videocam_fill,
+                label: 'Коннектор',
+              ),
+            ],
           ),
-          const _TabItem(
-            icon: CupertinoIcons.calendar,
-            activeIcon: CupertinoIcons.calendar,
-            label: 'Календарь',
-          ),
-          _TabItem(
-            icon: CupertinoIcons.chat_bubble_2,
-            activeIcon: CupertinoIcons.chat_bubble_2_fill,
-            label: 'Чаты',
-            badge: _unreadChatsCount > 0 ? _unreadChatsBadge : null,
-          ),
-          const _TabItem(
-            icon: CupertinoIcons.star,
-            activeIcon: CupertinoIcons.star_fill,
-            label: 'Избранное',
-          ),
-          const _TabItem(
-            icon: CupertinoIcons.videocam,
-            activeIcon: CupertinoIcons.videocam_fill,
-            label: 'Коннектор',
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Размытие под открытым боковым меню.
+class _DrawerBackdrop extends StatelessWidget {
+  const _DrawerBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: const SizedBox.expand(),
+        ),
       ),
     );
   }
@@ -820,8 +842,8 @@ class _DrawerHeaderCard extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: BrandingLoginLogo(height: 30),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: BrandingLoginLogo(height: 26),
           ),
           Container(
             height: 0.5,
@@ -829,21 +851,26 @@ class _DrawerHeaderCard extends StatelessWidget {
             color: CupertinoColors.separator.resolveFrom(context),
           ),
           CupertinoListTile(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            leadingSize: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leadingSize: 40,
             leading: MemberAvatar(
               displayName: displayName,
               avatarUrl: avatarUrl,
-              radius: 22,
+              radius: 20,
             ),
             title: Text(
               displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             subtitle: (position ?? '').isNotEmpty
-                ? Text(position!, maxLines: 1, overflow: TextOverflow.ellipsis)
+                ? Text(
+                    position!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13),
+                  )
                 : null,
             backgroundColor: const Color(0x00000000),
             trailing: const CupertinoListTileChevron(),
@@ -863,7 +890,7 @@ class _DrawerDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 0.5,
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       color: CupertinoColors.separator.resolveFrom(context),
     );
   }
@@ -924,11 +951,11 @@ class _DrawerItem extends StatelessWidget {
         onPressed: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          height: 46,
+          height: 40,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           // Выбранный пункт — светлая «стеклянная» капсула, без цвета.
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             color: selected
                 ? (isDark ? const Color(0x24FFFFFF) : const Color(0xE6FFFFFF))
                 : const Color(0x00FFFFFF),
@@ -951,18 +978,18 @@ class _DrawerItem extends StatelessWidget {
           child: Row(
             children: [
               SizedBox(
-                width: 26,
-                child: Icon(icon, size: 21, color: labelColor),
+                width: 24,
+                child: Icon(icon, size: 19, color: labelColor),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 17,
-                    letterSpacing: -0.4,
+                    fontSize: 15,
+                    letterSpacing: -0.2,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                     color: labelColor,
                   ),

@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import '../config/routes/disk_routes.dart';
 import '../models/disk/disk_entry.dart';
 import '../models/disk/disk_share.dart';
 import '../services/api_client.dart';
 import '../services/api_envelope.dart';
+import '../services/auth_service.dart';
 
 /// `/api/nextcloud/*` — файловое хранилище («Диск»).
 ///
@@ -20,6 +23,9 @@ class DiskRepository {
   DiskRepository._();
   static final DiskRepository instance = DiskRepository._();
 
+  /// Лимит сервера на один загружаемый файл (со слов бэкенда — 100 МБ).
+  static const maxUploadBytes = 100 * 1024 * 1024;
+
   static final _davPrefix = RegExp(r'^/*remote\.php/dav/files/[^/]+(/|$)');
 
   /// `files/list` отдаёт полные WebDAV-пути (`/remote.php/dav/files/user_1/a.jpg`),
@@ -30,27 +36,75 @@ class DiskRepository {
   static String toApiPath(String path) =>
       path.replaceFirst(_davPrefix, '').replaceFirst(RegExp(r'^/+'), '');
 
+  /// Последнее известное содержимое папок за текущую сессию: при повторном
+  /// входе в папку список показывается сразу, а свежий подгружается тихо.
+  final Map<String, DiskListing> _listingCache = {};
+  int _cacheGeneration = -1;
+
+  /// Сбрасывает кэши, если с прошлого обращения пользователь вышел из
+  /// аккаунта: чужие списки и файлы не должны пережить смену сессии.
+  void _checkSession() {
+    final generation = AuthService.instance.sessionGeneration;
+    if (generation == _cacheGeneration) return;
+    final isFirstCheck = _cacheGeneration == -1;
+    _cacheGeneration = generation;
+    _listingCache.clear();
+    _downloads.clear();
+    // Файлы с прошлых запусков оставляем — миниатюры не качаются заново.
+    // Ключ кэша — полный WebDAV-путь с логином, чужие файлы другому
+    // пользователю не попадутся; место в Caches при нехватке чистит iOS.
+    if (!isFirstCheck) _clearing = _clearFileCache();
+  }
+
+  DiskListing? cachedListing(String folder) {
+    _checkSession();
+    return _listingCache[toApiPath(folder)];
+  }
+
   Future<DiskListing> listFolder(String folder) async {
+    _checkSession();
+    final apiPath = toApiPath(folder);
     final decoded = await ApiClient.instance.get(
       DiskRoutes.filesListUrl,
-      queryParameters: {'folder': toApiPath(folder)},
+      queryParameters: {'folder': apiPath},
     );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
       defaultErrorMessage: 'Не удалось получить содержимое папки',
     );
-    return DiskListing.fromJson(data);
+    final listing = DiskListing.fromJson(
+      data,
+      folder: apiPath,
+      normalize: toApiPath,
+    );
+    _listingCache[apiPath] = listing;
+    return listing;
   }
 
+  /// Загружает файл с диска устройства потоком, не читая его в память.
+  /// [onProgress] — доля отправленного (0…1).
   Future<void> uploadFile({
-    required List<int> bytes,
+    required String filePath,
     required String filename,
     String folder = '',
+    void Function(double progress)? onProgress,
   }) async {
+    final length = await File(filePath).length();
+    final file = await http.MultipartFile.fromPath(
+      'file',
+      filePath,
+      filename: filename,
+    );
     final decoded = await ApiClient.instance.postMultipart(
       DiskRoutes.uploadUrl,
       fields: {'folder': toApiPath(folder)},
-      files: [http.MultipartFile.fromBytes('file', bytes, filename: filename)],
+      files: [file],
+      // Минута на ответ сервера плюс время на тело при 32 КБ/с — так
+      // крупный файл на медленной сети не обрывается по общему тайм-ауту.
+      timeout: Duration(seconds: 60 + length ~/ (32 * 1024)),
+      onProgress: onProgress == null
+          ? null
+          : (sent, total) => onProgress(total > 0 ? sent / total : 0),
     );
     ApiEnvelope.unwrapData(
       decoded,
@@ -95,32 +149,123 @@ class DiskRepository {
     );
   }
 
-  /// Возвращает байты файла. Бэкенд отдаёт бинарный поток при успехе, но
-  /// при ошибке (даже с HTTP 200) — тот же JSON-конверт `{success:false}`,
-  /// поэтому перед возвратом байтов проверяем, не JSON ли это ошибка.
-  Future<Uint8List> downloadFile(String path) async {
-    final bytes = await ApiClient.instance.downloadBytes(
+  /// Скачанные файлы живут во временной папке, ключ — путь, размер и дата
+  /// изменения: изменённый на сервере файл скачается заново.
+  final Map<String, Future<File>> _downloads = {};
+
+  /// Очистка кэша после смены сессии; скачивания ждут её, иначе она могла
+  /// бы удалить файл, который как раз пишется.
+  Future<void>? _clearing;
+
+  Future<Directory> _fileCacheDir() async {
+    await _clearing;
+    return _rawFileCacheDir();
+  }
+
+  Future<Directory> _rawFileCacheDir() async =>
+      Directory('${(await getTemporaryDirectory()).path}/disk_files');
+
+  Future<void> _clearFileCache() async {
+    try {
+      final dir = await _rawFileCacheDir();
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {
+      // Временная папка — не страшно, если что-то останется до очистки ОС.
+    }
+  }
+
+  /// Уже скачанный файл без сети — для миниатюр в списке.
+  Future<File?> cachedFile(DiskFile file) async {
+    _checkSession();
+    final local = await _localFileFor(file);
+    return await local.exists() ? local : null;
+  }
+
+  /// Локальная копия файла: из кэша или скачанная. Одновременные запросы
+  /// одного файла (миниатюра и открытие) делят одно скачивание.
+  /// [onProgress] — доля скачанного (0…1), если сервер сообщил размер.
+  Future<File> fetchFile(
+    DiskFile file, {
+    void Function(double progress)? onProgress,
+  }) {
+    _checkSession();
+    final key = _cacheKey(file);
+    final pending = _downloads[key];
+    if (pending != null) return pending;
+    final future = _fetchFile(file, onProgress).whenComplete(() {
+      // Блок, а не `=> remove(key)`: `remove` вернул бы этот же future,
+      // и `whenComplete` ждал бы сам себя вечно.
+      _downloads.remove(key);
+    });
+    _downloads[key] = future;
+    return future;
+  }
+
+  Future<File> _fetchFile(
+    DiskFile file,
+    void Function(double progress)? onProgress,
+  ) async {
+    final local = await _localFileFor(file);
+    if (await local.exists()) return local;
+
+    await ApiClient.instance.downloadToFile(
       Uri.parse(
         DiskRoutes.downloadUrl,
-      ).replace(queryParameters: {'path': toApiPath(path)}).toString(),
+      ).replace(queryParameters: {'path': toApiPath(file.path)}).toString(),
+      local,
+      onProgress: (received, total) {
+        final expected = total ?? file.size;
+        if (onProgress != null && expected != null && expected > 0) {
+          onProgress((received / expected).clamp(0, 1));
+        }
+      },
     );
 
-    Object? decoded;
-    try {
-      decoded = jsonDecode(utf8.decode(bytes));
-    } catch (_) {
-      // Бинарные данные не декодируются как UTF-8 JSON — это и есть файл.
+    // Ошибку бэкенд отдаёт тем же JSON-конвертом с HTTP 200 — маленький
+    // «файл», начинающийся с `{`, проверяем, прежде чем считать его файлом.
+    final length = await local.length();
+    if (length < 4096 && !_looksLikeJson(file)) {
+      Object? decoded;
+      try {
+        decoded = jsonDecode(await local.readAsString());
+      } catch (_) {
+        // Не JSON — это и есть файл.
+      }
+      if (decoded is Map<String, dynamic> && decoded['success'] == false) {
+        await local.delete();
+        ApiEnvelope.unwrapData(
+          decoded,
+          defaultErrorMessage: 'Не удалось скачать файл',
+        );
+      }
     }
-    // Вне try: иначе ApiException из unwrapData глотается и JSON ошибки
-    // сохраняется пользователю как «файл».
-    if (decoded is Map<String, dynamic> && decoded['success'] == false) {
-      ApiEnvelope.unwrapData(
-        decoded,
-        defaultErrorMessage: 'Не удалось скачать файл',
-      );
-    }
+    return local;
+  }
 
-    return Uint8List.fromList(bytes);
+  /// Настоящий `.json` на «Диске» нельзя путать с ошибкой сервера.
+  static bool _looksLikeJson(DiskFile file) =>
+      file.name.toLowerCase().endsWith('.json') ||
+      (file.mime?.contains('json') ?? false);
+
+  String _cacheKey(DiskFile file) =>
+      '${file.path}|${file.size}|${file.lastModified?.millisecondsSinceEpoch}';
+
+  Future<File> _localFileFor(DiskFile file) async {
+    final dir = await _fileCacheDir();
+    // Имя файла сохраняем как есть: по расширению его открывают QuickLook
+    // и «Поделиться», а уникальность даёт папка с хэшем ключа.
+    final safeName = file.name.replaceAll(RegExp(r'[/\\:]'), '_');
+    return File('${dir.path}/${_fnv1a(_cacheKey(file))}/$safeName');
+  }
+
+  /// FNV-1a (64 бита) — стабильный между запусками хэш для имени папки.
+  static String _fnv1a(String input) {
+    var hash = 0xcbf29ce484222325;
+    for (final byte in utf8.encode(input)) {
+      hash ^= byte;
+      hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+    }
+    return hash.toUnsigned(64).toRadixString(16);
   }
 
   Future<Map<String, dynamic>> createPublicLink(

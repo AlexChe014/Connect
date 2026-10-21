@@ -1,5 +1,8 @@
 import 'package:flutter/cupertino.dart';
 
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
+import '../widgets/booking_glass_form.dart';
 import 'mail_connection_form_screen.dart';
 
 class MailProviderPickerScreen extends StatelessWidget {
@@ -7,47 +10,34 @@ class MailProviderPickerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Новый почтовый ящик'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
+    return const BookingGlassScaffold(
+      title: 'Новый почтовый ящик',
+      children: [
+        AppGlassSectionLabel(
+          'Выберите почтового провайдера',
+          padding: EdgeInsets.fromLTRB(20, 4, 20, 6),
         ),
-      ),
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        AppGlassSection(
+          margin: EdgeInsets.symmetric(horizontal: 16),
           children: [
-            CupertinoListSection.insetGrouped(
-              margin: EdgeInsets.zero,
-              header: const Text('ВЫБЕРИТЕ ПОЧТОВОГО ПРОВАЙДЕРА'),
-              children: [
-                _ProviderTile(
-                  provider: MailProviderKind.yandex,
-                  color: CupertinoColors.systemRed,
-                  icon: CupertinoIcons.mail_solid,
-                ),
-                _ProviderTile(
-                  provider: MailProviderKind.mailru,
-                  color: CupertinoColors.activeBlue,
-                  icon: CupertinoIcons.at,
-                ),
-                _ProviderTile(
-                  provider: MailProviderKind.corporate,
-                  color: CupertinoColors.systemGrey,
-                  icon: CupertinoIcons.building_2_fill,
-                ),
-              ],
+            _ProviderTile(
+              provider: MailProviderKind.yandex,
+              color: CupertinoColors.systemRed,
+              icon: CupertinoIcons.mail_solid,
+            ),
+            _ProviderTile(
+              provider: MailProviderKind.mailru,
+              color: CupertinoColors.systemBlue,
+              icon: CupertinoIcons.at,
+            ),
+            _ProviderTile(
+              provider: MailProviderKind.corporate,
+              color: CupertinoColors.systemGrey,
+              icon: CupertinoIcons.building_2_fill,
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -66,25 +56,20 @@ class _ProviderTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CupertinoListTile(
-      leading: Container(
-        width: 29,
-        height: 29,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Icon(icon, size: 16, color: CupertinoColors.white),
-      ),
-      title: Text(_titleFor(provider)),
+      leading: AppIconBadge(icon: icon, color: color),
+      title: Text(_titleFor(provider), style: const TextStyle(fontSize: 16)),
       trailing: const CupertinoListTileChevron(),
-      onTap: () => Navigator.of(context).push<bool>(
-        CupertinoPageRoute<bool>(
-          builder: (context) => MailConnectionFormScreen(provider: provider),
-        ),
-      ).then((created) {
-        if (created == true && context.mounted) Navigator.of(context).pop(true);
-      }),
+      onTap: () => Navigator.of(context)
+          .push<bool>(
+            CupertinoPageRoute<bool>(
+              builder: (context) =>
+                  MailConnectionFormScreen(provider: provider),
+            ),
+          )
+          .then((created) {
+            if (created == true && context.mounted)
+              Navigator.of(context).pop(true);
+          }),
     );
   }
 

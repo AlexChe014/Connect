@@ -78,9 +78,16 @@ class MailRoutes {
 
   // --- Attachments ---
 
-  static String attachmentUrl(int connectionId, int attachmentId, String filename) {
+  /// `/mail/attachments/{connection}/{email}/{filename}`: `{email}` — id
+  /// письма, как во всех остальных маршрутах почты, а не id вложения
+  /// (сервер его и не отдаёт — у вложений приходит 0, отсюда были 404).
+  static String attachmentUrl(
+    int connectionId,
+    int messageId,
+    String filename,
+  ) {
     final encoded = Uri.encodeComponent(filename);
-    return '${ApiConfig.baseUrl}$_mailPrefix/attachments/$connectionId/$attachmentId/$encoded';
+    return '${ApiConfig.baseUrl}$_mailPrefix/attachments/$connectionId/$messageId/$encoded';
   }
 
   // --- SMTP ---

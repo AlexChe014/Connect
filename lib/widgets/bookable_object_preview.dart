@@ -28,7 +28,7 @@ class BookableObjectPreview extends StatelessWidget {
                 height: imageSize,
                 decoration: BoxDecoration(
                   color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Icon(
@@ -41,7 +41,7 @@ class BookableObjectPreview extends StatelessWidget {
                 url: imageUrl,
                 width: imageSize,
                 height: imageSize,
-                borderRadius: 12,
+                borderRadius: 14,
               ),
         const SizedBox(width: 12),
         Expanded(
@@ -51,19 +51,19 @@ class BookableObjectPreview extends StatelessWidget {
               if (!compact)
                 Text(
                   object.name,
-                  style: const TextStyle(
-                    fontSize: 16,
+                  style: TextStyle(
+                    fontSize: 17,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
               if (object.capacity > 0) ...[
                 SizedBox(height: compact ? 0 : 6),
                 Text(
                   'Вместимость: до ${object.capacity} чел.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -73,9 +73,9 @@ class BookableObjectPreview extends StatelessWidget {
                   object.description!.trim(),
                   maxLines: compact ? 2 : 4,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],

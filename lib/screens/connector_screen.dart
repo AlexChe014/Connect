@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/menu_button.dart';
 import 'create_instant_meeting_screen.dart';
 import 'schedule_video_meeting_screen.dart';
@@ -39,16 +41,8 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
     required VoidCallback onTap,
   }) {
     return CupertinoListTile(
-      leading: Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, size: 18, color: color),
-      ),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 14, 10),
+      leading: AppIconBadge(icon: icon, color: color),
       title: Text(title),
       subtitle: Text(
         subtitle,
@@ -73,46 +67,50 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 16,
         ),
-        child: CustomScrollView(
-          slivers: [
-            CupertinoSliverNavigationBar(
-              largeTitle: const Text('Коннектор'),
-              leading: const MenuButton(),
-              backgroundColor: CupertinoColors.systemGroupedBackground,
-              border: null,
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: Text(
-                  'Видеоконференции',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            CustomScrollView(
+              slivers: [
+                CupertinoSliverNavigationBar(
+                  largeTitle: const Text('Коннектор'),
+                  leading: const MenuButton(),
+                  // Прозрачная: под шапкой остаётся системное размытие, а заливка
+                  // дала бы на цветном пятне видимую границу.
+                  backgroundColor: CupertinoColors.systemGroupedBackground
+                      .resolveFrom(context)
+                      .withValues(alpha: 0),
+                  automaticBackgroundVisibility: false,
+                  border: null,
+                ),
+                const SliverToBoxAdapter(
+                  child: AppGlassSectionLabel(
+                    'Видеоконференции',
+                    padding: EdgeInsets.fromLTRB(20, 8, 20, 6),
                   ),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: CupertinoListSection.insetGrouped(
-                margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                children: [
-                  _actionTile(
-                    icon: CupertinoIcons.video_camera_solid,
-                    color: CupertinoColors.systemBlue,
-                    title: 'Создать видеовстречу',
-                    subtitle: 'Пригласить участников и сразу начать',
-                    onTap: _openCreateInstant,
+                SliverToBoxAdapter(
+                  child: AppGlassSection(
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    children: [
+                      _actionTile(
+                        icon: CupertinoIcons.video_camera_solid,
+                        color: CupertinoColors.systemBlue,
+                        title: 'Создать видеовстречу',
+                        subtitle: 'Пригласить участников и сразу начать',
+                        onTap: _openCreateInstant,
+                      ),
+                      _actionTile(
+                        icon: CupertinoIcons.calendar_badge_plus,
+                        color: CupertinoColors.systemOrange,
+                        title: 'Запланировать видеовстречу',
+                        subtitle: 'Создать запись в календаре с участниками',
+                        onTap: _openSchedule,
+                      ),
+                    ],
                   ),
-                  _actionTile(
-                    icon: CupertinoIcons.calendar_badge_plus,
-                    color: CupertinoColors.systemOrange,
-                    title: 'Запланировать видеовстречу',
-                    subtitle: 'Создать запись в календаре с участниками',
-                    onTap: _openSchedule,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),

@@ -8,7 +8,10 @@ import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
 import '../services/document_pending_service.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/booking_glass_form.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import 'documents_list_screen.dart';
 
@@ -222,28 +225,15 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
     if (mounted) await _pending.refresh(_services);
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 34,
-      height: 34,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Icon(icon, size: 18, color: color),
-    );
-  }
-
   List<Widget> _buildContentSlivers() {
     if (_isLoading || _isAuthenticating) {
       return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          sliver: SliverList.separated(
-            itemCount: 6,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => const AppSkeletonCardTile(),
+        AppGlassSliverList(
+          itemCount: 3,
+          padding: const EdgeInsets.fromLTRB(16, 34, 16, 24),
+          itemBuilder: (context, index) => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: AppSkeletonListTile(),
           ),
         ),
       ];
@@ -252,6 +242,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
     if (_services.isEmpty) {
       return [
         SliverFillRemaining(
+          hasScrollBody: false,
           child: AppEmptyState(
             icon: CupertinoIcons.lock_shield,
             message:
@@ -259,36 +250,43 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
                 'Введите личный код доступа, чтобы получить список сервисов 1С',
             onRetry: _requestPersonalAccessCode,
             retryLabel: 'Ввести код доступа',
+            scrollable: false,
           ),
         ),
       ];
     }
 
     return [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        sliver: SliverList.separated(
-          itemCount: _services.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final service = _services[index];
-            return _ServiceTile(
-              service: service,
-              pendingCount: _pending.counts[service.id],
-              countError: _pending.errors.contains(service.id),
-              countLoading: _pending.loading.contains(service.id),
-              icon: _iconBadge(
-                service.isSigningService
-                    ? CupertinoIcons.pencil_outline
-                    : CupertinoIcons.checkmark_seal,
-                service.isSigningService
-                    ? CupertinoColors.systemBlue
-                    : CupertinoColors.systemGreen,
-              ),
-              onTap: () => _openDocuments(service),
-              onMore: () => _showServiceActions(service),
-            );
-          },
+      const SliverToBoxAdapter(
+        child: AppGlassSectionLabel(
+          'Сервисы 1С',
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 6),
+        ),
+      ),
+      AppGlassSliverList(
+        itemCount: _services.length,
+        // Поле 16 + значок 29 + зазор 12.
+        separatorIndent: 57,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemBuilder: (context, index) {
+          final service = _services[index];
+          return _ServiceRow(
+            service: service,
+            pendingCount: _pending.counts[service.id],
+            countError: _pending.errors.contains(service.id),
+            countLoading: _pending.loading.contains(service.id),
+            onTap: () => _openDocuments(service),
+            onMore: () => _showServiceActions(service),
+          );
+        },
+      ),
+      const SliverPadding(
+        padding: EdgeInsets.only(bottom: 24),
+        sliver: SliverToBoxAdapter(
+          child: BookingFootnote(
+            'Число справа — документы, которые ждут вашего решения. '
+            'Через «…» можно выйти из сервисов 1С.',
+          ),
         ),
       ),
     ];
@@ -305,33 +303,54 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 16,
         ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator.adaptive(
-            onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                const CupertinoSliverNavigationBar(
-                  largeTitle: Text('Согласование'),
-                  backgroundColor: CupertinoColors.systemGroupedBackground,
-                  border: null,
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    CupertinoSliverNavigationBar(
+                      largeTitle: const Text('Согласование'),
+                      leading: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        onPressed: () => Navigator.maybePop(context),
+                        child: Icon(
+                          CupertinoIcons.back,
+                          size: 26,
+                          color: CupertinoColors.label.resolveFrom(context),
+                        ),
+                      ),
+                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
+                      // дала бы на цветном пятне видимую границу.
+                      backgroundColor: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context)
+                          .withValues(alpha: 0),
+                      automaticBackgroundVisibility: false,
+                      border: null,
+                    ),
+                    ..._buildContentSlivers(),
+                  ],
                 ),
-                ..._buildContentSlivers(),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({
+/// Строка сервиса 1С на стеклянном списке: значок, название, число
+/// документов на решении, «…» с действиями и шеврон.
+class _ServiceRow extends StatelessWidget {
+  const _ServiceRow({
     required this.service,
-    required this.icon,
     required this.onTap,
     required this.onMore,
     required this.pendingCount,
@@ -343,96 +362,100 @@ class _ServiceTile extends StatelessWidget {
   final int? pendingCount;
   final bool countError;
   final bool countLoading;
-  final Widget icon;
   final VoidCallback onTap;
   final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              icon,
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  service.displayName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label,
+    final count = pendingCount;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+        child: Row(
+          children: [
+            AppIconBadge(
+              icon: service.isSigningService
+                  ? CupertinoIcons.pencil
+                  : CupertinoIcons.checkmark_seal_fill,
+              color: service.isSigningService
+                  ? CupertinoColors.systemBlue
+                  : CupertinoColors.systemGreen,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                service.displayName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (countLoading)
+              const CupertinoActivityIndicator(radius: 8)
+            else if (countError)
+              Semantics(
+                label: 'Не удалось проверить документы',
+                child: Icon(
+                  CupertinoIcons.exclamationmark_circle,
+                  color: CupertinoColors.systemOrange.resolveFrom(context),
+                  size: 20,
+                ),
+              )
+            else if (count != null)
+              Semantics(
+                label: 'Документов на согласование: $count',
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 24),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: count > 0
+                        ? CupertinoColors.systemRed.resolveFrom(context)
+                        : CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$count',
+                    style: TextStyle(
+                      color: count > 0
+                          ? CupertinoColors.white
+                          : CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-              if (countLoading)
-                const CupertinoActivityIndicator(radius: 8)
-              else if (countError)
-                Semantics(
-                  label: 'Не удалось проверить документы',
-                  child: const Icon(
-                    CupertinoIcons.exclamationmark_circle,
-                    color: CupertinoColors.systemOrange,
-                    size: 20,
-                  ),
-                )
-              else if (pendingCount != null)
-                Semantics(
-                  label: 'Документов на согласование: $pendingCount',
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: pendingCount! > 0
-                          ? CupertinoColors.systemRed
-                          : CupertinoColors.systemGrey5,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$pendingCount',
-                      style: TextStyle(
-                        color: pendingCount! > 0
-                            ? CupertinoColors.white
-                            : CupertinoColors.secondaryLabel,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: onMore,
-                child: Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Icon(
-                    CupertinoIcons.ellipsis,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              minimumSize: Size.zero,
+              onPressed: onMore,
+              child: Icon(
+                CupertinoIcons.ellipsis_circle,
+                size: 22,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
-              Icon(
-                CupertinoIcons.chevron_forward,
-                size: 16,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              ),
-            ],
-          ),
+            ),
+            Icon(
+              CupertinoIcons.chevron_forward,
+              size: 16,
+              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+            ),
+          ],
         ),
       ),
     );

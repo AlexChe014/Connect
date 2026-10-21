@@ -6,6 +6,7 @@ import '../repositories/connector_repository.dart';
 import '../services/api_client.dart';
 import '../services/connector_invite_service.dart';
 import '../utils/connector_launch.dart';
+import '../widgets/booking_glass_form.dart';
 import '../widgets/selected_staff_field.dart';
 
 /// Создание мгновенной видеовстречи с приглашением участников в чат.
@@ -19,7 +20,7 @@ class CreateInstantMeetingScreen extends StatefulWidget {
 
 class _CreateInstantMeetingScreenState
     extends State<CreateInstantMeetingScreen> {
-  final _topicController = TextEditingController(text: 'Видеовстреча');
+  final _topicController = TextEditingController();
   List<StaffUser> _invitees = [];
   bool _isSubmitting = false;
 
@@ -41,10 +42,7 @@ class _CreateInstantMeetingScreenState
 
       final session = await ConnectorRepository.instance.createInstant(
         topic: topic,
-        userIds: _invitees
-            .map((u) => u.idAsInt)
-            .whereType<int>()
-            .toList(),
+        userIds: _invitees.map((u) => u.idAsInt).whereType<int>().toList(),
       );
 
       var invited = 0;
@@ -97,74 +95,38 @@ class _CreateInstantMeetingScreenState
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-        middle: const Text('Новая видеовстреча'),
-        trailing: _isSubmitting
-            ? const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: CupertinoActivityIndicator(),
-              )
-            : CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: _submit,
-                child: const Text('Начать'),
-              ),
+    return BookingGlassScaffold(
+      title: 'Новая видеовстреча',
+      canPop: !_isSubmitting,
+      trailing: BookingNavAction(
+        label: 'Начать',
+        isLoading: _isSubmitting,
+        onPressed: _submit,
       ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
+      children: [
+        BookingTitleCard(
+          themeController: _topicController,
+          themePlaceholder: 'Видеовстреча',
         ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 32),
-            children: [
-              CupertinoFormSection.insetGrouped(
-                children: [
-                  CupertinoTextFormFieldRow(
-                    controller: _topicController,
-                    prefix: const Text('Название'),
-                    placeholder: 'Видеовстреча',
-                    textCapitalization: TextCapitalization.sentences,
-                    textAlign: TextAlign.end,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SelectedStaffField(
-                  label: 'Пригласить',
-                  participants: _invitees,
-                  onUserAdded: (user) =>
-                      setState(() => _invitees = [..._invitees, user]),
-                  onUserRemoved: (user) => setState(
-                    () => _invitees =
-                        _invitees.where((p) => p.id != user.id).toList(),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: Text(
-                  'Выбранным пользователям в личный чат придёт ссылка на '
-                  'встречу — её можно открыть в приложении или в браузере.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ),
-            ],
+        const SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SelectedStaffField(
+            label: 'Пригласить',
+            participants: _invitees,
+            onUserAdded: (user) =>
+                setState(() => _invitees = [..._invitees, user]),
+            onUserRemoved: (user) => setState(
+              () =>
+                  _invitees = _invitees.where((p) => p.id != user.id).toList(),
+            ),
           ),
         ),
-      ),
+        const BookingFootnote(
+          'Выбранным пользователям в личный чат придёт ссылка на '
+          'встречу — её можно открыть в приложении или в браузере.',
+        ),
+      ],
     );
   }
 }

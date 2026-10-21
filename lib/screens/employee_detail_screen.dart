@@ -1,17 +1,17 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
 import '../screens/chat_conversation_screen.dart';
 import '../services/api_client.dart';
 import '../services/chat_call_service.dart';
 import '../services/chat_service.dart';
-import '../widgets/chat_avatar.dart';
-import '../widgets/status_bubble.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/employee_row.dart';
 
 class EmployeeDetailScreen extends StatefulWidget {
   const EmployeeDetailScreen({super.key, required this.user});
@@ -118,9 +118,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
       );
       if (!context.mounted) return;
       if (chat == null) {
-        ScaffoldMessenger.maybeOf(
-          context,
-        )?.showSnackBar(const SnackBar(content: Text('Не удалось начать звонок')));
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Не удалось начать звонок')),
+        );
         return;
       }
       await _callService.startCallFromChat(chat);
@@ -145,11 +145,25 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     }
   }
 
-  Future<void> _email(BuildContext context) async {
+  Future<void> _email() async {
     final email = user.email?.trim();
     if (email == null || email.isEmpty) return;
-    final uri = Uri(scheme: 'mailto', path: email);
-    await launchUrl(uri);
+    await launchUrl(Uri(scheme: 'mailto', path: email));
+  }
+
+  Future<void> _dial() async {
+    // В tel: только цифры и «+» — пробелы, скобки и дефисы из
+    // справочника ломают ссылку на части устройств.
+    final phone = (user.phone ?? '').replaceAll(RegExp(r'[^0-9+]'), '');
+    if (phone.isEmpty) return;
+    await launchUrl(Uri(scheme: 'tel', path: phone));
+  }
+
+  void _copy(String value, String what) {
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text('$what скопирован')));
   }
 
   Widget _iconBadge(IconData icon, Color color) {
@@ -165,41 +179,42 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     );
   }
 
-  /// Строка "подпись сверху / значение снизу на всю ширину" — в отличие от
-  /// leading+title+additionalInfo, длинные значения (email, телефон) не
-  /// обрезаются и не выталкивают подпись.
+  /// Строка "подпись сверху / значение снизу на всю ширину" — длинные
+  /// значения (email, роли) переносятся, а не обрезаются.
   Widget _infoRow(
     BuildContext context, {
     required IconData icon,
     required Color color,
     required String label,
     required String value,
-    bool isPlaceholder = false,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
   }) {
-    return CupertinoListTile(
-      leading: _iconBadge(icon, color),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+    return GestureDetector(
+      onLongPress: onLongPress,
+      child: CupertinoListTile(
+        leading: _iconBadge(icon, color),
+        onTap: onTap,
+        title: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
         ),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          value,
-          // CupertinoListTile форсирует subtitle в 1 строку с "…", если не
-          // переопределить maxLines явно — вопреки комментарию выше это
-          // резало длинные значения (например, должность) на самом деле.
-          maxLines: 20,
-          overflow: TextOverflow.ellipsis,
-          style: isPlaceholder
-              ? TextStyle(
-                  fontStyle: FontStyle.italic,
-                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-                )
-              : const TextStyle(color: CupertinoColors.label),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            value,
+            // CupertinoListTile форсирует subtitle в 1 строку с "…", если
+            // не переопределить maxLines явно.
+            maxLines: 20,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
         ),
       ),
     );
@@ -210,41 +225,155 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     return t.contains('админ') || t.contains('admin');
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final birthdayLabel = user.birthday != null
-        ? DateFormat('d MMMM', 'ru_RU').format(user.birthday!)
-        : 'Не указан';
-    final positionLabel = (user.position ?? '').trim().isNotEmpty
-        ? user.position!.trim()
-        : 'Не указана';
-    final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
+  /// Шапка-карточка: аватар слева, текст справа. Раньше аватар стоял
+  /// по центру во всю ширину и съедал треть экрана, а контакты
+  /// оказывались за сгибом.
+  Widget _buildHeader(BuildContext context) {
+    final position = (user.position ?? '').trim();
+    final department = (user.department ?? '').trim();
     final workStatus = (user.workStatus ?? '').trim();
-    final hasPhone = (user.phone ?? '').trim().isNotEmpty;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(24),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              EmployeeAvatar(user: user, radius: 34),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.fullName,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ),
+                    if (position.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        position,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 14, color: secondary),
+                      ),
+                    ],
+                    if (department.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        department,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.tertiaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _HeaderChip(
+                          dotColor: user.isOnline
+                              ? CupertinoColors.systemGreen.resolveFrom(context)
+                              : CupertinoColors.systemGrey.resolveFrom(context),
+                          text: user.isOnline ? 'В сети' : 'Не в сети',
+                        ),
+                        if (workStatus.isNotEmpty)
+                          _HeaderChip(text: workStatus),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActions(BuildContext context) {
     final hasEmail = (user.email ?? '').trim().isNotEmpty;
     final canCall = user.idAsInt != null;
+    final actions = <Widget>[
+      AppGlassActionButton(
+        icon: CupertinoIcons.bubble_left_fill,
+        label: 'Написать',
+        onTap: () => _openChat(context),
+      ),
+      if (canCall)
+        AppGlassActionButton(
+          icon: CupertinoIcons.phone_fill,
+          label: 'Звонок',
+          onTap: _callService.isStartingCall ? null : () => _call(context),
+        ),
+      if (hasEmail)
+        AppGlassActionButton(
+          icon: CupertinoIcons.mail_solid,
+          label: 'Почта',
+          onTap: _email,
+        ),
+      AppGlassActionButton(
+        icon: _isFavorite ? CupertinoIcons.star_fill : CupertinoIcons.star,
+        label: 'Избранное',
+        onTap: _toggleFavorite,
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        children: [
+          for (var i = 0; i < actions.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: actions[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final email = (user.email ?? '').trim();
+    final phone = (user.phone ?? '').trim();
+    final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
+    final showRoles = _isAdmin && rolesText != null;
+    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: groupedBg,
       navigationBar: CupertinoNavigationBar(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        // Прозрачная: под шапкой остаётся системное размытие, а заливка
+        // дала бы на цветном пятне видимую границу.
+        backgroundColor: groupedBg.withValues(alpha: 0),
+        automaticBackgroundVisibility: false,
         border: null,
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
           minimumSize: Size.zero,
           onPressed: () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
-        ),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _toggleFavorite,
           child: Icon(
-            _isFavorite ? CupertinoIcons.star_fill : CupertinoIcons.star,
-            size: 24,
-            color: _isFavorite
-                ? CupertinoColors.systemYellow
-                : CupertinoColors.label.resolveFrom(context),
+            CupertinoIcons.back,
+            size: 26,
+            color: CupertinoColors.label.resolveFrom(context),
           ),
         ),
       ),
@@ -255,240 +384,131 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 16,
         ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-            children: [
-              Center(
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    MemberAvatar(
-                      displayName: user.fullName,
-                      avatarUrl: user.avatarUrl,
-                      radius: 52,
-                    ),
-                    Positioned(
-                      right: 2,
-                      bottom: 2,
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: user.isOnline
-                              ? const Color(0xFF34C759)
-                              : AppColors.outlineStrong,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: CupertinoColors.systemGroupedBackground
-                                .resolveFrom(context),
-                            width: 3,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (user.isBirthdayToday)
-                      Positioned(
-                        left: -4,
-                        bottom: -2,
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: CupertinoColors.systemGroupedBackground
-                                .resolveFrom(context),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Text(
-                            '🎂',
-                            style: TextStyle(fontSize: 20),
-                          ),
-                        ),
-                      ),
-                  ],
+        child: Stack(
+          children: [
+            const AppGlassGlow(height: 360),
+            Builder(
+              // Свой context — под скаффолдом, где в MediaQuery уже учтена
+              // высота полупрозрачной шапки.
+              builder: (context) => ListView(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top + 8,
+                  bottom: MediaQuery.paddingOf(context).bottom + 32,
                 ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                user.fullName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              if ((user.department ?? '').trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  user.department!.trim(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ],
-              if (workStatus.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Center(child: StatusBubble(text: workStatus)),
-              ],
-              const SizedBox(height: 6),
-              Text(
-                user.isOnline ? 'В сети' : 'Не в сети',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _ContactActionButton(
-                    icon: CupertinoIcons.bubble_left_fill,
-                    color: CupertinoColors.systemBlue,
-                    label: 'Написать',
-                    onTap: () => _openChat(context),
-                  ),
-                  if (canCall) ...[
-                    const SizedBox(width: 24),
-                    _ContactActionButton(
-                      icon: CupertinoIcons.phone_fill,
-                      color: CupertinoColors.systemGreen,
-                      label: 'Позвонить',
-                      onTap: _callService.isStartingCall
-                          ? null
-                          : () => _call(context),
+                  _buildHeader(context),
+                  _buildActions(context),
+                  if (email.isNotEmpty || phone.isNotEmpty) ...[
+                    const AppGlassSectionLabel('Контакты'),
+                    AppGlassSection(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        if (phone.isNotEmpty)
+                          _infoRow(
+                            context,
+                            icon: CupertinoIcons.phone_fill,
+                            color: CupertinoColors.systemGreen,
+                            label: 'Телефон',
+                            value: phone,
+                            onTap: _dial,
+                            onLongPress: () => _copy(phone, 'Телефон'),
+                          ),
+                        if (email.isNotEmpty)
+                          _infoRow(
+                            context,
+                            icon: CupertinoIcons.mail_solid,
+                            color: CupertinoColors.systemBlue,
+                            label: 'Email',
+                            value: email,
+                            onTap: _email,
+                            onLongPress: () => _copy(email, 'Email'),
+                          ),
+                      ],
                     ),
                   ],
-                  if (hasEmail) ...[
-                    const SizedBox(width: 24),
-                    _ContactActionButton(
-                      icon: CupertinoIcons.mail_solid,
-                      color: CupertinoColors.systemIndigo,
-                      label: 'Почта',
-                      onTap: () => _email(context),
+                  if (user.birthday != null || showRoles) ...[
+                    const AppGlassSectionLabel('О сотруднике'),
+                    AppGlassSection(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        if (user.birthday != null)
+                          _infoRow(
+                            context,
+                            icon: CupertinoIcons.gift_fill,
+                            color: CupertinoColors.systemPink,
+                            label: 'День рождения',
+                            value: DateFormat(
+                              'd MMMM',
+                              'ru_RU',
+                            ).format(user.birthday!),
+                          ),
+                        // Роли — служебная информация, полезна только
+                        // администраторам; обычным пользователям всегда
+                        // покажет одно и то же ("Пользователь") и шумит.
+                        if (showRoles)
+                          _infoRow(
+                            context,
+                            icon: CupertinoIcons
+                                .person_crop_circle_badge_checkmark,
+                            color: CupertinoColors.systemOrange,
+                            label: 'Роли',
+                            value: rolesText,
+                          ),
+                      ],
                     ),
                   ],
                 ],
               ),
-              const SizedBox(height: 28),
-              if (hasEmail || hasPhone) ...[
-                CupertinoListSection.insetGrouped(
-                  header: const Text('Контакты'),
-                  children: [
-                    if (hasEmail)
-                      _infoRow(
-                        context,
-                        icon: CupertinoIcons.mail_solid,
-                        color: CupertinoColors.systemBlue,
-                        label: 'Email',
-                        value: user.email!.trim(),
-                      ),
-                    if (hasPhone)
-                      _infoRow(
-                        context,
-                        icon: CupertinoIcons.phone_fill,
-                        color: CupertinoColors.systemGreen,
-                        label: 'Телефон',
-                        value: user.phone!.trim(),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
-              CupertinoListSection.insetGrouped(
-                header: const Text('О сотруднике'),
-                children: [
-                  _infoRow(
-                    context,
-                    icon: CupertinoIcons.gift_fill,
-                    color: CupertinoColors.systemPink,
-                    label: 'День рождения',
-                    value: birthdayLabel,
-                    isPlaceholder: user.birthday == null,
-                  ),
-                  _infoRow(
-                    context,
-                    icon: CupertinoIcons.briefcase_fill,
-                    color: CupertinoColors.systemTeal,
-                    label: 'Должность',
-                    value: positionLabel,
-                    isPlaceholder: (user.position ?? '').trim().isEmpty,
-                  ),
-                  if ((user.department ?? '').trim().isNotEmpty)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.building_2_fill,
-                      color: CupertinoColors.systemIndigo,
-                      label: 'Отдел',
-                      value: user.department!.trim(),
-                    ),
-                  // Роли — служебная информация, полезна только для
-                  // администраторов; обычным пользователям всегда покажет
-                  // одно и то же ("Пользователь") и просто шумит на экране.
-                  if (_isAdmin && rolesText != null)
-                    _infoRow(
-                      context,
-                      icon: CupertinoIcons.star_fill,
-                      color: CupertinoColors.systemOrange,
-                      label: 'Роли',
-                      value: rolesText,
-                    ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ContactActionButton extends StatelessWidget {
-  const _ContactActionButton({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.onTap,
-  });
+/// Капсула под ФИО: статус «в сети» с цветной точкой или рабочий статус.
+class _HeaderChip extends StatelessWidget {
+  const _HeaderChip({required this.text, this.dotColor});
 
-  final IconData icon;
-  final Color color;
-  final String label;
-  final VoidCallback? onTap;
+  final String text;
+  final Color? dotColor;
 
   @override
   Widget build(BuildContext context) {
-    final disabled = onTap == null;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Opacity(
-        opacity: disabled ? 0.5 : 1,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (dotColor != null) ...[
             Container(
-              width: 56,
-              height: 56,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              child: Icon(icon, size: 24, color: CupertinoColors.white),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
               ),
             ),
+            const SizedBox(width: 6),
           ],
-        ),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

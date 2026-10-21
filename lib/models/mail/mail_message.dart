@@ -6,11 +6,16 @@ class MailAttachment {
   final String? mimeType;
   final int? size;
 
+  /// `Content-ID` встроенной картинки (без угловых скобок) — HTML письма
+  /// ссылается на неё как `cid:...`. Сервер может его и не отдавать.
+  final String? contentId;
+
   const MailAttachment({
     required this.id,
     required this.filename,
     this.mimeType,
     this.size,
+    this.contentId,
   });
 
   factory MailAttachment.fromJson(Map<String, dynamic> json) {
@@ -20,6 +25,11 @@ class MailAttachment {
           _optionalString(json, ['filename', 'name', 'file_name']) ?? 'file',
       mimeType: _optionalString(json, ['mime', 'mime_type', 'content_type']),
       size: _parseInt(json['size'] ?? json['file_size']),
+      contentId: _optionalString(json, [
+        'content_id',
+        'contentId',
+        'cid',
+      ])?.replaceAll(RegExp(r'^<|>$'), ''),
     );
   }
 
@@ -46,6 +56,9 @@ class MailMessage {
   final String subject;
   final String from;
   final String? to;
+
+  /// Получатели копии — список адресов через запятую.
+  final String? cc;
   final String? body;
   final String? bodyHtml;
   final DateTime? date;
@@ -58,6 +71,7 @@ class MailMessage {
     required this.subject,
     required this.from,
     this.to,
+    this.cc,
     this.body,
     this.bodyHtml,
     this.date,
@@ -72,18 +86,59 @@ class MailMessage {
     return '';
   }
 
-  MailMessage withRead(bool value) => MailMessage(
+  MailMessage withRead(bool value) => copyWith(isRead: value);
+
+  MailMessage copyWith({
+    String? subject,
+    String? from,
+    String? to,
+    String? cc,
+    String? body,
+    String? bodyHtml,
+    DateTime? date,
+    bool? isRead,
+    bool? hasAttachments,
+    List<MailAttachment>? attachments,
+  }) => MailMessage(
     id: id,
-    subject: subject,
-    from: from,
-    to: to,
-    body: body,
-    bodyHtml: bodyHtml,
-    date: date,
-    isRead: value,
-    hasAttachments: hasAttachments,
-    attachments: attachments,
+    subject: subject ?? this.subject,
+    from: from ?? this.from,
+    to: to ?? this.to,
+    cc: cc ?? this.cc,
+    body: body ?? this.body,
+    bodyHtml: bodyHtml ?? this.bodyHtml,
+    date: date ?? this.date,
+    isRead: isRead ?? this.isRead,
+    hasAttachments: hasAttachments ?? this.hasAttachments,
+    attachments: attachments ?? this.attachments,
   );
+
+  /// Отдельные адреса из списка `a@x, Имя <b@y>` (как в [to]/[cc]).
+  /// Запятая внутри кавычек или угловых скобок адреса не делит.
+  static List<String> splitAddresses(String? list) {
+    if (list == null || list.trim().isEmpty) return const [];
+    final result = <String>[];
+    final current = StringBuffer();
+    var inQuotes = false;
+    var inBrackets = false;
+    for (final char in list.split('')) {
+      if (char == '"') inQuotes = !inQuotes;
+      if (char == '<') inBrackets = true;
+      if (char == '>') inBrackets = false;
+      if ((char == ',' || char == ';') && !inQuotes && !inBrackets) {
+        if (current.toString().trim().isNotEmpty) {
+          result.add(current.toString().trim());
+        }
+        current.clear();
+      } else {
+        current.write(char);
+      }
+    }
+    if (current.toString().trim().isNotEmpty) {
+      result.add(current.toString().trim());
+    }
+    return result;
+  }
 
   bool get hasBody => htmlContent != null || plainBody.isNotEmpty;
 
@@ -180,8 +235,9 @@ class MailMessage {
           _optionalString(json, ['from_email', 'from_name', 'from_address']) ??
           '',
       to:
-          _parseAddress(json['to']) ??
+          _parseAddressList(json['to'] ?? json['recipients']) ??
           _optionalString(json, ['to_email', 'recipient', 'to_address']),
+      cc: _parseAddressList(json['cc'] ?? json['copy']),
       body: body,
       bodyHtml: bodyHtml,
       date: _parseDate(
@@ -477,6 +533,20 @@ class MailMessage {
       return _parseAddress(raw.first);
     }
     return null;
+  }
+
+  /// Все адреса поля (to/cc) одной строкой через запятую — раньше из
+  /// списка брался только первый получатель.
+  static String? _parseAddressList(Object? raw) {
+    if (raw is List) {
+      final items = raw
+          .map(_parseAddress)
+          .whereType<String>()
+          .where((e) => e.isNotEmpty)
+          .toList();
+      return items.isEmpty ? null : items.join(', ');
+    }
+    return _parseAddress(raw);
   }
 
   static int? _parseInt(Object? v) {

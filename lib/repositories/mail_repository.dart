@@ -161,12 +161,14 @@ class ReplyMailRequest {
   final String to;
   final String subject;
   final String? body;
+  final List<http.MultipartFile> attachments;
 
   const ReplyMailRequest({
     required this.messageId,
     required this.to,
     required this.subject,
     this.body,
+    this.attachments = const [],
   });
 }
 
@@ -175,12 +177,14 @@ class ForwardMailRequest {
   final String to;
   final String subject;
   final String? body;
+  final List<http.MultipartFile> attachments;
 
   const ForwardMailRequest({
     required this.messageId,
     required this.to,
     required this.subject,
     this.body,
+    this.attachments = const [],
   });
 }
 
@@ -459,11 +463,11 @@ class MailRepository {
 
   Future<Uint8List> downloadAttachment({
     required int connectionId,
-    required int attachmentId,
+    required int messageId,
     required String filename,
   }) async {
     final bytes = await ApiClient.instance.downloadBytes(
-      MailRoutes.attachmentUrl(connectionId, attachmentId, filename),
+      MailRoutes.attachmentUrl(connectionId, messageId, filename),
     );
     return Uint8List.fromList(bytes);
   }
@@ -505,10 +509,38 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось установить ящик по умолчанию');
   }
 
+  /// Принимают ли `/mail/smtp/reply` и `/mail/smtp/forward` вложения
+  /// (multipart `attachments[]`, как `/mail/smtp/send`). Пока сервер их не
+  /// поддерживает, ответ/пересылка с файлами уходит новым письмом — см.
+  /// docs/BACKEND_MAIL_FIXES.md, п. 10. Включить после выкладки бэкенда.
+  static const bool replyAttachmentsSupported = false;
+
   Future<void> sendMail(SendMailRequest request) async {
     // The current API sends from the user's default SMTP connection.
     // Select it explicitly; an atomic per-message sender needs backend support.
-    await setDefaultConnection(request.connectionId);
+    // Afterwards the previous default is restored: otherwise sending once
+    // from a second mailbox silently changed which one opens first.
+    int? previousDefault;
+    try {
+      final sendable = await getSendableConnections();
+      previousDefault = sendable.where((c) => c.isDefault).firstOrNull?.id;
+    } catch (_) {
+      // Without the list we cannot restore — sending still matters more.
+    }
+    final switched = previousDefault != request.connectionId;
+    if (switched) await setDefaultConnection(request.connectionId);
+    try {
+      await _postSend(request);
+    } finally {
+      if (switched && previousDefault != null) {
+        try {
+          await setDefaultConnection(previousDefault);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _postSend(SendMailRequest request) async {
     final fields = <String, String>{
       'to': request.to,
       'subject': request.subject,
@@ -528,6 +560,20 @@ class MailRepository {
   }
 
   Future<void> replyMail(ReplyMailRequest request) async {
+    if (request.attachments.isNotEmpty) {
+      final decoded = await ApiClient.instance.postMultipart(
+        MailRoutes.smtpReplyUrl(request.messageId),
+        fields: {
+          'to': request.to,
+          'subject': request.subject,
+          if (request.body != null && request.body!.trim().isNotEmpty)
+            'body': request.body!,
+        },
+        files: request.attachments,
+      );
+      _unwrapMailData(decoded, 'Не удалось ответить на письмо');
+      return;
+    }
     final body = <String, dynamic>{
       'to': request.to,
       'subject': request.subject,
@@ -543,6 +589,20 @@ class MailRepository {
   }
 
   Future<void> forwardMail(ForwardMailRequest request) async {
+    if (request.attachments.isNotEmpty) {
+      final decoded = await ApiClient.instance.postMultipart(
+        MailRoutes.smtpForwardUrl(request.messageId),
+        fields: {
+          'to': request.to,
+          'subject': request.subject,
+          if (request.body != null && request.body!.trim().isNotEmpty)
+            'body': request.body!,
+        },
+        files: request.attachments,
+      );
+      _unwrapMailData(decoded, 'Не удалось переслать письмо');
+      return;
+    }
     final body = <String, dynamic>{
       'to': request.to,
       'subject': request.subject,

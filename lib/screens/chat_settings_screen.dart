@@ -758,24 +758,11 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   );
   static const _listSubtitleStyle = TextStyle(fontSize: 13);
 
-  /// Секция списка на стекле вместо сплошной подложки insetGrouped.
   Widget _glassSection({
     required List<Widget> children,
     EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(16, 20, 16, 0),
   }) {
-    return Padding(
-      padding: margin,
-      child: AppGlass(
-        borderRadius: BorderRadius.circular(22),
-        shadows: AppGlass.controlShadow,
-        child: CupertinoListSection.insetGrouped(
-          margin: EdgeInsets.zero,
-          backgroundColor: const Color(0x00000000),
-          decoration: const BoxDecoration(),
-          children: children,
-        ),
-      ),
-    );
+    return AppGlassSection(margin: margin, children: children);
   }
 
   Widget _iconBadge(IconData icon, Color color) {
@@ -895,7 +882,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         child: Row(
           children: [
             Expanded(
-              child: _QuickActionButton(
+              child: AppGlassActionButton(
                 icon: CupertinoIcons.phone_fill,
                 label: 'Звонок',
                 onTap: _call,
@@ -903,7 +890,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _QuickActionButton(
+              child: AppGlassActionButton(
                 icon: _chat.isFavorite
                     ? CupertinoIcons.star_fill
                     : CupertinoIcons.star,
@@ -913,7 +900,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _QuickActionButton(
+              child: AppGlassActionButton(
                 icon: _chat.isMuted
                     ? CupertinoIcons.bell_slash_fill
                     : CupertinoIcons.bell_fill,
@@ -923,7 +910,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _QuickActionButton(
+              child: AppGlassActionButton(
                 icon: CupertinoIcons.search,
                 label: 'Поиск',
                 onTap: _openSearch,
@@ -1108,52 +1095,6 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Кнопка быстрого действия — стеклянная плитка с иконкой и подписью,
-/// как в карточке контакта iOS 26.
-class _QuickActionButton extends StatelessWidget {
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = CupertinoColors.label.resolveFrom(context);
-    return AppGlass(
-      borderRadius: BorderRadius.circular(18),
-      shadows: AppGlass.controlShadow,
-      child: CupertinoButton(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-        minimumSize: Size.zero,
-        onPressed: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: color,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
       ),
     );
   }

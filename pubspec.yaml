@@ -63,6 +63,7 @@ dependencies:
   audioplayers: ^6.8.1
   laravel_reverb: ^0.7.1
   firebase_crashlytics: ^5.4.0
+  open_filex: ^5.0.0
 
 dev_dependencies:
   flutter_test:

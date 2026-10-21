@@ -18,6 +18,7 @@ class ChatMessageText extends StatefulWidget {
     this.fontSize = 15,
     this.maxLines,
     this.overflow,
+    this.paragraphSpacing = 6,
   });
 
   final String text;
@@ -25,6 +26,9 @@ class ChatMessageText extends StatefulWidget {
   final double fontSize;
   final int? maxLines;
   final TextOverflow? overflow;
+
+  /// Отступ после абзаца `<p>` в HTML-тексте.
+  final double paragraphSpacing;
 
   @override
   State<ChatMessageText> createState() => _ChatMessageTextState();
@@ -125,7 +129,10 @@ class _ChatMessageTextState extends State<ChatMessageText> {
           fontSize: FontSize(widget.fontSize),
           lineHeight: LineHeight.number(1.35),
         ),
-        'p': Style(margin: Margins.only(bottom: 6), padding: HtmlPaddings.zero),
+        'p': Style(
+          margin: Margins.only(bottom: widget.paragraphSpacing),
+          padding: HtmlPaddings.zero,
+        ),
         'div': Style(margin: Margins.zero, padding: HtmlPaddings.zero),
         'a': Style(
           color: effectiveColor,

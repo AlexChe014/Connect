@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../models/staff_user.dart';
+import 'app_glass.dart';
 import 'chat_avatar.dart';
 import 'staff_user_picker_sheet.dart';
 
@@ -35,104 +36,86 @@ class _SelectedStaffFieldState extends State<SelectedStaffField> {
   @override
   Widget build(BuildContext context) {
     final participants = widget.participants;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
+    // Список строк, а не чипы: длинные ФИО в чипах обрезались и
+    // складывались в рваную лесенку разной ширины.
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CupertinoListSection.insetGrouped(
+        AppGlassSectionLabel(
+          participants.isEmpty
+              ? widget.label
+              : '${widget.label} (${participants.length})',
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+        ),
+        AppGlassSection(
           margin: EdgeInsets.zero,
           children: [
-            CupertinoListTile(
-              leading: Container(
-                width: 29,
-                height: 29,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: CupertinoColors.systemGreen,
-                  borderRadius: BorderRadius.circular(7),
+            for (final user in participants)
+              CupertinoListTile(
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 8, 8),
+                leading: MemberAvatar(
+                  displayName: user.fullName,
+                  avatarUrl: user.avatarUrl,
+                  radius: 15,
                 ),
-                child: const Icon(
-                  CupertinoIcons.person_2_fill,
-                  size: 17,
-                  color: CupertinoColors.white,
+                title: Text(
+                  user.fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
+                ),
+                trailing: CupertinoButton(
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: Size.zero,
+                  onPressed: () => widget.onUserRemoved(user),
+                  child: Icon(
+                    CupertinoIcons.xmark_circle_fill,
+                    size: 20,
+                    color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                  ),
                 ),
               ),
-              title: Text(widget.label),
+            CupertinoListTile(
+              padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 14, 8),
+              leading: Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: CupertinoColors.tertiarySystemFill.resolveFrom(
+                    context,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  CupertinoIcons.plus,
+                  size: 16,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+              title: Text(
+                'Добавить участника',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
               additionalInfo: participants.isEmpty
-                  ? const Text(
-                      'Не выбраны',
-                      style: TextStyle(color: CupertinoColors.secondaryLabel),
+                  ? Text(
+                      'Никого',
+                      style: TextStyle(fontSize: 15, color: secondary),
                     )
                   : null,
-              trailing: const CupertinoListTileChevron(),
               onTap: _openPicker,
             ),
           ],
         ),
-        if (participants.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: participants.map((user) {
-              return _StaffChip(
-                user: user,
-                onRemove: () => widget.onUserRemoved(user),
-              );
-            }).toList(),
-          ),
-        ],
       ],
-    );
-  }
-}
-
-class _StaffChip extends StatelessWidget {
-  const _StaffChip({required this.user, required this.onRemove});
-
-  final StaffUser user;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemGrey5.resolveFrom(context),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MemberAvatar(
-            displayName: user.fullName,
-            avatarUrl: user.avatarUrl,
-            radius: 11,
-          ),
-          const SizedBox(width: 6),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 140),
-            child: Text(
-              user.fullName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.label,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          GestureDetector(
-            onTap: onRemove,
-            child: const Icon(
-              CupertinoIcons.xmark_circle_fill,
-              size: 16,
-              color: CupertinoColors.systemGrey,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

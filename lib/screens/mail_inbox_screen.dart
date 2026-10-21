@@ -1,17 +1,26 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show Colors, RefreshIndicator, Scaffold, ScaffoldMessenger, SnackBar;
+    show
+        RefreshIndicator,
+        ScaffoldMessenger,
+        SnackBar,
+        SnackBarAction,
+        SnackBarClosedReason;
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:intl/intl.dart';
 
+import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/chat_avatar.dart';
+import '../widgets/mail_glass.dart';
 import 'compose_mail_screen.dart';
 import 'mail_folders_screen.dart';
 import 'mail_message_screen.dart';
@@ -51,6 +60,25 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   int _nextPage = 1;
   bool _usingServiceFallback = false;
 
+  /// Подгрузка следующей страницы упала — автоматически больше не
+  /// повторяем (раньше запрос уходил на каждое движение прокрутки),
+  /// внизу списка кнопка «Повторить».
+  bool _loadMoreFailed = false;
+  final _scrollController = ScrollController();
+
+  /// Результаты серверного поиска (`/mail/search`) по текущему ящику;
+  /// `null` — поиск не запускался или упал, тогда фильтруем загруженное.
+  List<MailMessage>? _searchResults;
+  bool _isSearching = false;
+  bool _searchHasMore = false;
+  int _searchNextPage = 1;
+  int _searchVersion = 0;
+  Timer? _searchDebounce;
+
+  /// Письма, удалённые свайпом, пока у пользователя есть «Вернуть»:
+  /// скрыты из списка, на сервер запрос уходит после закрытия снекбара.
+  final Set<int> _pendingDeleteIds = {};
+
   Timer? _refreshTimer;
   int _requestVersion = 0;
 
@@ -59,21 +87,38 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   bool _isEditing = false;
   final Set<int> _selectedIds = {};
   bool _isBulkActing = false;
+  VoidCallback? _releaseHomeSuppress;
 
+  /// Поиск: совпадения среди загруженных писем (в т.ч. по тексту) плюс
+  /// найденное сервером во всём ящике — раньше искали только по первым
+  /// загруженным страницам.
   List<MailMessage> get _visibleMessages {
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return _messages;
-    return _messages.where((m) {
+    final visible = _messages.where((m) => !_pendingDeleteIds.contains(m.id));
+    if (query.isEmpty) return visible.toList();
+    final local = visible.where((m) {
       return m.subject.toLowerCase().contains(query) ||
           m.from.toLowerCase().contains(query) ||
           m.previewBody.toLowerCase().contains(query);
     }).toList();
+    final localIds = local.map((m) => m.id).toSet();
+    return [
+      ...local,
+      ...?_searchResults?.where(
+        (m) => !localIds.contains(m.id) && !_pendingDeleteIds.contains(m.id),
+      ),
+    ];
   }
+
+  bool get _isSearchMode => _searchQuery.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Нижняя стеклянная панель занимает всю ширину — плавающая кнопка
+    // «Домой» легла бы поверх поиска (см. HomeShortcutButton).
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
     MailUnreadService.instance.mailChanges.addListener(_refreshVisible);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
@@ -84,10 +129,13 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
   @override
   void dispose() {
+    _releaseHomeSuppress?.call();
     _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     MailUnreadService.instance.mailChanges.removeListener(_refreshVisible);
     _searchController.dispose();
+    _searchDebounce?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -106,7 +154,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
-    unawaited(_loadMessages());
+    unawaited(_loadMessages(keepLoaded: true));
   }
 
   Future<void> _loadFolders() async {
@@ -133,7 +181,14 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   List<MailFolder> get _browsableFolders =>
       _folders.where((folder) => folder.id > 0).toList();
 
-  Future<void> _loadMessages({bool forceSync = false}) async {
+  /// Перечитывает первую страницу. С [keepLoaded] (фоновое обновление,
+  /// возврат из письма) уже подгруженные страницы сохраняются — раньше
+  /// автообновление раз в минуту обрезало список до первой страницы, и
+  /// долистанные письма пропадали.
+  Future<void> _loadMessages({
+    bool forceSync = false,
+    bool keepLoaded = false,
+  }) async {
     if (!mounted) return;
     final version = ++_requestVersion;
     final connectionId = _connection.id;
@@ -160,17 +215,22 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         // A counter failure must not discard successfully loaded messages.
       }
       if (!mounted || version != _requestVersion) return;
+      final tail = keepLoaded ? _olderLoadedMessages(page.messages) : const [];
       setState(() {
         _folders = folders;
         _selectedFolder =
             folders.where((f) => f.id == folder?.id).firstOrNull ?? folder;
-        _messages = page.messages;
-        _hasMoreMessages = page.hasMore;
-        _nextPage = page.nextPage;
+        _messages = [...page.messages, ...tail];
+        if (tail.isEmpty) {
+          _hasMoreMessages = page.hasMore;
+          _nextPage = page.nextPage;
+        }
+        _loadMoreFailed = false;
         _usingServiceFallback = usingService;
         _isLoadingMessages = false;
       });
       unawaited(MailUnreadService.instance.refresh());
+      _fillViewportIfNeeded();
     } catch (_) {
       if (!mounted || version != _requestVersion) return;
       setState(() => _isLoadingMessages = false);
@@ -186,7 +246,54 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     }
   }
 
-  Future<void> _loadMoreMessages() async {
+  /// Письма со следующих страниц, уже загруженные раньше: всё, что старше
+  /// самого старого письма свежей первой страницы. Удалённые на сервере
+  /// письма из диапазона первой страницы при этом уходят из списка.
+  List<MailMessage> _olderLoadedMessages(List<MailMessage> firstPage) {
+    if (firstPage.isEmpty || _messages.length <= firstPage.length) {
+      return const [];
+    }
+    final ids = firstPage.map((m) => m.id).toSet();
+    final dates = firstPage.map((m) => m.date).whereType<DateTime>();
+    final oldest = dates.isEmpty
+        ? null
+        : dates.reduce((a, b) => a.isBefore(b) ? a : b);
+    final lastKnown = _messages.lastIndexWhere((m) => ids.contains(m.id));
+    final result = <MailMessage>[];
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
+      if (ids.contains(m.id)) continue;
+      final isOlder = oldest != null && m.date != null
+          ? m.date!.isBefore(oldest)
+          : i > lastKnown;
+      if (isOlder) result.add(m);
+    }
+    return result;
+  }
+
+  /// Первая страница может не заполнить экран — тогда прокрутки нет и
+  /// подгрузка по скроллу не сработает никогда. Догружаем сами.
+  void _fillViewportIfNeeded() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      if (position.maxScrollExtent - position.pixels < 200) {
+        _loadMoreMessages();
+      }
+    });
+  }
+
+  Future<void> _loadMoreMessages({bool manual = false}) async {
+    if (_loadMoreFailed && !manual) return;
+    if (_isSearchMode) {
+      final query = _searchQuery.trim();
+      if (_isLoadingMore || _isSearching || !_searchHasMore) return;
+      if (_searchResults == null) return;
+      setState(() => _isLoadingMore = true);
+      await _runSearch(query, page: _searchNextPage);
+      if (mounted) setState(() => _isLoadingMore = false);
+      return;
+    }
     if (_isLoadingMore || !_hasMoreMessages || _isLoadingMessages) return;
     final version = _requestVersion;
     setState(() => _isLoadingMore = true);
@@ -218,11 +325,81 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         _hasMoreMessages = page.hasMore;
         _nextPage = page.nextPage;
         _isLoadingMore = false;
+        _loadMoreFailed = false;
       });
+      _fillViewportIfNeeded();
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _isLoadingMore = false);
+      if (!mounted || version != _requestVersion) return;
+      setState(() {
+        _isLoadingMore = false;
+        _loadMoreFailed = true;
+      });
     }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    setState(() {
+      _searchQuery = value;
+      _searchResults = null;
+      _searchHasMore = false;
+      _isSearching = false;
+    });
+    _searchVersion++;
+    final query = value.trim();
+    if (query.length < 2) return;
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _runSearch(query),
+    );
+  }
+
+  /// Серверный поиск по всем ящикам пользователя — оставляем только
+  /// текущий ящик.
+  Future<void> _runSearch(String query, {int page = 1}) async {
+    final version = page == 1 ? ++_searchVersion : _searchVersion;
+    final connectionId = _connection.id;
+    if (page == 1) setState(() => _isSearching = true);
+    try {
+      final result = await MailRepository.instance.searchMessages(
+        query,
+        page: page,
+      );
+      if (!mounted ||
+          version != _searchVersion ||
+          connectionId != _connection.id) {
+        return;
+      }
+      final found = result.results
+          .where((r) => r.connectionId == connectionId)
+          .map((r) => r.message);
+      final existing = page == 1 ? <MailMessage>[] : [...?_searchResults];
+      final ids = existing.map((m) => m.id).toSet();
+      setState(() {
+        _searchResults = [...existing, ...found.where((m) => ids.add(m.id))];
+        _searchHasMore = result.hasMore;
+        _searchNextPage = result.nextPage;
+        _isSearching = false;
+      });
+      _fillViewportIfNeeded();
+    } catch (_) {
+      if (!mounted || version != _searchVersion) return;
+      // Остаётся поиск по загруженным письмам.
+      setState(() {
+        _isSearching = false;
+        _searchHasMore = false;
+      });
+    }
+  }
+
+  /// Подменяет письмо и в общем списке, и в результатах поиска.
+  void _replaceMessage(int id, MailMessage Function(MailMessage) update) {
+    List<MailMessage> apply(List<MailMessage> list) => [
+      for (final m in list) m.id == id ? update(m) : m,
+    ];
+    _messages = apply(_messages);
+    final results = _searchResults;
+    if (results != null) _searchResults = apply(results);
   }
 
   Future<void> _openCompose({MailMessage? replyTo}) async {
@@ -244,6 +421,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
           messageId: message.id,
           initialMessage: message,
           folders: _folders,
+          currentFolder: _selectedFolder,
         ),
       ),
     );
@@ -252,7 +430,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     // (удалил/переместил/ответил) — обычный возврат назад приходит с `null`.
     // Перезагружаем список и в этом случае, иначе точка-индикатор
     // «непрочитано» не исчезнет сама по себе.
-    if (mounted && (changed == true || wasUnread)) await _loadMessages();
+    if (mounted && (changed == true || wasUnread)) {
+      await _loadMessages(keepLoaded: true);
+    }
   }
 
   Future<void> _showFolderPicker() async {
@@ -275,26 +455,21 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   }
 
   Future<void> _toggleRead(MailMessage message) async {
-    final index = _messages.indexWhere((m) => m.id == message.id);
     try {
       final connectionId = _connection.id;
       await (message.isRead
           ? MailRepository.instance.markUnread(
-              connectionId: _connection.id,
+              connectionId: connectionId,
               messageId: message.id,
             )
           : MailRepository.instance.markRead(
-              connectionId: _connection.id,
+              connectionId: connectionId,
               messageId: message.id,
             ));
       MailUnreadService.instance.invalidate();
-      if (!mounted || connectionId != _connection.id || index == -1) return;
-      final currentIndex = _messages.indexWhere((m) => m.id == message.id);
-      if (currentIndex < 0) return;
+      if (!mounted || connectionId != _connection.id) return;
       setState(
-        () => _messages[currentIndex] = _messages[currentIndex].withRead(
-          !message.isRead,
-        ),
+        () => _replaceMessage(message.id, (m) => m.withRead(!message.isRead)),
       );
     } catch (_) {
       if (!mounted) return;
@@ -304,19 +479,53 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     }
   }
 
-  Future<void> _deleteMessage(MailMessage message) async {
-    final index = _messages.indexWhere((m) => m.id == message.id);
-    if (index == -1) return;
-    setState(() => _messages.removeAt(index));
+  /// Удаление свайпом: письмо сразу пропадает, но несколько секунд его
+  /// можно вернуть из снекбара — раньше оно удалялось мгновенно и
+  /// безвозвратно от случайного свайпа.
+  void _deleteMessage(MailMessage message) {
+    final connectionId = _connection.id;
+    setState(() => _pendingDeleteIds.add(message.id));
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      unawaited(_commitDelete(message, connectionId));
+      return;
+    }
+    messenger.hideCurrentSnackBar();
+    messenger
+        .showSnackBar(
+          SnackBar(
+            content: const Text('Письмо удалено'),
+            action: SnackBarAction(label: 'Вернуть', onPressed: () {}),
+          ),
+        )
+        .closed
+        .then((reason) {
+          if (reason == SnackBarClosedReason.action) {
+            if (mounted) {
+              setState(() => _pendingDeleteIds.remove(message.id));
+            }
+            return;
+          }
+          unawaited(_commitDelete(message, connectionId));
+        });
+  }
+
+  Future<void> _commitDelete(MailMessage message, int connectionId) async {
     try {
       await MailRepository.instance.deleteMessage(
-        connectionId: _connection.id,
+        connectionId: connectionId,
         messageId: message.id,
       );
       if (!message.isRead) MailUnreadService.instance.refresh();
+      if (!mounted) return;
+      setState(() {
+        _messages.removeWhere((m) => m.id == message.id);
+        _searchResults?.removeWhere((m) => m.id == message.id);
+        _pendingDeleteIds.remove(message.id);
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _messages.insert(index, message));
+      setState(() => _pendingDeleteIds.remove(message.id));
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось удалить письмо')),
       );
@@ -357,7 +566,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       MailUnreadService.instance.refresh();
       if (!mounted) return;
       _setEditing(false);
-      await _loadMessages();
+      await _loadMessages(keepLoaded: true);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -371,6 +580,28 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   Future<void> _bulkDelete() async {
     if (_selectedIds.isEmpty || _isBulkActing) return;
     final ids = _selectedIds.toList();
+    final confirmed = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              ids.length == 1
+                  ? 'Удалить письмо'
+                  : 'Удалить письма (${ids.length})',
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final deleted = <int>{};
     setState(() => _isBulkActing = true);
     try {
       // Бэкендовый /mail/delete/few/{connection} не принимает ids (см.
@@ -382,19 +613,26 @@ class _MailInboxScreenState extends State<MailInboxScreen>
           connectionId: _connection.id,
           messageId: id,
         );
+        deleted.add(id);
       }
-      MailUnreadService.instance.refresh();
-      if (!mounted) return;
-      _setEditing(false);
-      await _loadMessages();
     } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Не удалось удалить часть писем')),
-      );
-      _setEditing(false);
-      await _loadMessages();
+      if (mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Не удалось удалить часть писем')),
+        );
+      }
     } finally {
+      MailUnreadService.instance.refresh();
+      if (mounted) {
+        // Удалённое убираем сразу: перезагрузка сохраняет подгруженные
+        // страницы и без этого вернула бы их из старого списка.
+        setState(() {
+          _messages.removeWhere((m) => deleted.contains(m.id));
+          _searchResults?.removeWhere((m) => deleted.contains(m.id));
+        });
+        _setEditing(false);
+        await _loadMessages(keepLoaded: true);
+      }
       if (mounted) setState(() => _isBulkActing = false);
     }
   }
@@ -414,6 +652,12 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       _usingServiceFallback = false;
       _searchController.clear();
       _searchQuery = '';
+      _searchResults = null;
+      _searchHasMore = false;
+      _isSearching = false;
+      _searchVersion++;
+      _loadMoreFailed = false;
+      _pendingDeleteIds.clear();
       _isEditing = false;
       _selectedIds.clear();
     });
@@ -484,294 +728,363 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     } catch (_) {}
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final dateFormat = DateFormat('d MMM, HH:mm', 'ru_RU');
-
-    // Wrapped in a Material Scaffold purely so ScaffoldMessenger has a local
-    // Scaffold to attach SnackBars to — this screen is pushed on top of the
-    // app's only Scaffold (MainNavigationScreen's), which sits hidden behind
-    // it, so error SnackBars would otherwise render invisibly there.
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground,
-        navigationBar: CupertinoNavigationBar(
-          leading: _isEditing
-              ? CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  onPressed: () => _setEditing(false),
-                  child: const Text('Отмена'),
-                )
-              : null,
-          middle: Text(
-            _selectedFolder == null || _selectedFolder!.isAllInbox
-                ? 'Входящие'
-                : _selectedFolder!.displayName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+  Future<void> _showMoreMenu() async {
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          if (_visibleMessages.isNotEmpty)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, 'select'),
+              child: const Text('Выбрать письма'),
+            ),
+          if (_connections.length > 1)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, 'account'),
+              child: const Text('Сменить ящик'),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'manage'),
+            child: const Text('Почтовые ящики'),
           ),
-          backgroundColor: CupertinoColors.systemBackground,
-          border: null,
-          trailing: _isEditing
-              ? CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  onPressed: () => _setEditing(false),
-                  child: const Text(
-                    'Готово',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      onPressed: _openManageMailboxes,
-                      child: const Icon(CupertinoIcons.gear, size: 22),
-                    ),
-                    if (_folders.isNotEmpty)
-                      CupertinoButton(
-                        padding: const EdgeInsets.only(left: 14),
-                        minimumSize: Size.zero,
-                        onPressed: _showFolderPicker,
-                        child: const Icon(CupertinoIcons.folder, size: 22),
-                      ),
-                    if (_visibleMessages.isNotEmpty)
-                      CupertinoButton(
-                        padding: const EdgeInsets.only(left: 14),
-                        minimumSize: Size.zero,
-                        onPressed: () => _setEditing(true),
-                        child: const Text('Изменить'),
-                      ),
-                  ],
-                ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
         ),
-        child: DefaultTextStyle(
-          style: TextStyle(
-            fontFamily: '.SF Pro Text',
-            decoration: TextDecoration.none,
-            color: CupertinoColors.label.resolveFrom(context),
-            fontSize: 16,
-          ),
-          child: SafeArea(
-            child: Stack(
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'select':
+        _setEditing(true);
+      case 'account':
+        await _showAccountPicker();
+      case 'manage':
+        await _openManageMailboxes();
+    }
+  }
+
+  String get _title {
+    if (_isEditing) {
+      return _selectedIds.isEmpty
+          ? 'Выберите письма'
+          : 'Выбрано: ${_selectedIds.length}';
+    }
+    final folder = _selectedFolder;
+    return folder == null || folder.isAllInbox
+        ? 'Входящие'
+        : folder.displayName;
+  }
+
+  Widget _buildNavBar(BuildContext context) {
+    final label = CupertinoColors.label.resolveFrom(context);
+    Widget iconButton(IconData icon, VoidCallback onPressed) => CupertinoButton(
+      padding: const EdgeInsets.only(left: 16),
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: Icon(icon, size: 24, color: label),
+    );
+
+    return CupertinoSliverNavigationBar(
+      largeTitle: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      // Прозрачная: под шапкой остаётся системное размытие, а заливка
+      // дала бы на цветном пятне видимую границу.
+      backgroundColor: CupertinoColors.systemBackground
+          .resolveFrom(context)
+          .withValues(alpha: 0),
+      automaticBackgroundVisibility: false,
+      border: null,
+      leading: _isEditing
+          ? CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => _setEditing(false),
+              child: Text('Отмена', style: TextStyle(color: label)),
+            )
+          : CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => Navigator.maybePop(context),
+              child: Icon(CupertinoIcons.back, size: 26, color: label),
+            ),
+      trailing: _isEditing
+          ? CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => _setEditing(false),
+              child: Text(
+                'Готово',
+                style: TextStyle(fontWeight: FontWeight.w600, color: label),
+              ),
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                (_isLoadingFolders || _isLoadingMessages) && _messages.isEmpty
-                    ? ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        itemCount: 8,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 8),
-                        itemBuilder: (context, index) =>
-                            const AppSkeletonCardTile(),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                            child: _connections.length > 1
-                                ? CupertinoButton(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: Size.zero,
-                                    onPressed: _showAccountPicker,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            _connection.email,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: CupertinoColors
-                                                  .secondaryLabel
-                                                  .resolveFrom(context),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Icon(
-                                          CupertinoIcons.chevron_down,
-                                          size: 12,
-                                          color: CupertinoColors.secondaryLabel
-                                              .resolveFrom(context),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : Text(
-                                    _connection.email,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: CupertinoColors.secondaryLabel
-                                          .resolveFrom(context),
-                                    ),
-                                  ),
-                          ),
-                          Expanded(
-                            child: RefreshIndicator.adaptive(
-                              onRefresh: () => _loadMessages(forceSync: true),
-                              child: NotificationListener<ScrollNotification>(
-                                onNotification: (notification) {
-                                  final metrics = notification.metrics;
-                                  if (metrics.pixels >=
-                                      metrics.maxScrollExtent - 200) {
-                                    _loadMoreMessages();
-                                  }
-                                  return false;
-                                },
-                                child: ListView(
-                                  padding: EdgeInsets.fromLTRB(0, 8, 0, 88),
-                                  children: [
-                                    if (!_connection.isActive ||
-                                        (_connection.lastError ?? '')
-                                            .isNotEmpty)
-                                      Container(
-                                        margin: const EdgeInsets.fromLTRB(
-                                          16,
-                                          0,
-                                          16,
-                                          12,
-                                        ),
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: CupertinoColors.systemRed
-                                              .withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const Icon(
-                                              CupertinoIcons
-                                                  .exclamationmark_triangle_fill,
-                                              color: CupertinoColors.systemRed,
-                                              size: 18,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                _connection.lastError ??
-                                                    'Почтовое подключение неактивно',
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  color:
-                                                      CupertinoColors.systemRed,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    if (_visibleMessages.isEmpty &&
-                                        !_isLoadingMessages)
-                                      SizedBox(
-                                        height:
-                                            MediaQuery.sizeOf(context).height *
-                                            0.35,
-                                        child: AppEmptyState(
-                                          icon: CupertinoIcons.tray,
-                                          message: _searchQuery.isNotEmpty
-                                              ? 'Ничего не найдено'
-                                              : _selectedFolder != null
-                                              ? 'В папке «${_selectedFolder!.displayName}» нет писем'
-                                              : 'Нет писем',
-                                        ),
-                                      )
-                                    else ...[
-                                      for (
-                                        var i = 0;
-                                        i < _visibleMessages.length;
-                                        i++
-                                      )
-                                        _MessageTile(
-                                          message: _visibleMessages[i],
-                                          showUnread:
-                                              !(_selectedFolder?.isSent ??
-                                                  false) &&
-                                              !(_selectedFolder?.isDrafts ??
-                                                  false),
-                                          dateFormat: dateFormat,
-                                          isLast:
-                                              i == _visibleMessages.length - 1,
-                                          isEditing: _isEditing,
-                                          isSelected: _selectedIds.contains(
-                                            _visibleMessages[i].id,
-                                          ),
-                                          onTap: _isEditing
-                                              ? () => _toggleSelected(
-                                                  _visibleMessages[i].id,
-                                                )
-                                              : () => _openMessage(
-                                                  _visibleMessages[i],
-                                                ),
-                                          onToggleRead: () =>
-                                              _toggleRead(_visibleMessages[i]),
-                                          onDelete: () => _deleteMessage(
-                                            _visibleMessages[i],
-                                          ),
-                                        ),
-                                      if (_isLoadingMessages || _isLoadingMore)
-                                        const Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 16,
-                                          ),
-                                          child: Center(
-                                            child: CupertinoActivityIndicator(),
-                                          ),
-                                        ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _isEditing
-                      ? _EditToolbar(
-                          selectedCount: _selectedIds.length,
-                          isBusy: _isBulkActing,
-                          onMarkRead: () => _bulkMarkRead(read: true),
-                          onMarkUnread: () => _bulkMarkRead(read: false),
-                          onDelete: _bulkDelete,
-                        )
-                      : _SearchComposeBar(
-                          controller: _searchController,
-                          onChanged: (value) =>
-                              setState(() => _searchQuery = value),
-                          onCompose: () => _openCompose(),
-                        ),
-                ),
+                if (_folders.isNotEmpty)
+                  iconButton(CupertinoIcons.folder, _showFolderPicker),
+                iconButton(CupertinoIcons.ellipsis_circle, _showMoreMenu),
               ],
             ),
+    );
+  }
+
+  /// Адрес ящика под заголовком; при нескольких ящиках — стеклянная
+  /// капсула, открывающая переключатель.
+  Widget _buildAccountChip(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final text = Text(
+      _connection.email,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(fontSize: 14, color: secondary),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: _connections.length < 2
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: text,
+              )
+            : AppGlass(
+                borderRadius: BorderRadius.circular(16),
+                shadows: AppGlass.controlShadow,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
+                  minimumSize: Size.zero,
+                  onPressed: _isEditing ? null : _showAccountPicker,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: text),
+                      const SizedBox(width: 4),
+                      Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 12,
+                        color: secondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner(BuildContext context) {
+    final red = CupertinoColors.systemRed.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(18),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                CupertinoIcons.exclamationmark_triangle_fill,
+                color: red,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _connection.lastError ?? 'Почтовое подключение неактивно',
+                  style: TextStyle(fontSize: 13, height: 1.3, color: red),
+                ),
+              ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildListSlivers(BuildContext context) {
+    if ((_isLoadingFolders || _isLoadingMessages) && _messages.isEmpty) {
+      return [
+        SliverList.builder(
+          itemCount: 8,
+          itemBuilder: (context, index) => const AppSkeletonListTile(),
+        ),
+      ];
+    }
+
+    final messages = _visibleMessages;
+    if (messages.isEmpty && _isSearching) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CupertinoActivityIndicator()),
+          ),
+        ),
+      ];
+    }
+    if (messages.isEmpty && !_isLoadingMessages) {
+      return [
+        SliverAppEmptyState(
+          icon: _searchQuery.isNotEmpty
+              ? CupertinoIcons.search
+              : CupertinoIcons.tray,
+          message: _searchQuery.isNotEmpty
+              ? 'Ничего не найдено'
+              : _selectedFolder != null
+              ? 'В папке «${_selectedFolder!.displayName}» нет писем'
+              : 'Нет писем',
+        ),
+      ];
+    }
+
+    final isOutgoingFolder =
+        (_selectedFolder?.isSent ?? false) ||
+        (_selectedFolder?.isDrafts ?? false);
+    final ownEmail = _connection.email.trim().toLowerCase();
+    return [
+      SliverList.separated(
+        itemCount: messages.length,
+        separatorBuilder: (context, index) => Container(
+          height: 0.5,
+          margin: EdgeInsets.only(
+            left: _MessageTile.textIndent(isEditing: _isEditing),
+          ),
+          color: CupertinoColors.separator.resolveFrom(context),
+        ),
+        itemBuilder: (context, index) {
+          final message = messages[index];
+          return _MessageTile(
+            message: message,
+            showUnread: !isOutgoingFolder,
+            // В «Отправленных» и «Черновиках» (и у своих писем в поиске)
+            // важнее, кому письмо, — раньше там везде стояло своё имя.
+            showRecipient:
+                isOutgoingFolder ||
+                mailEmailOnly(message.from).toLowerCase() == ownEmail,
+            isEditing: _isEditing,
+            isSelected: _selectedIds.contains(message.id),
+            onTap: _isEditing
+                ? () => _toggleSelected(message.id)
+                : () => _openMessage(message),
+            onToggleRead: () => _toggleRead(message),
+            onDelete: () => _deleteMessage(message),
+          );
+        },
+      ),
+      if (_isLoadingMessages || _isLoadingMore || _isSearching)
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: CupertinoActivityIndicator()),
+          ),
+        )
+      else if (_loadMoreFailed)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: CupertinoButton(
+                onPressed: () => _loadMoreMessages(manual: true),
+                child: Text(
+                  'Не удалось загрузить письма. Повторить',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasConnectionError =
+        !_connection.isActive || (_connection.lastError ?? '').isNotEmpty;
+
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemBackground,
+      child: DefaultTextStyle(
+        style: TextStyle(
+          fontFamily: '.SF Pro Text',
+          decoration: TextDecoration.none,
+          color: CupertinoColors.label.resolveFrom(context),
+          fontSize: 16,
+        ),
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: () => _loadMessages(forceSync: true),
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    final metrics = notification.metrics;
+                    if (metrics.pixels >= metrics.maxScrollExtent - 200) {
+                      _loadMoreMessages();
+                    }
+                    return false;
+                  },
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    slivers: [
+                      _buildNavBar(context),
+                      SliverToBoxAdapter(child: _buildAccountChip(context)),
+                      if (hasConnectionError)
+                        SliverToBoxAdapter(child: _buildErrorBanner(context)),
+                      ..._buildListSlivers(context),
+                      // Последнее письмо не должно прятаться под панелью.
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: MailFloatingBar.reservedHeight(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _isEditing
+                  ? _EditToolbar(
+                      selectedCount: _selectedIds.length,
+                      isBusy: _isBulkActing,
+                      onMarkRead: () => _bulkMarkRead(read: true),
+                      onMarkUnread: () => _bulkMarkRead(read: false),
+                      onDelete: _bulkDelete,
+                    )
+                  : _SearchComposeBar(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      onCompose: () => _openCompose(),
+                    ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
+/// Строка письма как в «Почте» iOS: точка «непрочитано», монограмма
+/// отправителя, имя и дата, тема, две строки превью.
 class _MessageTile extends StatelessWidget {
   const _MessageTile({
     required this.message,
     this.showUnread = true,
-    required this.dateFormat,
-    required this.isLast,
+    this.showRecipient = false,
     required this.isEditing,
     required this.isSelected,
     required this.onTap,
@@ -779,10 +1092,19 @@ class _MessageTile extends StatelessWidget {
     required this.onDelete,
   });
 
+  static const double _dotSlot = 18;
+  static const double _avatarRadius = 20;
+  static const double _checkSlot = 32;
+
+  /// Отступ разделителя — по левому краю текста, как в системных списках.
+  static double textIndent({required bool isEditing}) =>
+      6 + (isEditing ? _checkSlot : 0) + _dotSlot + _avatarRadius * 2 + 12;
+
   final MailMessage message;
   final bool showUnread;
-  final DateFormat dateFormat;
-  final bool isLast;
+
+  /// Показывать получателя вместо отправителя (свои письма).
+  final bool showRecipient;
   final bool isEditing;
   final bool isSelected;
   final VoidCallback onTap;
@@ -792,54 +1114,73 @@ class _MessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUnread = showUnread && !message.isRead;
+    final label = CupertinoColors.label.resolveFrom(context);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final recipients = MailMessage.splitAddresses(message.to);
+    final person = showRecipient
+        ? (recipients.isEmpty ? '' : mailDisplayName(recipients.first))
+        : mailDisplayName(message.from);
+    final String senderLabel;
+    if (person.isEmpty) {
+      senderLabel = showRecipient
+          ? 'Без получателя'
+          : 'Неизвестный отправитель';
+    } else if (showRecipient && recipients.length > 1) {
+      senderLabel = '$person и ещё ${recipients.length - 1}';
+    } else {
+      senderLabel = person;
+    }
 
-    final row = Container(
-      decoration: BoxDecoration(
-        color: isSelected
-            ? CupertinoColors.systemBlue.withValues(alpha: 0.08)
-            : CupertinoColors.systemBackground.resolveFrom(context),
-        border: isLast
-            ? null
-            : Border(
-                bottom: BorderSide(
-                  color: CupertinoColors.separator.resolveFrom(context),
-                  width: 0.33,
-                ),
-              ),
-      ),
+    // Без заливки: под строками просвечивает цветное пятно за шапкой.
+    final row = ColoredBox(
+      color: isSelected
+          ? AppColors.primary.withValues(alpha: 0.1)
+          : const Color(0x00000000),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.fromLTRB(6, 10, 16, 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (isEditing)
-                Padding(
-                  padding: const EdgeInsets.only(top: 3, right: 10),
-                  child: Icon(
-                    isSelected
-                        ? CupertinoIcons.checkmark_circle_fill
-                        : CupertinoIcons.circle,
-                    size: 22,
-                    color: isSelected
-                        ? CupertinoColors.activeBlue
-                        : CupertinoColors.tertiaryLabel.resolveFrom(context),
+                SizedBox(
+                  width: _checkSlot,
+                  height: _avatarRadius * 2,
+                  child: Center(
+                    child: Icon(
+                      isSelected
+                          ? CupertinoIcons.checkmark_circle_fill
+                          : CupertinoIcons.circle,
+                      size: 24,
+                      color: isSelected
+                          ? AppColors.primary
+                          : CupertinoColors.tertiaryLabel.resolveFrom(context),
+                    ),
                   ),
                 ),
-              if (isUnread)
-                Container(
-                  width: 8,
-                  height: 8,
-                  margin: const EdgeInsets.only(top: 6, right: 8),
-                  decoration: const BoxDecoration(
-                    color: CupertinoColors.activeBlue,
-                    shape: BoxShape.circle,
-                  ),
-                )
-              else
-                const SizedBox(width: 16),
+              SizedBox(
+                width: _dotSlot,
+                height: _avatarRadius * 2,
+                child: isUnread
+                    ? Center(
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+              MemberAvatar(
+                displayName: person.isEmpty ? '?' : person,
+                radius: _avatarRadius,
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -848,81 +1189,62 @@ class _MessageTile extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            message.from.isEmpty
-                                ? 'Неизвестный отправитель'
-                                : message.from,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: isUnread
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: CupertinoColors.label.resolveFrom(context),
-                            ),
+                            senderLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (message.date != null)
-                          Text(
-                            dateFormat.format(message.date!.toLocal()),
                             style: TextStyle(
-                              fontSize: 12,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
-                              ),
+                              fontSize: 16,
+                              fontWeight: isUnread
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: label,
                             ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      message.subject,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: isUnread
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (message.previewBody.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        message.previewBody,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    if (message.hasAttachments) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
+                        if (message.hasAttachments) ...[
+                          const SizedBox(width: 6),
                           Icon(
                             CupertinoIcons.paperclip,
                             size: 14,
-                            color: CupertinoColors.secondaryLabel.resolveFrom(
-                              context,
-                            ),
+                            color: secondary,
                           ),
-                          const SizedBox(width: 4),
+                        ],
+                        if (message.date != null) ...[
+                          const SizedBox(width: 6),
                           Text(
-                            'Вложения',
+                            formatMailListDate(message.date!),
                             style: TextStyle(
-                              fontSize: 12,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
-                              ),
+                              fontSize: 13,
+                              color: isUnread ? AppColors.primary : secondary,
                             ),
                           ),
                         ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      message.subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: isUnread
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: label,
+                      ),
+                    ),
+                    if (message.previewBody.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        message.previewBody.replaceAll(RegExp(r'\s+'), ' '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.25,
+                          color: secondary,
+                        ),
                       ),
                     ],
                   ],
@@ -940,25 +1262,29 @@ class _MessageTile extends StatelessWidget {
       key: ValueKey(message.id),
       startActionPane: ActionPane(
         motion: const DrawerMotion(),
-        extentRatio: 0.28,
+        extentRatio: 0.3,
         children: [
           SlidableAction(
             onPressed: (_) => onToggleRead(),
-            backgroundColor: CupertinoColors.activeBlue,
+            backgroundColor: AppColors.primary,
+            foregroundColor: CupertinoColors.white,
             icon: isUnread
                 ? CupertinoIcons.envelope_open
                 : CupertinoIcons.envelope_badge,
+            label: isUnread ? 'Прочитано' : 'Непрочит.',
           ),
         ],
       ),
       endActionPane: ActionPane(
         motion: const DrawerMotion(),
-        extentRatio: 0.28,
+        extentRatio: 0.3,
         children: [
           SlidableAction(
             onPressed: (_) => onDelete(),
             backgroundColor: CupertinoColors.systemRed,
+            foregroundColor: CupertinoColors.white,
             icon: CupertinoIcons.trash,
+            label: 'Удалить',
           ),
         ],
       ),
@@ -967,6 +1293,7 @@ class _MessageTile extends StatelessWidget {
   }
 }
 
+/// Нижняя стеклянная панель: поиск по загруженным письмам и «написать».
 class _SearchComposeBar extends StatelessWidget {
   const _SearchComposeBar({
     required this.controller,
@@ -980,40 +1307,32 @@ class _SearchComposeBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemBackground
-            .resolveFrom(context)
-            .withValues(alpha: 0.94),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-            width: 0.33,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: CupertinoSearchTextField(
-                  controller: controller,
-                  placeholder: 'Поиск писем',
-                  onChanged: onChanged,
+    return MailFloatingBar(
+      child: Row(
+        children: [
+          Expanded(
+            child: AppGlass(
+              borderRadius: BorderRadius.circular(MailFloatingBar.height / 2),
+              shadows: AppGlass.controlShadow,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Center(
+                  child: CupertinoSearchTextField(
+                    controller: controller,
+                    placeholder: 'Поиск писем',
+                    backgroundColor: const Color(0x00000000),
+                    onChanged: onChanged,
+                  ),
                 ),
               ),
-              CupertinoButton(
-                padding: const EdgeInsets.only(left: 6),
-                minimumSize: Size.zero,
-                onPressed: onCompose,
-                child: const Icon(CupertinoIcons.square_pencil, size: 26),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(width: 10),
+          MailGlassIconButton(
+            icon: CupertinoIcons.square_pencil,
+            onPressed: onCompose,
+          ),
+        ],
       ),
     );
   }
@@ -1037,88 +1356,32 @@ class _EditToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = selectedCount > 0 && !isBusy;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemBackground
-            .resolveFrom(context)
-            .withValues(alpha: 0.94),
-        border: Border(
-          top: BorderSide(
-            color: CupertinoColors.separator.resolveFrom(context),
-            width: 0.33,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 50,
-          child: isBusy
-              ? const Center(child: CupertinoActivityIndicator())
-              : Row(
-                  children: [
-                    _ToolbarAction(
-                      icon: CupertinoIcons.envelope_open,
-                      label: 'Прочитано',
-                      enabled: enabled,
-                      onTap: onMarkRead,
-                    ),
-                    _ToolbarAction(
-                      icon: CupertinoIcons.envelope_badge,
-                      label: 'Непрочитано',
-                      enabled: enabled,
-                      onTap: onMarkUnread,
-                    ),
-                    _ToolbarAction(
-                      icon: CupertinoIcons.trash,
-                      label: 'Удалить',
-                      enabled: enabled,
-                      onTap: onDelete,
-                      isDestructive: true,
-                    ),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ToolbarAction extends StatelessWidget {
-  const _ToolbarAction({
-    required this.icon,
-    required this.label,
-    required this.enabled,
-    required this.onTap,
-    this.isDestructive = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool enabled;
-  final VoidCallback onTap;
-  final bool isDestructive;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = !enabled
-        ? CupertinoColors.tertiaryLabel.resolveFrom(context)
-        : isDestructive
-        ? CupertinoColors.systemRed
-        : CupertinoColors.activeBlue;
-    return Expanded(
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: Size.zero,
-        onPressed: enabled ? onTap : null,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 11, color: color)),
-          ],
-        ),
+    return MailFloatingBar(
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(MailFloatingBar.height / 2),
+        shadows: AppGlass.controlShadow,
+        child: isBusy
+            ? const Center(child: CupertinoActivityIndicator())
+            : Row(
+                children: [
+                  MailBarAction(
+                    icon: CupertinoIcons.envelope_open,
+                    label: 'Прочитано',
+                    onPressed: enabled ? onMarkRead : null,
+                  ),
+                  MailBarAction(
+                    icon: CupertinoIcons.envelope_badge,
+                    label: 'Непрочитано',
+                    onPressed: enabled ? onMarkUnread : null,
+                  ),
+                  MailBarAction(
+                    icon: CupertinoIcons.trash,
+                    label: 'Удалить',
+                    onPressed: enabled ? onDelete : null,
+                    isDestructive: true,
+                  ),
+                ],
+              ),
       ),
     );
   }

@@ -4,6 +4,9 @@ import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
+import '../widgets/booking_glass_form.dart';
 
 enum MailProviderKind { yandex, mailru, corporate }
 
@@ -92,7 +95,8 @@ class MailConnectionFormScreen extends StatefulWidget {
   final MailConnection? existing;
 
   @override
-  State<MailConnectionFormScreen> createState() => _MailConnectionFormScreenState();
+  State<MailConnectionFormScreen> createState() =>
+      _MailConnectionFormScreenState();
 }
 
 class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
@@ -131,10 +135,12 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
       if (existing.smtpPort != null) {
         _smtpPortController.text = existing.smtpPort.toString();
       }
-      final encryption = (existing.customImapEncryption ?? existing.smtpEncryption)
-          ?.trim()
-          .toLowerCase();
-      _useSsl = encryption == null || encryption == 'ssl' || encryption == 'tls';
+      final encryption =
+          (existing.customImapEncryption ?? existing.smtpEncryption)
+              ?.trim()
+              .toLowerCase();
+      _useSsl =
+          encryption == null || encryption == 'ssl' || encryption == 'tls';
     }
   }
 
@@ -162,11 +168,13 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
         if (!_emailController.text.contains('@')) {
           return 'Некорректный адрес электронной почты';
         }
-        if (_imapHostController.text.trim().isEmpty) return 'Введите IMAP-сервер';
+        if (_imapHostController.text.trim().isEmpty)
+          return 'Введите IMAP-сервер';
         if (int.tryParse(_imapPortController.text.trim()) == null) {
           return 'Некорректный IMAP-порт';
         }
-        if (_smtpHostController.text.trim().isEmpty) return 'Введите SMTP-сервер';
+        if (_smtpHostController.text.trim().isEmpty)
+          return 'Введите SMTP-сервер';
         if (int.tryParse(_smtpPortController.text.trim()) == null) {
           return 'Некорректный SMTP-порт';
         }
@@ -211,7 +219,8 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
             username: _isCorporate && _loginController.text.trim().isNotEmpty
                 ? _loginController.text.trim()
                 : null,
-            customImapHost: _isCorporate && _imapHostController.text.trim().isNotEmpty
+            customImapHost:
+                _isCorporate && _imapHostController.text.trim().isNotEmpty
                 ? _imapHostController.text.trim()
                 : null,
             customImapPort: _isCorporate
@@ -237,8 +246,9 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
                 : _loginController.text.trim(),
             password: _passwordController.text,
             username: _isCorporate ? _loginController.text.trim() : null,
-            customImapHost:
-                _isCorporate ? _imapHostController.text.trim() : null,
+            customImapHost: _isCorporate
+                ? _imapHostController.text.trim()
+                : null,
             customImapPort: _isCorporate
                 ? int.tryParse(_imapPortController.text.trim())
                 : null,
@@ -258,284 +268,192 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
       if (!mounted) return;
       final message = e is ApiException
           ? e.message
-          : (_isEdit ? 'Не удалось обновить подключение' : 'Не удалось создать подключение');
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+          : (_isEdit
+                ? 'Не удалось обновить подключение'
+                : 'Не удалось создать подключение');
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
+  /// Поле формы: подпись слева, ввод справа — как в «Настройках» iOS.
+  Widget _field(
+    BuildContext context, {
+    required String label,
+    required TextEditingController controller,
+    String? placeholder,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+  }) {
+    final color = CupertinoColors.label.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontSize: 15, color: color)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: CupertinoTextField(
+              controller: controller,
+              placeholder: placeholder,
+              keyboardType: keyboardType,
+              obscureText: obscureText,
+              autocorrect: false,
+              enableSuggestions: !obscureText,
+              textAlign: TextAlign.end,
+              enabled: !_isSaving,
+              decoration: const BoxDecoration(),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              style: TextStyle(fontSize: 15, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// IMAP/SMTP и SSL — общие для подключения и редактирования
+  /// корпоративного ящика; в режиме правки подсказок в полях нет.
+  List<Widget> _buildServerSections(BuildContext context) {
+    final hints = !_isEdit;
+    return [
+      const AppGlassSectionLabel('Адрес отправителя'),
+      AppGlassSection(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          _field(
+            context,
+            label: 'Адрес почты',
+            controller: _emailController,
+            placeholder: hints ? 'name@company.com' : null,
+            keyboardType: TextInputType.emailAddress,
+          ),
+        ],
+      ),
+      const AppGlassSectionLabel('IMAP'),
+      AppGlassSection(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          _field(
+            context,
+            label: 'Сервер',
+            controller: _imapHostController,
+            placeholder: hints ? 'imap.company.com' : null,
+            keyboardType: TextInputType.url,
+          ),
+          _field(
+            context,
+            label: 'Порт',
+            controller: _imapPortController,
+            keyboardType: TextInputType.number,
+          ),
+        ],
+      ),
+      const AppGlassSectionLabel('SMTP'),
+      AppGlassSection(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          _field(
+            context,
+            label: 'Сервер',
+            controller: _smtpHostController,
+            placeholder: hints ? 'smtp.company.com' : null,
+            keyboardType: TextInputType.url,
+          ),
+          _field(
+            context,
+            label: 'Порт',
+            controller: _smtpPortController,
+            keyboardType: TextInputType.number,
+          ),
+        ],
+      ),
+      AppGlassSection(
+        children: [
+          BookingSwitchRow(
+            icon: CupertinoIcons.lock_shield_fill,
+            color: CupertinoColors.systemGreen,
+            label: 'Использовать SSL',
+            value: _useSsl,
+            onChanged: (value) {
+              if (!_isSaving) setState(() => _useSsl = value);
+            },
+          ),
+        ],
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(_isEdit ? 'Редактировать подключение' : _provider.title),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
-        ),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _isSaving ? null : _save,
-          child: _isSaving
-              ? const CupertinoActivityIndicator()
-              : Text(
-                  _isEdit ? 'Сохранить' : 'Подключить',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-        ),
+    final existing = widget.existing;
+    return BookingGlassScaffold(
+      title: _isEdit ? 'Подключение' : _provider.title,
+      canPop: !_isSaving,
+      trailing: BookingNavAction(
+        label: _isEdit ? 'Сохранить' : 'Подключить',
+        isLoading: _isSaving,
+        onPressed: _save,
       ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        if (existing == null) ...[
+          const AppGlassSectionLabel(
+            'Подключение',
+            padding: EdgeInsets.fromLTRB(20, 4, 20, 6),
+          ),
+          AppGlassSection(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              if (!_isEdit) ...[
-                CupertinoFormSection.insetGrouped(
-                  margin: EdgeInsets.zero,
-                  header: const Text('ПОДКЛЮЧЕНИЕ'),
-                  children: [
-                    CupertinoTextFormFieldRow(
-                      controller: _loginController,
-                      prefix: const Text('Email (Логин)'),
-                      placeholder: 'name@example.com',
-                      keyboardType: TextInputType.emailAddress,
-                      textAlign: TextAlign.end,
-                      enabled: !_isSaving,
-                    ),
-                    CupertinoTextFormFieldRow(
-                      controller: _passwordController,
-                      prefix: Text(_provider.passwordLabel),
-                      placeholder: _provider.passwordPlaceholder,
-                      obscureText: true,
-                      textAlign: TextAlign.end,
-                      enabled: !_isSaving,
-                    ),
-                  ],
-                ),
-                if (_provider.note != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-                    child: Text(
-                      _provider.note!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                      ),
-                    ),
-                  ),
-                if (_isCorporate) ...[
-                  const SizedBox(height: 20),
-                  CupertinoFormSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    header: const Text('АДРЕС ОТПРАВИТЕЛЯ'),
-                    children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _emailController,
-                        prefix: const Text('Адрес почты'),
-                        placeholder: 'name@company.com',
-                        keyboardType: TextInputType.emailAddress,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  CupertinoFormSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    header: const Text('IMAP'),
-                    children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _imapHostController,
-                        prefix: const Text('IMAP-сервер'),
-                        placeholder: 'imap.company.com',
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                      CupertinoTextFormFieldRow(
-                        controller: _imapPortController,
-                        prefix: const Text('IMAP-порт'),
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  CupertinoFormSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    header: const Text('SMTP'),
-                    children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _smtpHostController,
-                        prefix: const Text('SMTP-сервер'),
-                        placeholder: 'smtp.company.com',
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                      CupertinoTextFormFieldRow(
-                        controller: _smtpPortController,
-                        prefix: const Text('SMTP-порт'),
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  CupertinoListSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    children: [
-                      CupertinoListTile(
-                        title: const Text('Использовать SSL'),
-                        trailing: CupertinoSwitch(
-                          value: _useSsl,
-                          onChanged: _isSaving
-                              ? null
-                              : (value) => setState(() => _useSsl = value),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ] else ...[
-                CupertinoListSection.insetGrouped(
-                  margin: EdgeInsets.zero,
-                  children: [
-                    CupertinoListTile(
-                      leading: Container(
-                        width: 29,
-                        height: 29,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: CupertinoColors.activeBlue,
-                          borderRadius: BorderRadius.circular(7),
-                        ),
-                        child: const Icon(
-                          CupertinoIcons.mail_solid,
-                          size: 16,
-                          color: CupertinoColors.white,
-                        ),
-                      ),
-                      title: Text(widget.existing!.email),
-                      subtitle: Text(_provider.title),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                CupertinoFormSection.insetGrouped(
-                  margin: EdgeInsets.zero,
-                  children: [
-                    CupertinoTextFormFieldRow(
-                      controller: _passwordController,
-                      prefix: Text(_provider.passwordLabel),
-                      placeholder: 'Необязательно',
-                      obscureText: true,
-                      textAlign: TextAlign.end,
-                      enabled: !_isSaving,
-                    ),
-                  ],
-                ),
-                if (_isCorporate) ...[
-                  const SizedBox(height: 20),
-                  CupertinoFormSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    header: const Text('АДРЕС ОТПРАВИТЕЛЯ'),
-                    children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _emailController,
-                        prefix: const Text('Адрес почты'),
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  CupertinoFormSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    header: const Text('IMAP'),
-                    children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _imapHostController,
-                        prefix: const Text('IMAP-сервер'),
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                      CupertinoTextFormFieldRow(
-                        controller: _imapPortController,
-                        prefix: const Text('IMAP-порт'),
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  CupertinoFormSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    header: const Text('SMTP'),
-                    children: [
-                      CupertinoTextFormFieldRow(
-                        controller: _smtpHostController,
-                        prefix: const Text('SMTP-сервер'),
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                      CupertinoTextFormFieldRow(
-                        controller: _smtpPortController,
-                        prefix: const Text('SMTP-порт'),
-                        keyboardType: TextInputType.number,
-                        textAlign: TextAlign.end,
-                        enabled: !_isSaving,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  CupertinoListSection.insetGrouped(
-                    margin: EdgeInsets.zero,
-                    children: [
-                      CupertinoListTile(
-                        title: const Text('Использовать SSL'),
-                        trailing: CupertinoSwitch(
-                          value: _useSsl,
-                          onChanged: _isSaving
-                              ? null
-                              : (value) => setState(() => _useSsl = value),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-              if (_errorText != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Text(
-                    _errorText!,
-                    style: const TextStyle(
-                      color: CupertinoColors.systemRed,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
+              _field(
+                context,
+                label: _isCorporate ? 'Логин' : 'E-mail',
+                controller: _loginController,
+                placeholder: 'name@example.com',
+                keyboardType: TextInputType.emailAddress,
+              ),
+              _field(
+                context,
+                label: _provider.passwordLabel,
+                controller: _passwordController,
+                placeholder: _provider.passwordPlaceholder,
+                obscureText: true,
+              ),
             ],
           ),
-        ),
-      ),
+          if (_provider.note != null) BookingFootnote(_provider.note!),
+        ] else ...[
+          AppGlassSection(
+            margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            children: [
+              CupertinoListTile(
+                leading: const AppIconBadge(
+                  icon: CupertinoIcons.mail_solid,
+                  color: CupertinoColors.systemBlue,
+                ),
+                title: Text(existing.email),
+                subtitle: Text(_provider.title),
+              ),
+            ],
+          ),
+          AppGlassSection(
+            children: [
+              _field(
+                context,
+                label: _provider.passwordLabel,
+                controller: _passwordController,
+                placeholder: 'Без изменений',
+                obscureText: true,
+              ),
+            ],
+          ),
+          const BookingFootnote('Оставьте пустым, чтобы не менять пароль.'),
+        ],
+        if (_isCorporate) ..._buildServerSections(context),
+        if (_errorText != null) BookingFootnote(_errorText!, isError: true),
+      ],
     );
   }
 }

@@ -5,7 +5,8 @@ import '../models/bookings/update_booking_request.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
 import '../utils/booking_time_utils.dart';
-import '../widgets/bookable_object_preview.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/booking_glass_form.dart';
 import '../widgets/selected_staff_field.dart';
 
 /// Редактирование брони (`POST /booking/update/{id}`).
@@ -111,183 +112,100 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final detail = widget.detail;
-    final object = detail.object;
-    final disabledStyle = TextStyle(
-      color: CupertinoColors.secondaryLabel.resolveFrom(context),
-    );
+    final place = detail.displayObjectName.trim();
+    final days = detail.recurring?.daysOfWeek.isNotEmpty ?? false
+        ? detail.recurring!.daysOfWeekLabel
+        : null;
 
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Изменить бронь'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
-        ),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _isSubmitting ? null : _submit,
-          child: _isSubmitting
-              ? const CupertinoActivityIndicator()
-              : const Text(
-                  'Сохранить',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-        ),
+    return BookingGlassScaffold(
+      title: 'Изменить бронь',
+      canPop: !_isSubmitting,
+      trailing: BookingNavAction(
+        label: 'Сохранить',
+        isLoading: _isSubmitting,
+        onPressed: _submit,
       ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
+      children: [
+        BookingTitleCard(
+          themeController: _themeController,
+          themePlaceholder: 'Тема',
+          descriptionController: _descriptionController,
+          errorText: _themeError,
+          onThemeChanged: (_) {
+            if (_themeError != null) setState(() => _themeError = null);
+          },
         ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.only(top: 12, bottom: 32),
-            children: [
-              if (object != null) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.secondarySystemGroupedBackground
-                          .resolveFrom(context),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.all(14),
-                    child: BookableObjectPreview(object: object),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-              CupertinoFormSection.insetGrouped(
-                header: const Text('О БРОНИ'),
-                children: [
-                  CupertinoTextFormFieldRow(
-                    controller: _themeController,
-                    prefix: const Text('Тема'),
-                    textCapitalization: TextCapitalization.sentences,
-                    textAlign: TextAlign.end,
-                    onChanged: (_) {
-                      if (_themeError != null) {
-                        setState(() => _themeError = null);
-                      }
-                    },
-                  ),
-                  CupertinoTextFormFieldRow(
-                    controller: _descriptionController,
-                    prefix: const Text('Описание'),
-                    placeholder: 'Необязательно',
-                    textCapitalization: TextCapitalization.sentences,
-                    textAlign: TextAlign.end,
-                    maxLines: 3,
-                  ),
-                  CupertinoTextFormFieldRow(
-                    controller: _linkController,
-                    prefix: const Text('Ссылка'),
-                    placeholder: 'https://…',
-                    keyboardType: TextInputType.url,
-                    textAlign: TextAlign.end,
-                  ),
-                ],
+        AppGlassSection(
+          children: [
+            if (place.isNotEmpty)
+              BookingPickerRow(
+                icon: CupertinoIcons.location_solid,
+                color: CupertinoColors.systemRed,
+                label: 'Место',
+                value: place,
+                valueMaxWidth: 200,
               ),
-              if (_themeError != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                  child: Text(
-                    _themeError!,
-                    style: const TextStyle(
-                      color: CupertinoColors.systemRed,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SelectedStaffField(
-                  participants: _participants,
-                  onUserAdded: (user) =>
-                      setState(() => _participants = [..._participants, user]),
-                  onUserRemoved: (user) => setState(
-                    () => _participants = _participants
-                        .where((p) => p.id != user.id)
-                        .toList(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              CupertinoFormSection.insetGrouped(
-                header: const Text('ДАТА И ВРЕМЯ'),
-                children: [
-                  CupertinoListTile(
-                    title: const Text('День'),
-                    additionalInfo: Text(
-                      BookingTimeUtils.formatDateShort(detail.datetimeStart),
-                      style: disabledStyle,
-                    ),
-                  ),
-                  CupertinoListTile(
-                    title: const Text('Начало'),
-                    additionalInfo: Text(
-                      BookingTimeUtils.formatHm(detail.datetimeStart),
-                      style: disabledStyle,
-                    ),
-                  ),
-                  CupertinoListTile(
-                    title: const Text('Окончание'),
-                    additionalInfo: Text(
-                      BookingTimeUtils.formatHm(detail.datetimeEnd),
-                      style: disabledStyle,
-                    ),
-                  ),
-                  if (detail.recurring?.daysOfWeek.isNotEmpty ?? false)
-                    CupertinoListTile(
-                      title: const Text('Дни недели'),
-                      additionalInfo: Text(
-                        detail.recurring!.daysOfWeekLabel,
-                        style: disabledStyle,
-                      ),
-                    ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
-                child: Text(
-                  'Дату, время и дни повторения пока нельзя изменить.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-              ),
-              if (detail.isRecurring) ...[
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    widget.updateAll
-                        ? 'Изменения будут применены ко всей серии повторений.'
-                        : 'Изменения будут применены только к этой встрече.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(
-                        context,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            BookingFieldRow(
+              icon: CupertinoIcons.link,
+              color: CupertinoColors.systemBlue,
+              controller: _linkController,
+              placeholder: 'Ссылка на встречу',
+              keyboardType: TextInputType.url,
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: SelectedStaffField(
+            participants: _participants,
+            onUserAdded: (user) =>
+                setState(() => _participants = [..._participants, user]),
+            onUserRemoved: (user) => setState(
+              () => _participants = _participants
+                  .where((p) => p.id != user.id)
+                  .toList(),
+            ),
           ),
         ),
-      ),
+        const AppGlassSectionLabel('Когда'),
+        AppGlassSection(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            BookingPickerRow(
+              icon: CupertinoIcons.calendar,
+              color: CupertinoColors.systemOrange,
+              label: 'Дата',
+              value: BookingTimeUtils.formatDateShort(detail.datetimeStart),
+            ),
+            BookingPickerRow(
+              icon: CupertinoIcons.clock_fill,
+              color: CupertinoColors.systemOrange,
+              label: 'Время',
+              value:
+                  '${BookingTimeUtils.formatHm(detail.datetimeStart)}–'
+                  '${BookingTimeUtils.formatHm(detail.datetimeEnd)}',
+            ),
+            if (days != null)
+              BookingPickerRow(
+                icon: CupertinoIcons.repeat,
+                color: CupertinoColors.systemPurple,
+                label: 'Повтор',
+                value: days,
+                valueMaxWidth: 200,
+              ),
+          ],
+        ),
+        BookingFootnote(
+          [
+            'Дату, время и повтор пока нельзя изменить.',
+            if (detail.isRecurring)
+              widget.updateAll
+                  ? 'Изменения применятся ко всей серии.'
+                  : 'Изменения применятся только к этой встрече.',
+          ].join(' '),
+        ),
+      ],
     );
   }
 }

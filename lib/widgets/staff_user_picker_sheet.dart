@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../services/paginated.dart';
+import 'app_glass.dart';
 import 'app_loading.dart';
 import 'chat_avatar.dart';
 
@@ -261,14 +263,10 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Padding(
-              padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 10),
               child: Text(
                 'Участники',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.label,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
               ),
             ),
             Padding(
@@ -300,8 +298,10 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
                         _appliedQ.isEmpty
                             ? 'Сотрудники не найдены'
                             : 'Никого не найдено по запросу',
-                        style: const TextStyle(
-                          color: CupertinoColors.secondaryLabel,
+                        style: TextStyle(
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                         ),
                       ),
                     )
@@ -330,9 +330,17 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: SizedBox(
                 width: double.infinity,
-                child: CupertinoButton.filled(
+                child: CupertinoButton(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(14),
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Готово'),
+                  child: const Text(
+                    'Готово',
+                    style: TextStyle(
+                      color: CupertinoColors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -356,15 +364,20 @@ class _PickerUserTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    // Заливка и кромка как у AppGlass, но без размытия: строк в списке
+    // много, а BackdropFilter под каждой дорог.
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isSelected
-            ? CupertinoColors.systemGrey5.resolveFrom(context)
-            : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-                context,
-              ),
-        borderRadius: BorderRadius.circular(12),
+            ? CupertinoColors.tertiarySystemFill.resolveFrom(context)
+            : (isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
+        ),
+        boxShadow: isSelected ? null : AppGlass.controlShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: GestureDetector(
@@ -386,10 +399,10 @@ class _PickerUserTile extends StatelessWidget {
                   children: [
                     Text(
                       user.fullName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -398,9 +411,11 @@ class _PickerUserTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         user.email!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: CupertinoColors.secondaryLabel,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -410,9 +425,11 @@ class _PickerUserTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         user.department!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: CupertinoColors.secondaryLabel,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -424,12 +441,12 @@ class _PickerUserTile extends StatelessWidget {
               if (isSelected)
                 const Icon(
                   CupertinoIcons.checkmark_circle_fill,
-                  color: CupertinoColors.activeBlue,
+                  color: AppColors.primary,
                 )
               else
-                const Icon(
+                Icon(
                   CupertinoIcons.plus_circle,
-                  color: CupertinoColors.systemGrey,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
             ],
           ),

@@ -6,6 +6,7 @@ import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/widgets/app_empty_state.dart';
+import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/home_shortcut_button.dart';
@@ -227,7 +228,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
           return SwipeActionsRow(
             id: c.id,
             groupController: _swipeGroup,
-            borderRadius: 0,
+            borderRadius: BorderRadius.zero,
             actions: [
               SwipeAction(
                 icon: c.isPinned
@@ -329,38 +330,44 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 16,
         ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator.adaptive(
-            onRefresh: _chat.refreshChats,
-            child: CustomScrollView(
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('Чаты'),
-                  leading: const MenuButton(),
-                  // Полупрозрачная — список уходит под размытую шапку.
-                  backgroundColor: CupertinoColors.systemBackground
-                      .resolveFrom(context)
-                      .withValues(alpha: 0.8),
-                  automaticBackgroundVisibility: false,
-                  border: null,
-                  trailing: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    onPressed: _openComposeMenu,
-                    child: Icon(
-                      CupertinoIcons.add_circled,
-                      size: 28,
-                      color: CupertinoColors.label.resolveFrom(context),
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: _chat.refreshChats,
+                child: CustomScrollView(
+                  slivers: [
+                    CupertinoSliverNavigationBar(
+                      largeTitle: const Text('Чаты'),
+                      leading: const MenuButton(),
+                      // Прозрачная: под шапкой остаётся системное размытие,
+                      // а заливка дала бы на цветном пятне видимую границу.
+                      backgroundColor: CupertinoColors.systemBackground
+                          .resolveFrom(context)
+                          .withValues(alpha: 0),
+                      automaticBackgroundVisibility: false,
+                      border: null,
+                      trailing: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        onPressed: _openComposeMenu,
+                        child: Icon(
+                          CupertinoIcons.add_circled,
+                          size: 28,
+                          color: CupertinoColors.label.resolveFrom(context),
+                        ),
+                      ),
                     ),
-                  ),
+                    SliverToBoxAdapter(child: _buildSearchAndFilters()),
+                    _buildSliverBody(),
+                  ],
                 ),
-                SliverToBoxAdapter(child: _buildSearchAndFilters()),
-                _buildSliverBody(),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -805,9 +812,10 @@ class _ChatRow extends StatelessWidget {
                   ? chat.memberNames.join(', ')
                   : ''));
 
+    // Без заливки: кнопки свайпа рисуются только в открывшейся полосе
+    // (см. SwipeActionsRow), а под строками просвечивает цветное пятно.
     return ColoredBox(
-      // Непрозрачный фон закрывает кнопки свайпа под строкой.
-      color: CupertinoColors.systemBackground.resolveFrom(context),
+      color: const Color(0x00000000),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,

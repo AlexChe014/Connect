@@ -1,16 +1,16 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../config/app_theme.dart';
 import '../models/bookings/bookable_object.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
 import '../services/app_navigation_service.dart';
 import '../utils/booking_time_utils.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
-import '../widgets/chat_avatar.dart';
+import '../widgets/employee_row.dart';
 import '../widgets/menu_button.dart';
 import 'create_booking_screen.dart';
 import 'employee_detail_screen.dart';
@@ -88,37 +88,88 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
     }
   }
 
+  /// Убирает из избранного сразу (оптимистично) и даёт вернуть из
+  /// снекбара: звезда стоит под пальцем, промахнуться легко.
   Future<void> _removeUser(StaffUser user) async {
     final id = user.idAsInt;
     if (id == null) return;
+    final index = _users.indexOf(user);
     setState(() => _users = _users.where((u) => u.id != user.id).toList());
     try {
       await FavoritesRepository.instance.toggleUser(id);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _users = [..._users, user]);
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Не удалось убрать из избранного')),
-      );
+      setState(() => _users = _reinserted(_users, index, user));
+      _showSnack('Не удалось убрать из избранного');
+      return;
     }
+    _showUndo('${user.fullName} — убран из избранного', () async {
+      setState(() => _users = _reinserted(_users, index, user));
+      try {
+        await FavoritesRepository.instance.toggleUser(id);
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _users = _users.where((u) => u.id != user.id).toList());
+        _showSnack('Не удалось вернуть в избранное');
+      }
+    });
   }
 
   Future<void> _removeObject(BookableObject object) async {
+    final index = _objects.indexOf(object);
     setState(
       () => _objects = _objects.where((o) => o.id != object.id).toList(),
     );
+    Future<void> toggle() => FavoritesRepository.instance.toggleObject(
+      object.id,
+      favoriteTypeId: object.favoriteTypeId,
+    );
     try {
-      await FavoritesRepository.instance.toggleObject(
-        object.id,
-        favoriteTypeId: object.favoriteTypeId,
-      );
+      await toggle();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _objects = [..._objects, object]);
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Не удалось убрать из избранного')),
-      );
+      setState(() => _objects = _reinserted(_objects, index, object));
+      _showSnack('Не удалось убрать из избранного');
+      return;
     }
+    _showUndo('${object.name} — убран из избранного', () async {
+      setState(() => _objects = _reinserted(_objects, index, object));
+      try {
+        await toggle();
+      } catch (_) {
+        if (!mounted) return;
+        setState(
+          () => _objects = _objects.where((o) => o.id != object.id).toList(),
+        );
+        _showSnack('Не удалось вернуть в избранное');
+      }
+    });
+  }
+
+  List<T> _reinserted<T>(List<T> list, int index, T item) =>
+      [...list]..insert(index.clamp(0, list.length), item);
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showUndo(String message, VoidCallback onUndo) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
+        action: SnackBarAction(
+          label: 'Вернуть',
+          onPressed: () {
+            if (mounted) onUndo();
+          },
+        ),
+      ),
+    );
   }
 
   void _openEmployee(StaffUser user) {
@@ -157,36 +208,38 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
 
   Widget _buildSegmentedControl() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: CupertinoSlidingSegmentedControl<_FavoritesSegment>(
-        groupValue: _segment,
-        children: const {
-          _FavoritesSegment.users: Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('Сотрудники'),
-          ),
-          _FavoritesSegment.objects: Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
-            child: Text('Объекты'),
-          ),
-        },
-        onValueChanged: (value) {
-          if (value == null) return;
-          setState(() => _segment = value);
-        },
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(12),
+        shadows: AppGlass.controlShadow,
+        child: CupertinoSlidingSegmentedControl<_FavoritesSegment>(
+          groupValue: _segment,
+          backgroundColor: const Color(0x00000000),
+          thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
+          children: const {
+            _FavoritesSegment.users: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Сотрудники'),
+            ),
+            _FavoritesSegment.objects: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Объекты'),
+            ),
+          },
+          onValueChanged: (value) {
+            if (value == null) return;
+            setState(() => _segment = value);
+          },
+        ),
       ),
     );
   }
 
   Widget _buildResultsSliver() {
     if (_isLoading) {
-      return SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        sliver: SliverList.separated(
-          itemCount: 6,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) => const AppSkeletonCardTile(),
-        ),
+      return AppGlassSliverList(
+        itemCount: 6,
+        itemBuilder: (context, index) => const AppSkeletonListTile(),
       );
     }
 
@@ -194,23 +247,25 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
       if (_users.isEmpty) {
         return const SliverAppEmptyState(
           icon: CupertinoIcons.star,
-          message: 'Пока нет избранных сотрудников',
+          message:
+              'Пока нет избранных сотрудников.\n'
+              'Отметьте звездой в карточке коллеги.',
         );
       }
-      return SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        sliver: SliverList.separated(
-          itemCount: _users.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final user = _users[index];
-            return _FavoriteUserTile(
-              user: user,
-              onTap: () => _openEmployee(user),
-              onRemove: () => _removeUser(user),
-            );
-          },
-        ),
+      return AppGlassSliverList(
+        separatorIndent: EmployeeRow.separatorIndent,
+        itemCount: _users.length,
+        itemBuilder: (context, index) {
+          final user = _users[index];
+          return EmployeeRow(
+            user: user,
+            onTap: () => _openEmployee(user),
+            trailing: EmployeeRowButton(
+              icon: CupertinoIcons.star_fill,
+              onPressed: () => _removeUser(user),
+            ),
+          );
+        },
       );
     }
 
@@ -220,20 +275,17 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
         message: 'Пока нет избранных объектов',
       );
     }
-    return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      sliver: SliverList.separated(
-        itemCount: _objects.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final object = _objects[index];
-          return _FavoriteObjectTile(
-            object: object,
-            onTap: () => _openObject(object),
-            onRemove: () => _removeObject(object),
-          );
-        },
-      ),
+    return AppGlassSliverList(
+      separatorIndent: EmployeeRow.separatorIndent,
+      itemCount: _objects.length,
+      itemBuilder: (context, index) {
+        final object = _objects[index];
+        return _FavoriteObjectRow(
+          object: object,
+          onTap: () => _openObject(object),
+          onRemove: () => _removeObject(object),
+        );
+      },
     );
   }
 
@@ -248,97 +300,44 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
           color: CupertinoColors.label.resolveFrom(context),
           fontSize: 16,
         ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator.adaptive(
-            onRefresh: _load,
-            child: CustomScrollView(
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('Избранное'),
-                  leading: const MenuButton(),
-                  backgroundColor: CupertinoColors.systemGroupedBackground,
-                  border: null,
+        child: Stack(
+          children: [
+            const AppGlassGlow(),
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: RefreshIndicator.adaptive(
+                onRefresh: _load,
+                child: CustomScrollView(
+                  slivers: [
+                    CupertinoSliverNavigationBar(
+                      largeTitle: const Text('Избранное'),
+                      leading: const MenuButton(),
+                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
+                      // дала бы на цветном пятне видимую границу.
+                      backgroundColor: CupertinoColors.systemGroupedBackground
+                          .resolveFrom(context)
+                          .withValues(alpha: 0),
+                      automaticBackgroundVisibility: false,
+                      border: null,
+                    ),
+                    SliverToBoxAdapter(child: _buildSegmentedControl()),
+                    _buildResultsSliver(),
+                  ],
                 ),
-                SliverToBoxAdapter(child: _buildSegmentedControl()),
-                _buildResultsSliver(),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _FavoriteUserTile extends StatelessWidget {
-  const _FavoriteUserTile({
-    required this.user,
-    required this.onTap,
-    required this.onRemove,
-  });
-
-  final StaffUser user;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              MemberAvatar(
-                displayName: user.fullName,
-                avatarUrl: user.avatarUrl,
-                radius: 24,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  user.fullName,
-                  style: TextStyle(
-                    fontFamily: '.SF Pro Text',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label.resolveFrom(context),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: onRemove,
-                child: const Icon(
-                  CupertinoIcons.star_fill,
-                  size: 22,
-                  color: CupertinoColors.systemYellow,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FavoriteObjectTile extends StatelessWidget {
-  const _FavoriteObjectTile({
+/// Строка объекта бронирования — та же сетка, что у [EmployeeRow]:
+/// превью 44 слева, название и описание, звезда справа.
+class _FavoriteObjectRow extends StatelessWidget {
+  const _FavoriteObjectRow({
     required this.object,
     required this.onTap,
     required this.onRemove,
@@ -353,89 +352,77 @@ class _FavoriteObjectTile extends StatelessWidget {
     final imageUrl = object.previewImageUrl;
     final description = (object.description ?? '').trim();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              imageUrl == null
-                  ? Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+        child: Row(
+          children: [
+            imageUrl == null
+                ? Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.tertiarySystemFill.resolveFrom(
+                        context,
                       ),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        CupertinoIcons.location_solid,
-                        color: AppColors.primary,
-                        size: 24,
-                      ),
-                    )
-                  : AppNetworkImage(
-                      url: imageUrl,
-                      width: 48,
-                      height: 48,
-                      borderRadius: 12,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      object.name,
-                      style: TextStyle(
-                        fontFamily: '.SF Pro Text',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label.resolveFrom(context),
+                    child: Icon(
+                      CupertinoIcons.location_solid,
+                      size: 20,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
                       ),
+                    ),
+                  )
+                : AppNetworkImage(
+                    url: imageUrl,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 12,
+                  ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    object.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      description,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        description,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
-              CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: onRemove,
-                child: const Icon(
-                  CupertinoIcons.star_fill,
-                  size: 22,
-                  color: CupertinoColors.systemYellow,
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            EmployeeRowButton(
+              icon: CupertinoIcons.star_fill,
+              onPressed: onRemove,
+            ),
+          ],
         ),
       ),
     );
