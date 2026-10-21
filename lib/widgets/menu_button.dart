@@ -1,8 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../services/survey_pending_service.dart';
+
 /// Кнопка-бургер для `leading:` навбара корневых экранов нижнего меню —
 /// открывает боковой `Drawer`, объявленный в `MainNavigationScreen`.
+/// Красная точка — в меню есть непройденные опросы.
 class MenuButton extends StatelessWidget {
   const MenuButton({super.key});
 
@@ -12,10 +15,19 @@ class MenuButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: Size.zero,
       onPressed: () => Scaffold.of(context).openDrawer(),
-      child: Icon(
-        CupertinoIcons.line_horizontal_3,
-        size: 26,
-        color: CupertinoColors.label.resolveFrom(context),
+      child: ListenableBuilder(
+        listenable: SurveyPendingService.instance,
+        builder: (context, child) => Badge(
+          isLabelVisible: SurveyPendingService.instance.pendingCount > 0,
+          smallSize: 8,
+          backgroundColor: CupertinoColors.systemRed,
+          child: child,
+        ),
+        child: Icon(
+          CupertinoIcons.line_horizontal_3,
+          size: 26,
+          color: CupertinoColors.label.resolveFrom(context),
+        ),
       ),
     );
   }

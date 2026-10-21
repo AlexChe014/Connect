@@ -24,6 +24,7 @@ import 'screens/connector_screen.dart';
 import 'screens/disk_screen.dart';
 import 'screens/global_search_screen.dart';
 import 'screens/bonus_program_screen.dart';
+import 'screens/surveys_screen.dart';
 import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'widgets/app_glass.dart';
@@ -42,6 +43,7 @@ import 'services/document_pending_service.dart';
 import 'services/notification_preferences_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/root_stack_observer.dart';
+import 'services/survey_pending_service.dart';
 import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
 import 'utils/media_url_utils.dart';
@@ -248,9 +250,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     unawaited(ChatRealtimeService.instance.start());
     MailUnreadService.instance.addListener(_onMailUnreadChanged);
     MailUnreadService.instance.refresh();
-    _mailRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+    SurveyPendingService.instance.addListener(_onSurveysChanged);
+    unawaited(SurveyPendingService.instance.refreshQuietly());
+    _mailRefreshTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         MailUnreadService.instance.refresh();
+        // Новые опросы приходят редко — хватает раза в 5 минут.
+        if (timer.tick % 5 == 0) {
+          unawaited(SurveyPendingService.instance.refreshQuietly());
+        }
       }
     });
   }
@@ -262,6 +270,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     MailUnreadService.instance.removeListener(_onMailUnreadChanged);
     _mailRefreshTimer?.cancel();
     MailUnreadService.instance.reset();
+    SurveyPendingService.instance.removeListener(_onSurveysChanged);
+    SurveyPendingService.instance.reset();
     DocumentPendingService.instance.reset();
     unawaited(ChatRealtimeService.instance.stop());
     super.dispose();
@@ -271,6 +281,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       MailUnreadService.instance.refresh();
+      unawaited(SurveyPendingService.instance.refreshQuietly());
       unawaited(ChatService.instance.refreshChats(showLoading: false));
       unawaited(ChatService.instance.reloadCachedMessages());
       unawaited(ChatRealtimeService.instance.start());
@@ -282,6 +293,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 
   void _onMailUnreadChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onSurveysChanged() {
     if (mounted) setState(() {});
   }
 
@@ -496,6 +511,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                           Navigator.of(context).push(
                             CupertinoPageRoute(
                               builder: (_) => const DocumentsSigningScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _DrawerItem(
+                        icon: CupertinoIcons.chart_bar_square,
+                        label: 'Опросы',
+                        selected: false,
+                        badgeCount: SurveyPendingService.instance.pendingCount,
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            CupertinoPageRoute(
+                              builder: (_) => const SurveysScreen(),
                             ),
                           );
                         },

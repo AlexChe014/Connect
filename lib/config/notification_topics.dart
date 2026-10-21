@@ -98,6 +98,28 @@ abstract final class NotificationTopics {
     color: CupertinoColors.systemPink,
   );
 
+  /// Приглашение/напоминание пройти опрос. Не FCM-топик: бэкенд шлёт его
+  /// адресно получателям кампании, поэтому в [all] (настройки подписок)
+  /// не входит — нужен только для иконки в ленте и навигации.
+  static const survey = NotificationTopic(
+    id: 'survey',
+    type: 'survey_invitation',
+    title: 'Новый опрос',
+    description: 'Приглашения пройти опрос',
+    dataFields: ['token', 'recipient_id (необязательно)'],
+    icon: CupertinoIcons.chart_bar_square_fill,
+    color: CupertinoColors.systemPurple,
+  );
+
+  /// Уведомления модуля опросов: точное имя типа на бэкенде может
+  /// отличаться (`survey_invitation`, `survey_reminder`, ...), поэтому
+  /// узнаём их по префиксу `survey` или по `module`.
+  static bool isSurveyType(String? type, [String? module]) {
+    final t = type?.trim().toLowerCase() ?? '';
+    final m = module?.trim().toLowerCase() ?? '';
+    return t.startsWith('survey') || m == 'survey' || m == 'surveys';
+  }
+
   static const all = <NotificationTopic>[
     feedPost,
     documentApproval,
@@ -124,6 +146,7 @@ abstract final class NotificationTopics {
     if (type == 'meeting_invite' || type == 'booking_created') {
       return meetingInvite;
     }
+    if (isSurveyType(type)) return survey;
     for (final topic in all) {
       if (topic.type == type) return topic;
     }
