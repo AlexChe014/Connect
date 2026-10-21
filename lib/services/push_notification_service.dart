@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:connect/config/notification_topics.dart';
 import 'package:connect/firebase_options.dart';
 import 'package:connect/repositories/device_token_repository.dart';
 import 'package:connect/services/app_navigation_service.dart';
@@ -10,6 +11,7 @@ import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/mail_unread_service.dart';
 import 'package:connect/services/document_pending_service.dart';
+import 'package:connect/services/survey_pending_service.dart';
 import 'package:connect/models/chat/chat_call_record.dart';
 import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/models/chat/chat_sticker.dart';
@@ -346,6 +348,9 @@ class PushNotificationService {
     if (message.data['type'] == 'new_documents') {
       unawaited(DocumentPendingService.instance.refreshKnownServices());
     }
+    if (_isSurveyMessage(message.data)) {
+      unawaited(SurveyPendingService.instance.refreshQuietly());
+    }
     if (IncomingCallPayload.isChatCall(message.data)) {
       await IncomingCallService.instance.handlePushData(message.data);
       return;
@@ -453,8 +458,20 @@ class PushNotificationService {
     _navigateFromData(data);
   }
 
+  static bool _isSurveyMessage(Map<String, dynamic> data) =>
+      NotificationTopics.isSurveyType(
+        data['type']?.toString(),
+        data['module']?.toString(),
+      );
+
   void _storeNavigationFromMessage(RemoteMessage message) {
     final data = message.data;
+    if (_isSurveyMessage(data)) {
+      AppNavigationService.storePendingSurvey(
+        AppNavigationService.resolveSurveyToken(data),
+      );
+      return;
+    }
     switch (data['type']) {
       case 'chat_message':
         final chatId = data['chat_id'];

@@ -262,7 +262,11 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final topic = NotificationTopics.byType(item.type);
+    final topic =
+        NotificationTopics.byType(item.type) ??
+        (NotificationTopics.isSurveyType(item.type, item.module)
+            ? NotificationTopics.survey
+            : null);
     final icon = topic?.icon ?? CupertinoIcons.bell_fill;
     final color = topic?.color ?? CupertinoColors.systemGrey;
     final isUnread = !item.isRead;
