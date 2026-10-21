@@ -5,10 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
-import '../repositories/notifications_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/chat_realtime_service.dart';
+import '../services/notification_unread_service.dart';
 import '../services/push_notification_service.dart';
 import '../services/user_presence_service.dart';
 import '../utils/media_url_utils.dart';
@@ -31,23 +31,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   List<UserBooking> _upcomingBookings = const [];
   bool _bookingsLoading = false;
-  int _unreadNotifications = 0;
-
   @override
   void initState() {
     super.initState();
     _loadProfile();
-    _loadUnreadNotifications();
-  }
-
-  Future<void> _loadUnreadNotifications() async {
-    try {
-      final count = await NotificationsRepository.instance.getUnreadCount();
-      if (!mounted) return;
-      setState(() => _unreadNotifications = count);
-    } catch (_) {
-      // Эндпоинт может быть ещё не готов на бэкенде — просто не показываем бейдж.
-    }
+    NotificationUnreadService.instance.refresh();
   }
 
   Future<void> _openNotifications() async {
@@ -56,7 +44,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (context) => const NotificationsScreen(),
       ),
     );
-    _loadUnreadNotifications();
   }
 
   Future<void> _loadProfile() async {
@@ -586,7 +573,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Колокольчик в шапке с красным счётчиком непрочитанных уведомлений.
   Widget _buildNotificationsButton(BuildContext context) {
-    final count = _unreadNotifications;
+    final count = NotificationUnreadService.instance.unreadCount;
     return Semantics(
       button: true,
       label: count > 0 ? 'Уведомления, непрочитанных: $count' : 'Уведомления',
@@ -652,7 +639,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 largeTitle: const Text('Профиль'),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
                 border: null,
-                trailing: _buildNotificationsButton(context),
+                trailing: ListenableBuilder(
+                  listenable: NotificationUnreadService.instance,
+                  builder: (context, _) => _buildNotificationsButton(context),
+                ),
               ),
               _buildSliverBody(context),
             ],

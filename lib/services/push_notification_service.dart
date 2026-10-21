@@ -10,6 +10,7 @@ import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/mail_unread_service.dart';
+import 'package:connect/services/notification_unread_service.dart';
 import 'package:connect/services/document_pending_service.dart';
 import 'package:connect/services/survey_pending_service.dart';
 import 'package:connect/models/chat/chat_call_record.dart';
@@ -342,8 +343,17 @@ class PushNotificationService {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
-    if (message.data['type'] == 'mail') {
+    final type = message.data['type'];
+    if (type == 'mail' || type == 'new_emails') {
       MailUnreadService.instance.invalidate();
+    }
+    // Пуш по записи `user_notifications` — запись уже создана, обновляем
+    // счётчик. Чаты и звонки в эту таблицу не попадают.
+    if (type is String &&
+        type.isNotEmpty &&
+        type != 'chat_message' &&
+        !type.startsWith('chat_call')) {
+      unawaited(NotificationUnreadService.instance.refresh());
     }
     if (message.data['type'] == 'new_documents') {
       unawaited(DocumentPendingService.instance.refreshKnownServices());
@@ -494,6 +504,7 @@ class PushNotificationService {
           AppNavigationService.storePendingDocument(serviceId);
         }
       case 'mail':
+      case 'new_emails':
         final connectionId = data['connection_id'];
         if (connectionId != null && connectionId.isNotEmpty) {
           AppNavigationService.storePendingMail(
