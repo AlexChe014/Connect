@@ -422,6 +422,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
           initialMessage: message,
           folders: _folders,
           currentFolder: _selectedFolder,
+          onMove: (folder) => _moveMessage(message, folder),
         ),
       ),
     );
@@ -529,6 +530,40 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось удалить письмо')),
       );
+    }
+  }
+
+  /// Письмо сразу скрывается из списка, перенос идёт в фоне; при ошибке
+  /// возвращается на место.
+  Future<void> _moveMessage(MailMessage message, MailFolder folder) async {
+    final connectionId = _connection.id;
+    setState(() => _pendingDeleteIds.add(message.id));
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('Письмо перемещено в «${folder.displayName}»')),
+      );
+    try {
+      await MailRepository.instance.moveMessage(
+        connectionId: connectionId,
+        messageId: message.id,
+        folderId: folder.id,
+      );
+      MailUnreadService.instance.invalidate();
+      if (!mounted) return;
+      setState(() {
+        _messages.removeWhere((m) => m.id == message.id);
+        _searchResults?.removeWhere((m) => m.id == message.id);
+        _pendingDeleteIds.remove(message.id);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _pendingDeleteIds.remove(message.id));
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Не удалось переместить письмо')),
+        );
     }
   }
 

@@ -34,6 +34,7 @@ class MailMessageScreen extends StatefulWidget {
     this.initialMessage,
     this.folders = const [],
     this.currentFolder,
+    this.onMove,
   });
 
   final MailConnection connection;
@@ -44,6 +45,11 @@ class MailMessageScreen extends StatefulWidget {
   /// Папка, из которой открыто письмо: её не предлагаем в «Переместить»,
   /// и по ней понятно, что письмо своё (Отправленные/Черновики).
   final MailFolder? currentFolder;
+
+  /// Перемещение берёт на себя список: экран сразу закрывается, письмо
+  /// пропадает из списка, а запрос идёт в фоне — сервер переносит письмо
+  /// по IMAP несколько секунд, и раньше казалось, что ничего не происходит.
+  final ValueChanged<MailFolder>? onMove;
 
   @override
   State<MailMessageScreen> createState() => _MailMessageScreenState();
@@ -223,6 +229,14 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
     if (folder == null || !mounted) return;
 
+    final onMove = widget.onMove;
+    if (onMove != null) {
+      Navigator.of(context).pop();
+      onMove(folder);
+      return;
+    }
+
+    setState(() => _isDeleting = true);
     try {
       await MailRepository.instance.moveMessage(
         connectionId: widget.connection.id,
@@ -239,6 +253,8 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось переместить письмо')),
       );
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
