@@ -50,14 +50,6 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
   static const _forwardMarker = '---------- Пересланное сообщение ----------';
 
-  /// Текст пользователя без цитаты исходного письма: сервер сам добавляет
-  /// пересылаемое письмо целиком (с HTML), иначе оно вышло бы дважды.
-  String get _forwardComment {
-    final text = _bodyController.text;
-    final cut = text.indexOf(_forwardMarker);
-    return (cut < 0 ? text : text.substring(0, cut)).trim();
-  }
-
   final List<_PendingAttachment> _attachments = [];
   bool _isSending = false;
   String? _toError;
@@ -170,11 +162,11 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     if (discard == true && mounted) Navigator.of(context).pop();
   }
 
-  /// Вложения в ответе/пересылке сервер пока не принимает — до доработки
-  /// бэкенда (replyAttachmentsSupported) кнопку прикрепления не показываем.
+  /// Вложения в ответе сервер пока не принимает — до доработки бэкенда
+  /// (replyAttachmentsSupported) кнопку прикрепления не показываем.
+  /// Пересылка идёт через /mail/smtp/send, там вложения работают.
   bool get _canAttach =>
-      (widget.replyTo == null && widget.forwardOf == null) ||
-      MailRepository.replyAttachmentsSupported;
+      widget.replyTo == null || MailRepository.replyAttachmentsSupported;
 
   @override
   void dispose() {
@@ -299,10 +291,11 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       } else if (forwardOf != null) {
         await MailRepository.instance.forwardMail(
           ForwardMailRequest(
+            connectionId: widget.connection.id,
             messageId: forwardOf.id,
             to: _toValue,
             subject: _subjectController.text.trim(),
-            body: _forwardComment,
+            body: _bodyController.text,
             attachments: files,
           ),
         );

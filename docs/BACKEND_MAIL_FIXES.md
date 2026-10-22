@@ -401,6 +401,55 @@ UID там не находится (или, хуже, находит чужое 
   `attachments` поле `filename` — multipart-файлы под `attachments[]` не
   пройдут валидацию. Развести ключи (например, файлы — `files[]`), см. п. 10.
 
+## 15. `forward` падает с 500 «Server Error» на любом письме
+
+`SmtpController::forwardEmail` и `SmtpService::buildForward*Body` вызывают
+методы у значений, которые не являются объектами. Это PHP `Error`, а не
+`Exception`, поэтому `catch (\Exception $e)` его не ловит и Laravel отдаёт
+голый 500. Пересылка не работает ни для одного письма.
+
+1. `ImapService::getMessage()` отдаёт `'date' => $message->getDate()->toString()`,
+   то есть **строку**, а контроллер делает
+   `$originalEmail['date']->format('Y-m-d H:i')`. Это первое падение.
+2. `formatAddress()` отдаёт **массив** `['name' => …, 'email' => …]`, а
+   `buildForwardBody()`/`buildForwardTextBody()` вызывают `$from->getName()` и
+   `$from->getAddress()`. Это второе падение, сразу за первым.
+3. Ящик берётся неправильно: IMAP читает через `getDefaultConnection()`
+   вместо ящика самого письма, а SMTP-соединение для пересылки не выставляется
+   вовсе. Если письмо лежит не в ящике по умолчанию, `getFolder()` ищет папку
+   не на том сервере, и письмо уходит не с того адреса.
+
+**Исправление:**
+
+```php
+// SmtpController::forwardEmail
+$connection = isset($data['connection_id'])
+    ? EmailConnection::query()->findOrFail($data['connection_id'])
+    : $email->connection()->first();
+$this->smtpService->setConnection($connection);
+$originalEmail = (new ImapService())->setConnection($connection)->getMessage($email);
+
+$originalEmailData = [
+    'from'      => $originalEmail['from'],
+    'date'      => \Carbon\Carbon::parse($originalEmail['date'])->format('Y-m-d H:i'),
+    // …
+];
+
+// SmtpService::buildForwardBody / buildForwardTextBody
+$fromName  = $from['name'] ?? '';
+$fromEmail = $from['email'] ?? '';
+// … htmlspecialchars($fromName) … htmlspecialchars($fromEmail) …
+```
+
+Плюс `catch (\Throwable $e)` вместо `\Exception` в контроллерах SMTP, чтобы
+такие ошибки приходили клиенту текстом, а не голым 500.
+
+**Клиент (с 2026-10-22):** пересылает через `/mail/smtp/send` с ящика письма,
+исходное письмо идёт цитатой в `body_text` (без HTML и без вложений
+исходного). Вложения к пересылке можно прикладывать. Когда `forward`
+починят, можно вернуть `MailRepository.forwardMail` на `/mail/smtp/forward`
+(передавать `message` без цитаты, сервер добавит её сам).
+
 ## Чеклист
 
 - [ ] `POST /mail/smtp/send` принимает `connection_id` и шлёт именно с этого ящика
@@ -421,3 +470,4 @@ UID там не находится (или, хуже, находит чужое 
 - [ ] `reply` берёт `to`/`subject` из запроса (ответить всем), а не всегда `from` исходного
 - [ ] `forward` принимает несколько адресатов, прикладывает вложения исходного письма, при неудаче отдаёт ошибку
 - [ ] Файлы в `reply`/`forward` не конфликтуют с правилом base64-`attachments`
+- [ ] `forward` не падает с 500: дата-строка и массив `from` (п. 15), ящик берётся из письма, `catch (\Throwable)`

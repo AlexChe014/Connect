@@ -173,6 +173,7 @@ class ReplyMailRequest {
 }
 
 class ForwardMailRequest {
+  final int connectionId;
   final int messageId;
   final String to;
   final String subject;
@@ -180,6 +181,7 @@ class ForwardMailRequest {
   final List<http.MultipartFile> attachments;
 
   const ForwardMailRequest({
+    required this.connectionId,
     required this.messageId,
     required this.to,
     required this.subject,
@@ -585,33 +587,27 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
 
-  /// Сервер принимает в `to` ровно один адрес (`email`), поэтому нескольким
-  /// получателям пересылаем по отдельности. Исходное письмо с шапкой
-  /// «Пересланное сообщение» сервер добавляет сам — в `message` только
-  /// текст пользователя.
+  /// Пересылка идёт через `/mail/smtp/send`, а не `/mail/smtp/forward`:
+  /// forward на бэкенде падает с 500 на каждом письме (вызывает `->format()`
+  /// у даты-строки из ImapService::getMessage и `->getName()` у массива
+  /// `from`) — см. docs/BACKEND_MAIL_FIXES.md, п. 15. Поэтому `body` — текст
+  /// пользователя вместе с цитатой исходного письма. Сервер принимает в `to`
+  /// ровно один адрес (`email`), нескольким получателям шлём по отдельности.
   Future<void> forwardMail(ForwardMailRequest request) async {
     final recipients = MailMessage.splitAddresses(request.to)
         .map(_bareAddress)
         .where((a) => a.isNotEmpty)
         .toList();
     for (final to in recipients.isEmpty ? [request.to] : recipients) {
-      final fields = <String, String>{
-        'to': to,
-        'subject': request.subject,
-        if (request.body != null && request.body!.trim().isNotEmpty)
-          'message': request.body!,
-      };
-      final decoded = request.attachments.isNotEmpty
-          ? await ApiClient.instance.postMultipart(
-              MailRoutes.smtpForwardUrl(request.messageId),
-              fields: fields,
-              files: request.attachments,
-            )
-          : await ApiClient.instance.post(
-              MailRoutes.smtpForwardUrl(request.messageId),
-              body: fields,
-            );
-      _unwrapMailData(decoded, 'Не удалось переслать письмо');
+      await sendMail(
+        SendMailRequest(
+          connectionId: request.connectionId,
+          to: to,
+          subject: request.subject,
+          body: request.body,
+          attachments: request.attachments,
+        ),
+      );
     }
   }
 
