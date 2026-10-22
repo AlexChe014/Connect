@@ -1,23 +1,27 @@
 import '../api_config.dart';
 
-/// Лента уведомлений пользователя — эндпоинты со стороны бэкенда ещё
-/// предстоит реализовать (см. контракт в комментариях к каждому методу).
+/// Уведомления пользователя (`user_notifications`), `routes/api/user.php`.
+/// Все под `auth:sanctum`, ответ в конверте `{success, data}`.
 class NotificationRoutes {
   NotificationRoutes._();
 
-  static const String _prefix = '/notifications';
+  static const String _prefix = '/user/notifications';
 
-  /// `GET /notifications` — постранично, конверт `{success, data: {data: [...], next_page_url, ...}}`.
-  /// Формат элемента — см. `NotificationItem.fromJson`.
-  static String get listUrl => '${ApiConfig.baseUrl}$_prefix';
+  /// `GET /user/notifications/get?per_page=N` — постранично, сначала новые:
+  /// `data: {data: [...], next_page_url, ...}`. Элемент — см.
+  /// `NotificationItem.fromJson`.
+  static String get listUrl =>
+      '${ApiConfig.baseUrl}$_prefix/get?per_page=$perPage';
 
-  /// `GET /notifications/unread-count` — конверт `{success, data: <int>}`.
-  static String get unreadCountUrl =>
-      '${ApiConfig.baseUrl}$_prefix/unread-count';
+  static const int perPage = 20;
 
-  /// `POST /notifications/{id}/read` — без тела.
-  static String markReadUrl(int id) => '${ApiConfig.baseUrl}$_prefix/$id/read';
+  /// `GET /user/notifications/unread` — `data: {notifications: [...], count}`.
+  static String get unreadUrl => '${ApiConfig.baseUrl}$_prefix/unread';
 
-  /// `POST /notifications/read-all` — без тела.
+  /// `POST /user/notifications/read/{id}` — `data: true`, или `false`, если
+  /// уже было прочитано.
+  static String markReadUrl(int id) => '${ApiConfig.baseUrl}$_prefix/read/$id';
+
+  /// `POST /user/notifications/read-all` — без тела.
   static String get markAllReadUrl => '${ApiConfig.baseUrl}$_prefix/read-all';
 }

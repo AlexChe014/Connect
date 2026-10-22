@@ -1,12 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show RefreshIndicator, ScaffoldMessenger, SnackBar;
 import 'package:intl/intl.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../config/notification_topics.dart';
 import '../models/notification_item.dart';
 import '../repositories/notifications_repository.dart';
 import '../services/app_navigation_service.dart';
+import '../services/notification_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import 'notification_settings_screen.dart';
@@ -27,6 +31,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoadingMore = false;
   bool _isMarkingAll = false;
 
+  /// Были непрочитанными при открытии экрана: уже отмечены на сервере, но
+  /// до ухода с экрана остаются выделенными, чтобы было видно, что нового.
+  final Set<int> _freshIds = {};
+
+  /// Попали на экран и ждут отправки `read/{id}` — копим, чтобы при
+  /// прокрутке не слать запрос на каждый кадр.
+  final Set<int> _pendingReadIds = {};
+  Timer? _readFlushTimer;
+
   @override
   void initState() {
     super.initState();
@@ -36,10 +49,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   void dispose() {
+    _readFlushTimer?.cancel();
+    _flushRead();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
     super.dispose();
+  }
+
+  /// Уведомление хотя бы раз показалось на экране — считаем прочитанным.
+  void _markSeen(NotificationItem item) {
+    if (_freshIds.contains(item.id)) return;
+    final index = _items.indexWhere((i) => i.id == item.id);
+    if (index < 0 || _items[index].isRead) return;
+    _items[index] = _items[index].copyWith(isRead: true);
+    _freshIds.add(item.id);
+    _pendingReadIds.add(item.id);
+    _readFlushTimer?.cancel();
+    _readFlushTimer = Timer(const Duration(milliseconds: 400), _flushRead);
+  }
+
+  void _flushRead() {
+    if (_pendingReadIds.isEmpty) return;
+    final ids = _pendingReadIds.toList();
+    _pendingReadIds.clear();
+    NotificationUnreadService.instance.markRead(ids.length);
+    for (final id in ids) {
+      NotificationsRepository.instance.markAsRead(id).catchError((_) {});
+    }
   }
 
   void _onScroll() {
@@ -64,10 +101,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final page = await NotificationsRepository.instance.getPage();
       if (!mounted) return;
       setState(() {
-        _items = page.data;
+        _items = List.of(page.data);
         _nextPageUrl = page.nextPageUrl;
         _isInitialLoading = false;
       });
+      unawaited(NotificationUnreadService.instance.refresh());
     } catch (_) {
       if (!mounted) return;
       setState(() => _isInitialLoading = false);
@@ -94,14 +132,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markAllRead() async {
-    if (_isMarkingAll || _items.every((i) => i.isRead)) return;
+    if (_isMarkingAll) return;
+    // Непрочитанные могут быть и на ещё не загруженных страницах.
+    if (NotificationUnreadService.instance.unreadCount == 0 &&
+        _items.every((i) => i.isRead)) {
+      return;
+    }
 
     setState(() => _isMarkingAll = true);
     try {
       await NotificationsRepository.instance.markAllAsRead();
       if (!mounted) return;
+      NotificationUnreadService.instance.markAllRead();
       setState(() {
         _items = _items.map((i) => i.copyWith(isRead: true)).toList();
+        _freshIds.clear();
+        _pendingReadIds.clear();
       });
     } catch (_) {
       if (!mounted) return;
@@ -114,17 +160,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _openItem(NotificationItem item) async {
-    if (!item.isRead) {
-      setState(() {
-        _items = [
-          for (final i in _items)
-            i.id == item.id ? i.copyWith(isRead: true) : i,
-        ];
-      });
-      NotificationsRepository.instance.markAsRead(item.id).catchError((_) {});
-    }
+    // Тап по только что подгруженной карточке мог опередить отметку
+    // по показу — отправляем её сразу.
+    _markSeen(item);
+    _readFlushTimer?.cancel();
+    _flushRead();
 
-    await AppNavigationService.openFromData(item.toNavigationData());
+    final opened = await AppNavigationService.openNotificationInPlace(
+      item.toNavigationData(),
+    );
+    if (opened || !mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Этот раздел пока доступен только на портале')),
+    );
   }
 
   void _openSettings() {
@@ -178,10 +226,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             }
 
             final item = _items[index];
-            return _NotificationTile(
-              item: item,
-              dateFormat: dateFormat,
-              onTap: () => _openItem(item),
+            return VisibilityDetector(
+              key: Key('notification-${item.id}'),
+              onVisibilityChanged: (info) {
+                if (info.visibleFraction >= 0.5) _markSeen(item);
+              },
+              child: _NotificationTile(
+                item: item,
+                isHighlighted: !item.isRead || _freshIds.contains(item.id),
+                dateFormat: dateFormat,
+                onTap: () => _openItem(item),
+              ),
             );
           },
         ),
@@ -252,20 +307,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 class _NotificationTile extends StatelessWidget {
   const _NotificationTile({
     required this.item,
+    required this.isHighlighted,
     required this.dateFormat,
     required this.onTap,
   });
 
   final NotificationItem item;
+
+  /// Новое: не прочитано или стало прочитанным за этот показ экрана.
+  final bool isHighlighted;
   final DateFormat dateFormat;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final topic = NotificationTopics.byType(item.type);
+    final topic =
+        NotificationTopics.byType(item.type) ??
+        (NotificationTopics.isSurveyType(item.type, item.module)
+            ? NotificationTopics.survey
+            : null);
     final icon = topic?.icon ?? CupertinoIcons.bell_fill;
     final color = topic?.color ?? CupertinoColors.systemGrey;
-    final isUnread = !item.isRead;
+    final isUnread = isHighlighted;
 
     return Container(
       decoration: BoxDecoration(

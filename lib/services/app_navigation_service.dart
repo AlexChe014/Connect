@@ -1,11 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:connect/config/notification_topics.dart';
 import 'package:connect/models/documents/document_service.dart';
+import 'package:connect/models/surveys/survey_invitation.dart';
 import 'package:connect/models/mail/mail_connection.dart';
 import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/documents_repository.dart';
 import 'package:connect/repositories/mail_repository.dart';
+import 'package:connect/repositories/news_repository.dart';
+import 'package:connect/screens/bonus_history_screen.dart';
+import 'package:connect/screens/bonus_program_screen.dart';
+import 'package:connect/screens/bonus_roulette_screen.dart';
+import 'package:connect/screens/bonus_shop_screen.dart';
 import 'package:connect/screens/booking_detail_sheet.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/documents_list_screen.dart';
@@ -13,7 +20,11 @@ import 'package:connect/screens/documents_signing_screen.dart';
 import 'package:connect/screens/mail_inbox_screen.dart';
 import 'package:connect/screens/mail_message_screen.dart';
 import 'package:connect/screens/mail_screen.dart';
+import 'package:connect/screens/news_detail_screen.dart';
+import 'package:connect/screens/survey_form_screen.dart';
+import 'package:connect/screens/surveys_screen.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/survey_pending_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +66,10 @@ class AppNavigationService {
   static _PendingMail? _pendingMail;
   static String? _pendingBookingId;
 
+  /// Тап по пушу об опросе до готовности навигатора: `''` — открыть
+  /// список опросов, иначе токен получателя.
+  static String? _pendingSurveyToken;
+
   /// Чат, который сейчас открывается через [openChatById]. Дублирующая
   /// доставка push (обычное дело для FCM — например, эхо системного
   /// сообщения о завершённом звонке тому же устройству) иначе запускает
@@ -76,6 +91,9 @@ class AppNavigationService {
 
   static void storePendingBooking(String bookingId) =>
       _pendingBookingId = bookingId;
+
+  static void storePendingSurvey(String? token) =>
+      _pendingSurveyToken = token ?? '';
 
   static String? takePendingChatId() {
     final id = _pendingChatId;
@@ -325,6 +343,67 @@ class AppNavigationService {
     }
   }
 
+  /// Токен получателя из уведомления об опросе: поле `token` или ссылка
+  /// вида `{frontend_url}/survey/{token}`.
+  static String? resolveSurveyToken(Map<String, dynamic> data) {
+    final token = resolveDataField(data, ['token', 'survey_token']);
+    if (token != null) return token;
+    final link = resolveDataField(data, ['link', 'url']);
+    if (link == null) return null;
+    final segments = Uri.tryParse(link)?.pathSegments ?? const [];
+    final i = segments.indexOf('survey');
+    if (i < 0 || i + 1 >= segments.length) return null;
+    final fromLink = segments[i + 1].trim();
+    return fromLink.isEmpty ? null : fromLink;
+  }
+
+  /// Открывает «Опросы» и, если известен [token], сразу форму опроса.
+  static Future<void> openSurvey(String? token) async {
+    final navigator = navigatorKey.currentState;
+    if (!AuthService.instance.isAuthenticated || navigator == null) {
+      storePendingSurvey(token);
+      return;
+    }
+
+    // Не await: `/home` — корневой route, его future не завершится.
+    unawaited(
+      navigator.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+        arguments: {'initialIndex': 0},
+      ),
+    );
+    unawaited(
+      navigator.push<void>(
+        CupertinoPageRoute<void>(builder: (context) => const SurveysScreen()),
+      ),
+    );
+    if (token == null || token.isEmpty) return;
+
+    // Id получателя нужен для отметки portal-open — берём из списка.
+    final pending = SurveyPendingService.instance;
+    await pending.refreshQuietly();
+    if (!navigator.mounted) return;
+    SurveyInvitation? invitation;
+    for (final i in pending.invitations) {
+      if (i.token == token) {
+        invitation = i;
+        break;
+      }
+    }
+    if (invitation != null) {
+      unawaited(SurveysScreen.openInvitation(navigator.context, invitation));
+    } else {
+      unawaited(
+        navigator.push<void>(
+          CupertinoPageRoute<void>(
+            builder: (context) => SurveyFormScreen(token: token),
+          ),
+        ),
+      );
+    }
+  }
+
   /// Общая точка входа для навигации по `type`/`data` — используется и для
   /// тапа по push (см. `PushNotificationService`), и для тапа по элементу
   /// ленты уведомлений (`NotificationsScreen`), чтобы не дублировать логику.
@@ -332,6 +411,13 @@ class AppNavigationService {
   /// `type` здесь — значение как оно есть в БД бэкенда (`news_created`,
   /// `new_documents`, ...), без переименования на стороне бэкенда.
   static Future<void> openFromData(Map<String, dynamic> data) async {
+    if (NotificationTopics.isSurveyType(
+      data['type']?.toString(),
+      data['module']?.toString(),
+    )) {
+      await openSurvey(resolveSurveyToken(data));
+      return;
+    }
     switch (data['type']) {
       case 'chat_message':
         final chatId = data['chat_id']?.toString();
@@ -349,6 +435,7 @@ class AppNavigationService {
           await openDocumentService(serviceId);
         }
       case 'mail':
+      case 'new_emails':
         final connectionId = data['connection_id']?.toString();
         if (connectionId != null && connectionId.isNotEmpty) {
           await openMailConnection(
@@ -369,8 +456,177 @@ class AppNavigationService {
           if (bookingId != null) {
             await openBookingById(bookingId);
           }
+        } else if (NotificationTopics.isBonusType(data['type']?.toString()) ||
+            data['type'] == 'document_changes') {
+          // Без отложенного перехода: такие пуши редки и не срочны.
+          final navigator = navigatorKey.currentState;
+          if (!AuthService.instance.isAuthenticated || navigator == null) {
+            return;
+          }
+          unawaited(
+            navigator.pushNamedAndRemoveUntil(
+              '/home',
+              (route) => false,
+              arguments: {'initialIndex': 0},
+            ),
+          );
+          await openNotificationInPlace(data);
         }
     }
+  }
+
+  /// Тап по уведомлению в ленте (`NotificationsScreen`): в отличие от
+  /// [openFromData] не сбрасывает стек до `/home`, а открывает объект
+  /// поверх ленты — «Назад» возвращает к уведомлениям. `false` — для типа
+  /// нет экрана в приложении.
+  static Future<bool> openNotificationInPlace(Map<String, dynamic> data) async {
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return false;
+    final type = data['type']?.toString() ?? '';
+    final module = data['module']?.toString();
+
+    void push(Widget screen) => unawaited(
+      navigator.push<void>(CupertinoPageRoute<void>(builder: (_) => screen)),
+    );
+
+    try {
+      if (NotificationTopics.isSurveyType(type, module)) {
+        await _openSurveyInPlace(navigator, resolveSurveyToken(data));
+        return true;
+      }
+      if (NotificationTopics.isBookingType(type) || module == 'calendar') {
+        final id = int.tryParse(resolveBookingId(data) ?? '');
+        if (id == null) return false;
+        unawaited(BookingDetailSheet.show(navigator.context, bookingId: id));
+        return true;
+      }
+      if (NotificationTopics.isBonusType(type)) {
+        push(switch (type) {
+          'bonus_program_point_transfer_received' ||
+          'bonus_program_point_transfer_hr' => const BonusHistoryScreen(),
+          'bonus_program_shop_request_moderated' => const BonusShopScreen(),
+          'bonus_program_roulette_prize_request_moderated' =>
+            const BonusRouletteScreen(),
+          // Заявки для ответственных модерируются только на портале.
+          _ => const BonusProgramScreen(),
+        });
+        return true;
+      }
+      switch (type) {
+        case 'news_created':
+          final newsId = resolveDataField(data, ['news_id', 'id']);
+          if (newsId == null) return false;
+          final news = await NewsRepository.instance.getById(newsId);
+          if (!navigator.mounted) return true;
+          push(NewsDetailScreen(news: news));
+          return true;
+        case 'new_documents':
+          final service = await _findDocumentService(
+            resolveDataField(data, ['service_id']),
+          );
+          if (!navigator.mounted) return true;
+          push(
+            service != null
+                ? DocumentsListScreen(service: service)
+                : const DocumentsSigningScreen(),
+          );
+          return true;
+        case 'document_changes':
+          push(const DocumentsSigningScreen());
+          return true;
+        case 'new_emails':
+        case 'mail':
+          final connection = await _findMailConnection(
+            resolveDataField(data, ['connection_id']),
+          );
+          if (!navigator.mounted) return true;
+          if (connection == null) {
+            push(const MailScreen(autoOpenInbox: false));
+            return true;
+          }
+          final messageId = int.tryParse(
+            resolveDataField(data, ['email_id', 'message_id']) ?? '',
+          );
+          // Одно уведомление на пачку писем — открываем ящик, а письмо
+          // сразу только если оно одно.
+          final count = int.tryParse(resolveDataField(data, ['count']) ?? '');
+          if (messageId != null && (count == null || count <= 1)) {
+            push(
+              MailMessageScreen(connection: connection, messageId: messageId),
+            );
+          } else {
+            push(MailInboxScreen(connection: connection));
+          }
+          return true;
+        case 'chat_message':
+          final chatId = data['chat_id']?.toString();
+          if (chatId == null || chatId.isEmpty) return false;
+          await openChatById(chatId);
+          return true;
+      }
+    } catch (e, st) {
+      AppLogger.e(
+        'Failed to open notification: $type',
+        name: 'notifications.navigation',
+        error: e,
+        stackTrace: st,
+      );
+      return false;
+    }
+    return false;
+  }
+
+  static Future<void> _openSurveyInPlace(
+    NavigatorState navigator,
+    String? token,
+  ) async {
+    if (token == null || token.isEmpty) {
+      unawaited(
+        navigator.push<void>(
+          CupertinoPageRoute<void>(builder: (_) => const SurveysScreen()),
+        ),
+      );
+      return;
+    }
+    final pending = SurveyPendingService.instance;
+    await pending.refreshQuietly();
+    if (!navigator.mounted) return;
+    for (final i in pending.invitations) {
+      if (i.token == token) {
+        unawaited(SurveysScreen.openInvitation(navigator.context, i));
+        return;
+      }
+    }
+    unawaited(
+      navigator.push<void>(
+        CupertinoPageRoute<void>(
+          builder: (_) => SurveyFormScreen(token: token),
+        ),
+      ),
+    );
+  }
+
+  static Future<DocumentService?> _findDocumentService(String? rawId) async {
+    final id = int.tryParse(rawId ?? '');
+    if (id == null) return null;
+    final services = await DocumentsRepository.instance.getActiveServices();
+    for (final s in services) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
+
+  static Future<MailConnection?> _findMailConnection(String? rawId) async {
+    final id = int.tryParse(rawId ?? '');
+    final userId = await _currentUserId();
+    if (id == null || userId == null) return null;
+    final connections = await MailRepository.instance.getConnectionsByUser(
+      userId,
+    );
+    for (final c in connections) {
+      if (c.id == id) return c;
+    }
+    return null;
   }
 
   /// Id брони: `booking_id` наверху или во вложенном `data`, иначе `id`
@@ -467,6 +723,13 @@ class AppNavigationService {
     if (bookingId != null) {
       _pendingBookingId = null;
       await openBookingById(bookingId);
+      return;
+    }
+
+    final surveyToken = _pendingSurveyToken;
+    if (surveyToken != null) {
+      _pendingSurveyToken = null;
+      await openSurvey(surveyToken.isEmpty ? null : surveyToken);
     }
   }
 
