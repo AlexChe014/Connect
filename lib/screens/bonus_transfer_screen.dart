@@ -1,11 +1,15 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/app_theme.dart';
 import '../models/bonus_program/point_balance.dart';
 import '../models/bonus_program/point_transfer.dart';
 import '../models/staff_user.dart';
 import '../repositories/bonus_program_repository.dart';
 import '../services/api_client.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/bonus_glass.dart';
+import '../widgets/booking_glass_form.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/staff_user_picker_sheet.dart';
 
@@ -51,12 +55,6 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
   }
 
   void _onFormChanged() => setState(() {});
-
-  TextStyle _sectionHeaderStyle(BuildContext context) => TextStyle(
-    color: CupertinoColors.secondaryLabel.resolveFrom(context),
-    fontSize: 13,
-    fontWeight: FontWeight.w400,
-  );
 
   Future<void> _loadBalance() async {
     setState(() {
@@ -195,9 +193,9 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Готово 🎉'),
         content: Text(
-          'Переведено ${transfer.points} баллов'
+          'Переведено ${formatPoints(transfer.points)}'
           '${transfer.recipientName != null ? ' — ${transfer.recipientName}' : ''}.'
-          '${_balance != null ? '\nОстаток: ${_balance!.points} баллов.' : ''}',
+          '${_balance != null ? '\nОстаток: ${formatPoints(_balance!.points)}.' : ''}',
         ),
         actions: [
           CupertinoDialogAction(
@@ -212,156 +210,134 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Перевести баллы'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          color: CupertinoColors.label.resolveFrom(context),
-          decoration: TextDecoration.none,
-        ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            children: [
-              _BalanceChip(
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final label = CupertinoColors.label.resolveFrom(context);
+    final recipient = _recipient;
+    return BonusGlassScaffold(
+      title: 'Перевести баллы',
+      canPop: !_isSubmitting,
+      slivers: [
+        SliverList.list(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _BalanceCard(
                 balance: _balance,
                 isLoading: _isLoadingBalance,
                 error: _balanceError,
                 onRetry: _loadBalance,
               ),
-              const SizedBox(height: 16),
-              CupertinoListSection.insetGrouped(
-                margin: EdgeInsets.zero,
-                header: Text('ПОЛУЧАТЕЛЬ', style: _sectionHeaderStyle(context)),
-                children: [
-                  CupertinoListTile(
-                    leading: _recipient != null
-                        ? MemberAvatar(
-                            displayName: _recipient!.fullName,
-                            avatarUrl: _recipient!.avatarUrl,
-                            radius: 18,
-                          )
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: CupertinoColors.systemGrey5.resolveFrom(
-                                context,
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              CupertinoIcons.person_fill,
-                              size: 18,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
-                              ),
-                            ),
+            ),
+            const AppGlassSectionLabel('Получатель'),
+            AppGlassSection(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                CupertinoListTile(
+                  padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 14, 10),
+                  leadingSize: 40,
+                  leading: recipient != null
+                      ? MemberAvatar(
+                          displayName: recipient.fullName,
+                          avatarUrl: recipient.avatarUrl,
+                          radius: 20,
+                        )
+                      : Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
                           ),
-                    title: Text(_recipient?.fullName ?? 'Выбрать сотрудника'),
-                    subtitle: _recipient?.department != null
-                        ? Text(_recipient!.department!)
-                        : null,
-                    trailing: const CupertinoListTileChevron(),
-                    onTap: _pickRecipient,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              CupertinoListSection.insetGrouped(
-                margin: EdgeInsets.zero,
-                header: Text('СУММА', style: _sectionHeaderStyle(context)),
-                footer: Text(
-                  _amountError ?? _limitsHint,
-                  style: _sectionHeaderStyle(context).copyWith(
-                    color: _amountError != null
-                        ? CupertinoColors.systemRed
-                        : CupertinoColors.secondaryLabel.resolveFrom(context),
-                  ),
-                ),
-                children: [
-                  CupertinoTextField(
-                    controller: _pointsController,
-                    keyboardType: TextInputType.number,
-                    placeholder: 'Количество баллов',
-                    suffix: Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: Text(
-                        'баллов',
-                        style: TextStyle(
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
+                          child: const Icon(
+                            CupertinoIcons.person_fill,
+                            size: 20,
+                            color: AppColors.primary,
                           ),
-                          fontSize: 15,
                         ),
-                      ),
+                  title: Text(
+                    recipient?.fullName ?? 'Выбрать сотрудника',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: recipient != null ? label : AppColors.primary,
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: null,
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              CupertinoListSection.insetGrouped(
-                margin: EdgeInsets.zero,
-                header: Text(
-                  'КОММЕНТАРИЙ',
-                  style: _sectionHeaderStyle(context),
-                ),
-                children: [
-                  CupertinoTextField(
-                    controller: _commentController,
-                    placeholder: 'Необязательно',
-                    maxLines: 2,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: null,
-                  ),
-                ],
-              ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: CupertinoColors.systemRed),
+                  subtitle: recipient?.department != null
+                      ? Text(recipient!.department!)
+                      : null,
+                  trailing: const CupertinoListTileChevron(),
+                  onTap: _isSubmitting ? null : _pickRecipient,
                 ),
               ],
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: CupertinoButton.filled(
-                  onPressed: _canSubmit ? _submit : null,
-                  child: _isSubmitting
-                      ? const CupertinoActivityIndicator(
-                          color: CupertinoColors.white,
-                        )
-                      : const Text('Перевести'),
+            ),
+            const AppGlassSectionLabel('Сумма'),
+            AppGlassSection(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                CupertinoTextField(
+                  controller: _pointsController,
+                  keyboardType: TextInputType.number,
+                  placeholder: 'Количество баллов',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: label,
+                  ),
+                  suffix: Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: Text(
+                      pointsWord(_points ?? 0),
+                      style: TextStyle(color: secondary, fontSize: 15),
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                  decoration: const BoxDecoration(),
                 ),
+              ],
+            ),
+            BookingFootnote(
+              _amountError ?? _limitsHint,
+              isError: _amountError != null,
+            ),
+            const AppGlassSectionLabel('Комментарий'),
+            AppGlassSection(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                CupertinoTextField(
+                  controller: _commentController,
+                  placeholder: 'Необязательно',
+                  textCapitalization: TextCapitalization.sentences,
+                  minLines: 1,
+                  maxLines: 4,
+                  style: TextStyle(fontSize: 16, color: label),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: const BoxDecoration(),
+                ),
+              ],
+            ),
+            if (_errorMessage != null)
+              BookingFootnote(_errorMessage!, isError: true),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+              child: AppPrimaryButton(
+                label: 'Перевести',
+                isLoading: _isSubmitting,
+                onPressed: _canSubmit ? _submit : null,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
+      ],
     );
   }
 }
 
-/// Компактная плашка текущего баланса — контекст, сколько баллов доступно
-/// перевести, прямо на экране перевода.
-class _BalanceChip extends StatelessWidget {
-  const _BalanceChip({
+/// Сколько баллов доступно перевести — прямо на экране перевода.
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({
     required this.balance,
     required this.isLoading,
     this.error,
@@ -376,78 +352,75 @@ class _BalanceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const AppSkeletonBox(height: 48, borderRadius: 12);
+      return const AppSkeletonBox(height: 64, borderRadius: 22);
     }
-    if (error != null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: CupertinoColors.systemRed.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(12),
-        ),
+    final balance = this.balance;
+    if (error == null && balance == null) return const SizedBox.shrink();
+
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final tint = error != null
+        ? CupertinoColors.systemRed.resolveFrom(context)
+        : AppColors.primary;
+    return AppGlass(
+      borderRadius: BorderRadius.circular(22),
+      shadows: AppGlass.controlShadow,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
         child: Row(
           children: [
-            const Icon(
-              CupertinoIcons.exclamationmark_triangle,
-              color: CupertinoColors.systemRed,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                error!,
-                style: const TextStyle(
-                  color: CupertinoColors.systemRed,
-                  fontSize: 14,
-                ),
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: isDark ? 0.24 : 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                error != null
+                    ? CupertinoIcons.exclamationmark_triangle_fill
+                    : CupertinoIcons.star_fill,
+                size: 19,
+                color: tint,
               ),
             ),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-              onPressed: onRetry,
-              child: const Text('Повторить'),
-            ),
+            const SizedBox(width: 12),
+            if (error != null) ...[
+              Expanded(
+                child: Text(
+                  error!,
+                  style: TextStyle(fontSize: 15, color: tint),
+                ),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: onRetry,
+                child: const Text(
+                  'Повторить',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ] else ...[
+              Expanded(
+                child: Text(
+                  'Доступно',
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  ),
+                ),
+              ),
+              Text(
+                formatPoints(balance!.points),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
         ),
-      );
-    }
-    if (balance == null) return const SizedBox.shrink();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [CupertinoColors.systemIndigo, CupertinoColors.systemPurple],
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            CupertinoIcons.creditcard,
-            color: CupertinoColors.white,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            'Доступно',
-            style: TextStyle(color: CupertinoColors.white, fontSize: 14),
-          ),
-          const Spacer(),
-          Text(
-            '${balance!.points} баллов',
-            style: const TextStyle(
-              color: CupertinoColors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }

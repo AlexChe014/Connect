@@ -47,6 +47,17 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   final _toController = TextEditingController();
   final _subjectController = TextEditingController();
   final _bodyController = TextEditingController();
+
+  static const _forwardMarker = '---------- Пересланное сообщение ----------';
+
+  /// Текст пользователя без цитаты исходного письма: сервер сам добавляет
+  /// пересылаемое письмо целиком (с HTML), иначе оно вышло бы дважды.
+  String get _forwardComment {
+    final text = _bodyController.text;
+    final cut = text.indexOf(_forwardMarker);
+    return (cut < 0 ? text : text.substring(0, cut)).trim();
+  }
+
   final List<_PendingAttachment> _attachments = [];
   bool _isSending = false;
   String? _toError;
@@ -117,7 +128,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       final quote = forwardOf.previewBody;
       final date = forwardOf.date;
       _bodyController.text =
-          '\n\n---------- Пересланное сообщение ----------\n'
+          '\n\n$_forwardMarker\n'
           'От: ${forwardOf.from}\n'
           '${date == null ? '' : 'Дата: ${dateFormat.format(date.toLocal())}\n'}'
           'Тема: ${forwardOf.subject}\n'
@@ -291,7 +302,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             messageId: forwardOf.id,
             to: _toValue,
             subject: _subjectController.text.trim(),
-            body: _bodyController.text,
+            body: _forwardComment,
             attachments: files,
           ),
         );

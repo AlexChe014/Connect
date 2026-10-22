@@ -31,9 +31,14 @@ class MailInboxScreen extends StatefulWidget {
     super.key,
     required this.connection,
     this.connections = const [],
+    this.isTab = false,
   });
 
   final MailConnection connection;
+
+  /// Экран — корень вкладки «Почта»: без кнопки «назад», а кнопку «Домой»
+  /// прячет сама оболочка, пока вкладка активна.
+  final bool isTab;
 
   /// Остальные подключённые ящики пользователя — чтобы показать
   /// переключатель в шапке. Если пуст или содержит только [connection],
@@ -118,7 +123,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     WidgetsBinding.instance.addObserver(this);
     // Нижняя стеклянная панель занимает всю ширину — плавающая кнопка
     // «Домой» легла бы поверх поиска (см. HomeShortcutButton).
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
+    if (!widget.isTab) {
+      _releaseHomeSuppress = HomeShortcutButton.suppress();
+    }
     MailUnreadService.instance.mailChanges.addListener(_refreshVisible);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
@@ -812,23 +819,24 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         : folder.displayName;
   }
 
-  Widget _buildNavBar(BuildContext context) {
+  Widget _buildNavBar(BuildContext context, {required bool blur}) {
     final label = CupertinoColors.label.resolveFrom(context);
     Widget iconButton(IconData icon, VoidCallback onPressed) => CupertinoButton(
       padding: const EdgeInsets.only(left: 16),
       minimumSize: Size.zero,
       onPressed: onPressed,
-      child: Icon(icon, size: 24, color: label),
+      child: Icon(icon, size: 26, color: label),
     );
 
     return CupertinoSliverNavigationBar(
       largeTitle: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-      // дала бы на цветном пятне видимую границу.
+      // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+      // Размытие — только при прокрутке (AppGlassBarBlur).
       backgroundColor: CupertinoColors.systemBackground
           .resolveFrom(context)
           .withValues(alpha: 0),
       automaticBackgroundVisibility: false,
+      enableBackgroundFilterBlur: blur,
       border: null,
       leading: _isEditing
           ? CupertinoButton(
@@ -837,6 +845,8 @@ class _MailInboxScreenState extends State<MailInboxScreen>
               onPressed: () => _setEditing(false),
               child: Text('Отмена', style: TextStyle(color: label)),
             )
+          : widget.isTab
+          ? null
           : CupertinoButton(
               padding: EdgeInsets.zero,
               minimumSize: Size.zero,
@@ -859,6 +869,10 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                 if (_folders.isNotEmpty)
                   iconButton(CupertinoIcons.folder, _showFolderPicker),
                 iconButton(CupertinoIcons.ellipsis_circle, _showMoreMenu),
+                // Во вкладке нижняя панель уступила место таббару —
+                // «написать» переезжает в шапку, как «+» в Чатах.
+                if (widget.isTab)
+                  iconButton(CupertinoIcons.square_pencil, _openCompose),
               ],
             ),
     );
@@ -1042,71 +1056,89 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     final hasConnectionError =
         !_connection.isActive || (_connection.lastError ?? '').isNotEmpty;
 
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: () => _loadMessages(forceSync: true),
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    final metrics = notification.metrics;
-                    if (metrics.pixels >= metrics.maxScrollExtent - 200) {
-                      _loadMoreMessages();
-                    }
-                    return false;
-                  },
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    slivers: [
-                      _buildNavBar(context),
-                      SliverToBoxAdapter(child: _buildAccountChip(context)),
-                      if (hasConnectionError)
-                        SliverToBoxAdapter(child: _buildErrorBanner(context)),
-                      ..._buildListSlivers(context),
-                      // Последнее письмо не должно прятаться под панелью.
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: MailFloatingBar.reservedHeight(context),
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: () => _loadMessages(forceSync: true),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      final metrics = notification.metrics;
+                      if (metrics.pixels >= metrics.maxScrollExtent - 200) {
+                        _loadMoreMessages();
+                      }
+                      return false;
+                    },
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      slivers: [
+                        _buildNavBar(context, blur: blur),
+                        SliverToBoxAdapter(child: _buildAccountChip(context)),
+                        if (widget.isTab)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: CupertinoSearchTextField(
+                                controller: _searchController,
+                                placeholder: 'Поиск писем',
+                                onChanged: _onSearchChanged,
+                              ),
+                            ),
+                          ),
+                        if (hasConnectionError)
+                          SliverToBoxAdapter(child: _buildErrorBanner(context)),
+                        ..._buildListSlivers(context),
+                        // Последнее письмо не должно прятаться под панелью.
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: widget.isTab && !_isEditing
+                                ? MediaQuery.paddingOf(context).bottom + 16
+                                : MailFloatingBar.reservedHeight(context),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _isEditing
-                  ? _EditToolbar(
-                      selectedCount: _selectedIds.length,
-                      isBusy: _isBulkActing,
-                      onMarkRead: () => _bulkMarkRead(read: true),
-                      onMarkUnread: () => _bulkMarkRead(read: false),
-                      onDelete: _bulkDelete,
-                    )
-                  : _SearchComposeBar(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      onCompose: () => _openCompose(),
-                    ),
-            ),
-          ],
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _isEditing
+                    ? _EditToolbar(
+                        selectedCount: _selectedIds.length,
+                        isBusy: _isBulkActing,
+                        onMarkRead: () => _bulkMarkRead(read: true),
+                        onMarkUnread: () => _bulkMarkRead(read: false),
+                        onDelete: _bulkDelete,
+                      )
+                    : widget.isTab
+                    ? const SizedBox.shrink()
+                    : _SearchComposeBar(
+                        controller: _searchController,
+                        onChanged: _onSearchChanged,
+                        onCompose: () => _openCompose(),
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

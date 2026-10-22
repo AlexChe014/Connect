@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/bookings/user_booking.dart';
@@ -31,11 +33,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   List<UserBooking> _upcomingBookings = const [];
   bool _bookingsLoading = false;
+  String? _appVersion;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
     NotificationUnreadService.instance.refresh();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() => _appVersion = '${info.version} (${info.buildNumber})');
+    } catch (_) {
+      // Без версии профиль работает — строку просто не показываем.
+    }
   }
 
   Future<void> _openNotifications() async {
@@ -518,6 +533,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Политика конфиденциальности',
             onPressed: _openPrivacyPolicy,
           ),
+          if (_appVersion != null) _versionLabel(_appVersion!),
         ],
       ),
     );
@@ -566,6 +582,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
         style: TextStyle(
           fontSize: 13,
           color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+    );
+  }
+
+  /// Версия сборки в самом низу профиля: по ней поддержка понимает, какой
+  /// билд у пользователя. Долгое нажатие копирует строку.
+  Widget _versionLabel(String version) {
+    return GestureDetector(
+      onLongPress: () {
+        Clipboard.setData(ClipboardData(text: version));
+        HapticFeedback.selectionClick();
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('Версия скопирована')));
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          'Версия $version',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+          ),
         ),
       ),
     );

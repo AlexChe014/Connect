@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../config/api_config.dart';
 import '../config/branding.dart';
+import '../config/home_tabs.dart';
 import '../services/auth_service.dart';
 import '../services/branding_service.dart';
 import '../services/notification_preferences_service.dart';
@@ -106,7 +107,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(
           '/home',
-          arguments: {'initialIndex': 3},
+          arguments: {'initialIndex': HomeTabs.news},
         );
       }
     } on AuthException catch (e) {
@@ -143,8 +144,9 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final maxFormWidth =
-                  constraints.maxWidth >= 700 ? 480.0 : constraints.maxWidth;
+              final maxFormWidth = constraints.maxWidth >= 700
+                  ? 480.0
+                  : constraints.maxWidth;
 
               return Center(
                 child: SingleChildScrollView(
@@ -152,8 +154,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxWidth: maxFormWidth,
-                      minHeight: (constraints.maxHeight - 48)
-                          .clamp(0.0, double.infinity),
+                      minHeight: (constraints.maxHeight - 48).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -175,8 +179,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 15,
-                            color: CupertinoColors.secondaryLabel
-                                .resolveFrom(context),
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
@@ -193,8 +198,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Icon(
                                 CupertinoIcons.info_circle,
-                                color: CupertinoColors.activeBlue
-                                    .resolveFrom(context),
+                                color: CupertinoColors.activeBlue.resolveFrom(
+                                  context,
+                                ),
                                 size: 22,
                               ),
                               const SizedBox(width: 10),
@@ -262,8 +268,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: CupertinoColors.systemRed
-                                  .withValues(alpha: 0.12),
+                              color: CupertinoColors.systemRed.withValues(
+                                alpha: 0.12,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
@@ -359,10 +366,7 @@ class _AuthField extends StatelessWidget {
       ),
       suffix: suffix == null
           ? null
-          : Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: suffix,
-            ),
+          : Padding(padding: const EdgeInsets.only(right: 16), child: suffix),
     );
   }
 }

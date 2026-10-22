@@ -865,68 +865,71 @@ class _DiskScreenState extends State<DiskScreen> {
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
     final task = _task;
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: () => _load(silent: true),
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  slivers: [
-                    _buildNavBar(context),
-                    if (_crumbs.isNotEmpty)
-                      SliverToBoxAdapter(child: _buildBreadcrumb(context)),
-                    _buildContentSliver(),
-                    // Последняя строка не должна прятаться под панелью.
-                    SliverToBoxAdapter(
-                      child: SizedBox(
-                        height:
-                            MailFloatingBar.reservedHeight(context) +
-                            (task != null ? _DiskTaskCapsule.height + 8 : 0),
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: () => _load(silent: true),
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    slivers: [
+                      _buildNavBar(context, blur: blur),
+                      if (_crumbs.isNotEmpty)
+                        SliverToBoxAdapter(child: _buildBreadcrumb(context)),
+                      _buildContentSliver(),
+                      // Последняя строка не должна прятаться под панелью.
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height:
+                              MailFloatingBar.reservedHeight(context) +
+                              (task != null ? _DiskTaskCapsule.height + 8 : 0),
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (task != null) _DiskTaskCapsule(task: task),
+                    _DiskBottomBar(
+                      controller: _searchController,
+                      onChanged: (value) => setState(() => _query = value),
+                      onAdd: _task == null && !_isBusy ? _showAddMenu : null,
                     ),
                   ],
                 ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (task != null) _DiskTaskCapsule(task: task),
-                  _DiskBottomBar(
-                    controller: _searchController,
-                    onChanged: (value) => setState(() => _query = value),
-                    onAdd: _task == null && !_isBusy ? _showAddMenu : null,
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNavBar(BuildContext context) {
+  Widget _buildNavBar(BuildContext context, {required bool blur}) {
     final label = CupertinoColors.label.resolveFrom(context);
     return CupertinoSliverNavigationBar(
       largeTitle: Text(
@@ -934,12 +937,13 @@ class _DiskScreenState extends State<DiskScreen> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-      // дала бы на цветном пятне видимую границу.
+      // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+      // Размытие — только при прокрутке (AppGlassBarBlur).
       backgroundColor: CupertinoColors.systemGroupedBackground
           .resolveFrom(context)
           .withValues(alpha: 0),
       automaticBackgroundVisibility: false,
+      enableBackgroundFilterBlur: blur,
       border: null,
       leading: CupertinoButton(
         padding: EdgeInsets.zero,

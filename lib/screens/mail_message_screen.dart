@@ -589,79 +589,84 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
     final label = CupertinoColors.label.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.maybePop(context),
-          child: Icon(CupertinoIcons.back, size: 26, color: label),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: CupertinoNavigationBar(
+          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+          // Размытие — только при прокрутке (AppGlassBarBlur).
+          backgroundColor: groupedBg.withValues(alpha: 0),
+          automaticBackgroundVisibility: false,
+          enableBackgroundFilterBlur: blur,
+          border: null,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => Navigator.maybePop(context),
+            child: Icon(CupertinoIcons.back, size: 26, color: label),
+          ),
+          trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
         ),
-        trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 15,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            if (_isLoading)
-              const SafeArea(child: AppPageLoader())
-            else if (message == null)
-              const SafeArea(child: AppEmptyState(message: 'Письмо не найдено'))
-            else ...[
-              Builder(
-                // Свой context — под скаффолдом, где в MediaQuery уже учтена
-                // высота полупрозрачной шапки.
-                builder: (context) => ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    MediaQuery.paddingOf(context).top + 8,
-                    16,
-                    MailFloatingBar.reservedHeight(context) + 8,
-                  ),
-                  children: [
-                    _buildHeaderCard(context, message),
-                    const SizedBox(height: 10),
-                    AppFlatGlassCard(
-                      // HTML-письмо сам WebView отбивает от краёв, лишний
-                      // отступ карточки только отнимал у него ширину.
-                      padding: MailBodyContent.rendersHtml(message)
-                          ? EdgeInsets.zero
-                          : const EdgeInsets.all(16),
-                      child: MailBodyContent(
-                        message: message,
-                        loadAttachment: (attachment) =>
-                            MailRepository.instance.downloadAttachment(
-                              connectionId: widget.connection.id,
-                              messageId: widget.messageId,
-                              filename: attachment.filename,
-                            ),
-                      ),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 15,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              if (_isLoading)
+                const SafeArea(child: AppPageLoader())
+              else if (message == null)
+                const SafeArea(
+                  child: AppEmptyState(message: 'Письмо не найдено'),
+                )
+              else ...[
+                Builder(
+                  // Свой context — под скаффолдом, где в MediaQuery уже учтена
+                  // высота полупрозрачной шапки.
+                  builder: (context) => ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.paddingOf(context).top + 8,
+                      16,
+                      MailFloatingBar.reservedHeight(context) + 8,
                     ),
-                    if (_listedAttachments(message).isNotEmpty)
-                      _buildAttachments(context, message),
-                  ],
+                    children: [
+                      _buildHeaderCard(context, message),
+                      const SizedBox(height: 10),
+                      AppFlatGlassCard(
+                        // HTML-письмо сам WebView отбивает от краёв, лишний
+                        // отступ карточки только отнимал у него ширину.
+                        padding: MailBodyContent.rendersHtml(message)
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.all(16),
+                        child: MailBodyContent(
+                          message: message,
+                          loadAttachment: (attachment) =>
+                              MailRepository.instance.downloadAttachment(
+                                connectionId: widget.connection.id,
+                                messageId: widget.messageId,
+                                filename: attachment.filename,
+                              ),
+                        ),
+                      ),
+                      if (_listedAttachments(message).isNotEmpty)
+                        _buildAttachments(context, message),
+                    ],
+                  ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _buildActionBar(),
-              ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildActionBar(),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

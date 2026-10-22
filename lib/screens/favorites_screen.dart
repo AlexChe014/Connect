@@ -11,7 +11,6 @@ import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/employee_row.dart';
-import '../widgets/menu_button.dart';
 import 'create_booking_screen.dart';
 import 'employee_detail_screen.dart';
 
@@ -59,10 +58,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
 
   @override
   void didPopNext() {
-    // Экран остаётся смонтированным под запушенными поверх него route (эта
-    // вкладка не пересоздаётся при переходах через боковое меню), поэтому
-    // избранное, изменённое там, не подхватится без явной перезагрузки при
-    // возврате сюда.
+    // Экран остаётся смонтированным под запушенными поверх него route,
+    // поэтому избранное, изменённое там, не подхватится без явной
+    // перезагрузки при возврате сюда.
     _load();
   }
 
@@ -291,43 +289,56 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: _load,
-                child: CustomScrollView(
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Избранное'),
-                      leading: const MenuButton(),
-                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-                      // дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                    ),
-                    SliverToBoxAdapter(child: _buildSegmentedControl()),
-                    _buildResultsSliver(),
-                  ],
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: _load,
+                  child: CustomScrollView(
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Избранное'),
+                        leading: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: () => Navigator.maybePop(context),
+                          child: Icon(
+                            CupertinoIcons.back,
+                            size: 26,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ),
+                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+                        // Размытие — только при прокрутке (AppGlassBarBlur).
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
+                      ),
+                      SliverToBoxAdapter(child: _buildSegmentedControl()),
+                      _buildResultsSliver(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

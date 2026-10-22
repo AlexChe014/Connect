@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:connect/config/home_tabs.dart';
 import 'package:connect/config/notification_topics.dart';
 import 'package:connect/models/documents/document_service.dart';
-import 'package:connect/models/surveys/survey_invitation.dart';
 import 'package:connect/models/mail/mail_connection.dart';
+import 'package:connect/models/surveys/survey_invitation.dart';
 import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/documents_repository.dart';
 import 'package:connect/repositories/mail_repository.dart';
@@ -129,10 +130,14 @@ class AppNavigationService {
         return;
       }
 
-      await navigator.pushNamedAndRemoveUntil(
-        '/home',
-        (route) => false,
-        arguments: {'initialIndex': 2},
+      // Без await: `/home` — корневой route, его Future завершится, только
+      // когда его закроют, и код ниже не выполнился бы.
+      unawaited(
+        navigator.pushNamedAndRemoveUntil(
+          '/home',
+          (route) => false,
+          arguments: {'initialIndex': HomeTabs.chats},
+        ),
       );
 
       if (!navigator.mounted) return;
@@ -171,10 +176,14 @@ class AppNavigationService {
     }
 
     if (!navigator.mounted) return;
-    await navigator.pushNamedAndRemoveUntil(
-      '/home',
-      (route) => false,
-      arguments: {'initialIndex': 0, 'openNewsId': newsId},
+    // Без await: Future корневого `/home` завершится, только когда его
+    // закроют, — вызывающий код (openFromData) завис бы.
+    unawaited(
+      navigator.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+        arguments: {'initialIndex': HomeTabs.news, 'openNewsId': newsId},
+      ),
     );
   }
 
@@ -198,7 +207,7 @@ class AppNavigationService {
       navigator.pushNamedAndRemoveUntil(
         '/home',
         (route) => false,
-        arguments: {'initialIndex': 0},
+        arguments: {'initialIndex': HomeTabs.more},
       ),
     );
     unawaited(
@@ -255,19 +264,22 @@ class AppNavigationService {
       return;
     }
 
-    await navigator.pushNamedAndRemoveUntil(
-      '/home',
-      (route) => false,
-      arguments: {'initialIndex': 0},
-    );
-
-    if (!navigator.mounted) return;
-    await navigator.push<void>(
-      CupertinoPageRoute<void>(
-        builder: (context) => const MailScreen(autoOpenInbox: false),
+    // Без await: `/home` — корневой route, его Future завершится, только
+    // когда его закроют, и код ниже не выполнился бы.
+    unawaited(
+      navigator.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+        arguments: {'initialIndex': HomeTabs.mail},
       ),
     );
+    if (!navigator.mounted) return;
 
+    // Экраны открываем без await: Future от push завершается, когда экран
+    // ЗАКРЫВАЮТ. Раньше тут открывался список ящиков и код ждал его
+    // закрытия — до входящих и самого письма дело не доходило.
+    // Сама вкладка «Почта» уже показывает основной ящик — дальше открываем
+    // только то, чего в ней нет.
     final id = int.tryParse(connectionId);
     final userId = await _currentUserId();
     if (id == null || userId == null) return;
@@ -275,26 +287,34 @@ class AppNavigationService {
       final connections = await MailRepository.instance.getConnectionsByUser(
         userId,
       );
-      MailConnection? connection;
-      for (final c in connections) {
-        if (c.id == id) {
-          connection = c;
-          break;
-        }
-      }
-      if (connection == null || !navigator.mounted) return;
-      await navigator.push<void>(
-        CupertinoPageRoute<void>(
-          builder: (context) => MailInboxScreen(connection: connection!),
-        ),
+      if (!navigator.mounted) return;
+      final connection = connections.where((c) => c.id == id).firstOrNull;
+      if (connection == null) return;
+      final tabConnection = connections.firstWhere(
+        (c) => c.isDefault,
+        orElse: () => connections.first,
       );
+      if (connection.id != tabConnection.id) {
+        unawaited(
+          navigator.push<void>(
+            CupertinoPageRoute<void>(
+              builder: (context) => MailInboxScreen(
+                connection: connection,
+                connections: connections,
+              ),
+            ),
+          ),
+        );
+      }
 
       final msgId = int.tryParse(messageId ?? '');
-      if (msgId == null || !navigator.mounted) return;
-      await navigator.push<void>(
-        CupertinoPageRoute<void>(
-          builder: (context) =>
-              MailMessageScreen(connection: connection!, messageId: msgId),
+      if (msgId == null) return;
+      unawaited(
+        navigator.push<void>(
+          CupertinoPageRoute<void>(
+            builder: (context) =>
+                MailMessageScreen(connection: connection, messageId: msgId),
+          ),
         ),
       );
     } catch (e, st) {
@@ -324,10 +344,14 @@ class AppNavigationService {
     final id = int.tryParse(bookingId);
     if (id == null) return;
 
-    await navigator.pushNamedAndRemoveUntil(
-      '/home',
-      (route) => false,
-      arguments: {'initialIndex': 1},
+    // Без await: `/home` — корневой route, его Future завершится, только
+    // когда его закроют, и код ниже не выполнился бы.
+    unawaited(
+      navigator.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+        arguments: {'initialIndex': HomeTabs.calendar},
+      ),
     );
 
     if (!navigator.mounted) return;
@@ -370,7 +394,7 @@ class AppNavigationService {
       navigator.pushNamedAndRemoveUntil(
         '/home',
         (route) => false,
-        arguments: {'initialIndex': 0},
+        arguments: {'initialIndex': HomeTabs.more},
       ),
     );
     unawaited(
@@ -467,7 +491,7 @@ class AppNavigationService {
             navigator.pushNamedAndRemoveUntil(
               '/home',
               (route) => false,
-              arguments: {'initialIndex': 0},
+              arguments: {'initialIndex': HomeTabs.news},
             ),
           );
           await openNotificationInPlace(data);
@@ -657,7 +681,10 @@ class AppNavigationService {
   /// `data` (бэкенд для части типов уведомлений кладёт оригинальные поля
   /// только туда, JSON-строкой в push и вложенной картой в ленте
   /// уведомлений, не дублируя их наверх).
-  static String? resolveDataField(Map<String, dynamic> data, List<String> keys) {
+  static String? resolveDataField(
+    Map<String, dynamic> data,
+    List<String> keys,
+  ) {
     for (final key in keys) {
       final value = data[key];
       if (value != null && value.toString().isNotEmpty) {

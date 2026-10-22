@@ -72,6 +72,7 @@ class MailBodyContent extends StatefulWidget {
 
 class _MailBodyContentState extends State<MailBodyContent> {
   static const _heightChannel = 'MailBodyHeight';
+  static const _selectionChannel = 'MailBodySelection';
 
   /// Высота до первого замера — небольшая, чтобы короткие письма не
   /// оставляли под собой пустое место, пока WebView грузится.
@@ -79,6 +80,19 @@ class _MailBodyContentState extends State<MailBodyContent> {
 
   WebViewController? _controller;
   double _contentHeight = _initialHeight;
+
+  /// В письме выделен текст: пока выделение есть, WebView забирает все
+  /// жесты — иначе вертикальное перетаскивание ручек выделения перехватывал
+  /// скролл страницы, и выделить больше пары слов не получалось.
+  bool _hasSelection = false;
+
+  /// WebView уже отрисовал письмо. До этого на месте тела крутится
+  /// индикатор — иначе медленное письмо выглядело как пустое окно.
+  bool _isRendered = false;
+
+  /// Завершается, когда страница загружена и в неё можно подставлять
+  /// встроенные картинки.
+  Completer<void> _pageFinished = Completer<void>();
 
   /// Номер загрузки: ответ на устаревший запрос картинок не должен
   /// подменить письмо, если его успели заменить.
@@ -98,6 +112,8 @@ class _MailBodyContentState extends State<MailBodyContent> {
     // (или пустой) HTML.
     if (oldWidget.message.htmlContent != widget.message.htmlContent) {
       _contentHeight = _initialHeight;
+      _hasSelection = false;
+      _isRendered = false;
       _initController();
     }
   }
@@ -108,29 +124,53 @@ class _MailBodyContentState extends State<MailBodyContent> {
       _controller = null;
       return;
     }
+    _pageFinished = Completer<void>();
+    final pageFinished = _pageFinished;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFFFFFFFF))
       ..addJavaScriptChannel(_heightChannel, onMessageReceived: _onHeight)
+      ..addJavaScriptChannel(_selectionChannel, onMessageReceived: _onSelection)
       ..setNavigationDelegate(
-        NavigationDelegate(onNavigationRequest: _onNavigationRequest),
+        NavigationDelegate(
+          onNavigationRequest: _onNavigationRequest,
+          onPageFinished: (_) {
+            if (!pageFinished.isCompleted) pageFinished.complete();
+            if (mounted && !_isRendered) setState(() => _isRendered = true);
+          },
+        ),
       );
     unawaited(_load(html));
   }
 
+  /// Текст письма показываем сразу, а встроенные картинки (`cid:`)
+  /// подставляем в уже открытую страницу по мере скачивания — раньше
+  /// письмо целиком ждало их до 8 секунд, и окно оставалось пустым.
   Future<void> _load(String html) async {
     final token = ++_loadToken;
     final controller = _controller;
-    final resolved = await _inlineCidImages(html);
+    final pageFinished = _pageFinished;
+    if (controller == null) return;
+    await controller.loadHtmlString(_prepareHtml(html));
+    final images = await _resolveCidImages(html);
+    if (images.isEmpty) return;
+    await pageFinished.future;
     if (!mounted || token != _loadToken || controller != _controller) return;
-    await controller?.loadHtmlString(_prepareHtml(resolved));
+    for (final entry in images.entries) {
+      try {
+        await controller.runJavaScript(
+          'window.mailSetCid(${jsonEncode(entry.key)}, '
+          '${jsonEncode(entry.value)});',
+        );
+      } catch (_) {}
+    }
   }
 
-  /// Подставляет встроенные картинки data-URI. Не дольше нескольких
-  /// секунд: медленное вложение не должно задерживать текст письма.
-  Future<String> _inlineCidImages(String html) async {
+  /// Скачивает встроенные картинки как data-URI. Не дольше нескольких
+  /// секунд на картинку: медленное вложение остаётся битым.
+  Future<Map<String, String>> _resolveCidImages(String html) async {
     final load = widget.loadAttachment;
-    if (load == null || !html.toLowerCase().contains('cid:')) return html;
+    if (load == null || !html.toLowerCase().contains('cid:')) return const {};
     final cids = MailBodyContent._cidPattern
         .allMatches(html)
         .map((m) => m.group(1)!)
@@ -155,14 +195,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
         }
       }),
     );
-    var result = html;
-    replacements.forEach((cid, dataUri) {
-      result = result.replaceAll(
-        RegExp('cid:${RegExp.escape(cid)}', caseSensitive: false),
-        dataUri,
-      );
-    });
-    return result;
+    return replacements;
   }
 
   static String _mimeFromName(String filename) {
@@ -180,8 +213,19 @@ class _MailBodyContentState extends State<MailBodyContent> {
   void _onHeight(JavaScriptMessage message) {
     final height = double.tryParse(message.message);
     if (height == null || height <= 0 || !mounted) return;
-    if ((height - _contentHeight).abs() < 1) return;
-    setState(() => _contentHeight = height);
+    if ((height - _contentHeight).abs() < 1 && _isRendered) return;
+    // Высота приходит из уже отрисованной страницы — запасной сигнал на
+    // случай, если onPageFinished не сработает.
+    setState(() {
+      _contentHeight = height;
+      _isRendered = true;
+    });
+  }
+
+  void _onSelection(JavaScriptMessage message) {
+    final hasSelection = message.message == '1';
+    if (hasSelection == _hasSelection || !mounted) return;
+    setState(() => _hasSelection = hasSelection);
   }
 
   /// Ссылки из письма открываем во внешнем браузере / почтовом клиенте,
@@ -214,7 +258,8 @@ class _MailBodyContentState extends State<MailBodyContent> {
   html { background: #ffffff; -webkit-text-size-adjust: 100%; }
   body { margin: 0 !important; padding: 12px !important; color: #000000;
          font-family: -apple-system, Roboto, Arial, sans-serif;
-         word-wrap: break-word; overflow-wrap: anywhere; overflow-x: auto; }
+         word-wrap: break-word; overflow-wrap: anywhere; overflow-x: auto;
+         -webkit-user-select: text !important; user-select: text !important; }
   img { max-width: 100% !important; height: auto !important; }
   table { max-width: 100% !important; }
   td, th { word-break: break-word; }
@@ -247,6 +292,23 @@ class _MailBodyContentState extends State<MailBodyContent> {
   }
   setTimeout(report, 300);
   setTimeout(report, 1500);
+  window.mailSetCid = function (cid, uri) {
+    var want = ('cid:' + cid).toLowerCase();
+    var imgs = document.images;
+    for (var i = 0; i < imgs.length; i++) {
+      var src = (imgs[i].getAttribute('src') || '').toLowerCase();
+      if (src === want) imgs[i].src = uri;
+    }
+  };
+  var selected = false;
+  document.addEventListener('selectionchange', function () {
+    var s = window.getSelection();
+    var now = !!s && !s.isCollapsed && String(s).length > 0;
+    if (now !== selected) {
+      selected = now;
+      MailBodySelection.postMessage(now ? '1' : '0');
+    }
+  });
 })();
 </script>
 ''';
@@ -307,15 +369,38 @@ class _MailBodyContentState extends State<MailBodyContent> {
         borderRadius: BorderRadius.circular(12),
         child: SizedBox(
           height: isCapped ? maxHeight : _contentHeight,
-          child: WebViewWidget(
-            controller: _controller!,
-            gestureRecognizers: isCapped
-                ? {
-                    Factory<VerticalDragGestureRecognizer>(
-                      VerticalDragGestureRecognizer.new,
-                    ),
-                  }
-                : const <Factory<OneSequenceGestureRecognizer>>{},
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: WebViewWidget(
+                  controller: _controller!,
+                  // Долгое нажатие всегда отдаём WebView, чтобы выделение текста
+                  // начиналось сразу, а не проигрывало скроллу страницы.
+                  gestureRecognizers: _hasSelection
+                      ? {
+                          Factory<EagerGestureRecognizer>(
+                            EagerGestureRecognizer.new,
+                          ),
+                        }
+                      : {
+                          Factory<LongPressGestureRecognizer>(
+                            LongPressGestureRecognizer.new,
+                          ),
+                          if (isCapped)
+                            Factory<VerticalDragGestureRecognizer>(
+                              VerticalDragGestureRecognizer.new,
+                            ),
+                        },
+                ),
+              ),
+              if (!_isRendered)
+                const Positioned.fill(
+                  child: ColoredBox(
+                    color: Color(0xFFFFFFFF),
+                    child: Center(child: CupertinoActivityIndicator()),
+                  ),
+                ),
+            ],
           ),
         ),
       );

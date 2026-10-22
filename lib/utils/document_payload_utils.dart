@@ -100,6 +100,8 @@ class DocumentPayloadUtils {
 
   static String labelForAcceptor(Map<String, dynamic> json) {
     for (final key in const [
+      'performer',
+      'Performer',
       'name',
       'Name',
       'title',
@@ -118,6 +120,8 @@ class DocumentPayloadUtils {
 
   static String? acceptorStatus(Map<String, dynamic> json) {
     for (final key in const [
+      'result',
+      'Result',
       'status',
       'Status',
       'state',
@@ -126,6 +130,22 @@ class DocumentPayloadUtils {
       'Decision',
       'Статус',
     ]) {
+      final value = _stringValue(json[key]);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  static String? acceptorDate(Map<String, dynamic> json) {
+    for (final key in const ['date', 'Date', 'Дата']) {
+      final value = _stringValue(json[key]);
+      if (value != null) return value;
+    }
+    return null;
+  }
+
+  static String? acceptorComment(Map<String, dynamic> json) {
+    for (final key in const ['comment', 'Comment', 'Комментарий']) {
       final value = _stringValue(json[key]);
       if (value != null) return value;
     }

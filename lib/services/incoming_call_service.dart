@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connect/config/call_config.dart';
+import 'package:connect/config/home_tabs.dart';
 import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/models/incoming_call_payload.dart';
 import 'package:connect/repositories/chat_call_repository.dart';
@@ -303,7 +304,10 @@ class IncomingCallService {
       if (!_shownCallIds.add(callId)) return;
 
       if (_isBusyFor(callId)) {
-        AppLogger.d('Incoming $callId while busy — auto-decline', name: 'callkit');
+        AppLogger.d(
+          'Incoming $callId while busy — auto-decline',
+          name: 'callkit',
+        );
         unawaited(
           ChatCallRepository.instance.declineCall(
             callId,
@@ -385,7 +389,8 @@ class IncomingCallService {
   bool _isBusyFor(String callId) {
     final calls = ChatCallService.instance;
     if (calls.liveDirectCallId == callId) return false;
-    return calls.isBusy || (_acceptInFlight && !_acceptedLocally.contains(callId));
+    return calls.isBusy ||
+        (_acceptInFlight && !_acceptedLocally.contains(callId));
   }
 
   /// CallKit показал входящий (и для FCM-пути, и для VoIP, показанного нативно).
@@ -411,7 +416,9 @@ class IncomingCallService {
       await AuthService.instance.init();
     }
     final status = await ChatCallRepository.instance.markRinging(callId);
-    if (status != null && status.isFinal && !_acceptedLocally.contains(callId)) {
+    if (status != null &&
+        status.isFinal &&
+        !_acceptedLocally.contains(callId)) {
       AppLogger.d(
         'CallKit $callId is already ${status.wire} on server — dismissing',
         name: 'callkit',
@@ -516,17 +523,13 @@ class IncomingCallService {
       AppNavigationService.navigatorKey.currentState?.pushNamedAndRemoveUntil(
         '/home',
         (route) => false,
-        arguments: {'initialIndex': 2},
+        arguments: {'initialIndex': HomeTabs.chats},
       );
 
       final session = await ConnectorRepository.instance.join(room);
       // Не закрываем CallKit до входа в Jitsi — иначе на lock screen
       // приложение может не подняться на передний план.
-      await openConnectorSession(
-        session,
-        callId: callId,
-        endWhenLeave: true,
-      );
+      await openConnectorSession(session, callId: callId, endWhenLeave: true);
       await FlutterCallkitIncoming.endCall(callId);
     } catch (e) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);

@@ -12,6 +12,7 @@ import '../services/chat_call_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/employee_row.dart';
+import '../widgets/app_icon_badge.dart';
 
 class EmployeeDetailScreen extends StatefulWidget {
   const EmployeeDetailScreen({super.key, required this.user});
@@ -166,18 +167,8 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     )?.showSnackBar(SnackBar(content: Text('$what скопирован')));
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 29,
-      height: 29,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Icon(icon, size: 17, color: CupertinoColors.white),
-    );
-  }
+  Widget _iconBadge(IconData icon, Color color) =>
+      AppIconBadge(icon: icon, color: color);
 
   /// Строка "подпись сверху / значение снизу на всю ширину" — длинные
   /// значения (email, роли) переносятся, а не обрезаются.
@@ -358,109 +349,112 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
       context,
     );
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.pop(context),
-          child: Icon(
-            CupertinoIcons.back,
-            size: 26,
-            color: CupertinoColors.label.resolveFrom(context),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: CupertinoNavigationBar(
+          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+          // Размытие — только при прокрутке (AppGlassBarBlur).
+          backgroundColor: groupedBg.withValues(alpha: 0),
+          automaticBackgroundVisibility: false,
+          enableBackgroundFilterBlur: blur,
+          border: null,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => Navigator.pop(context),
+            child: Icon(
+              CupertinoIcons.back,
+              size: 26,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
           ),
         ),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            Builder(
-              // Свой context — под скаффолдом, где в MediaQuery уже учтена
-              // высота полупрозрачной шапки.
-              builder: (context) => ListView(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.paddingOf(context).top + 8,
-                  bottom: MediaQuery.paddingOf(context).bottom + 32,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              Builder(
+                // Свой context — под скаффолдом, где в MediaQuery уже учтена
+                // высота полупрозрачной шапки.
+                builder: (context) => ListView(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.paddingOf(context).top + 8,
+                    bottom: MediaQuery.paddingOf(context).bottom + 32,
+                  ),
+                  children: [
+                    _buildHeader(context),
+                    _buildActions(context),
+                    if (email.isNotEmpty || phone.isNotEmpty) ...[
+                      const AppGlassSectionLabel('Контакты'),
+                      AppGlassSection(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          if (phone.isNotEmpty)
+                            _infoRow(
+                              context,
+                              icon: CupertinoIcons.phone_fill,
+                              color: CupertinoColors.systemGreen,
+                              label: 'Телефон',
+                              value: phone,
+                              onTap: _dial,
+                              onLongPress: () => _copy(phone, 'Телефон'),
+                            ),
+                          if (email.isNotEmpty)
+                            _infoRow(
+                              context,
+                              icon: CupertinoIcons.mail_solid,
+                              color: CupertinoColors.systemBlue,
+                              label: 'Email',
+                              value: email,
+                              onTap: _email,
+                              onLongPress: () => _copy(email, 'Email'),
+                            ),
+                        ],
+                      ),
+                    ],
+                    if (user.birthday != null || showRoles) ...[
+                      const AppGlassSectionLabel('О сотруднике'),
+                      AppGlassSection(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          if (user.birthday != null)
+                            _infoRow(
+                              context,
+                              icon: CupertinoIcons.gift_fill,
+                              color: CupertinoColors.systemPink,
+                              label: 'День рождения',
+                              value: DateFormat(
+                                'd MMMM',
+                                'ru_RU',
+                              ).format(user.birthday!),
+                            ),
+                          // Роли — служебная информация, полезна только
+                          // администраторам; обычным пользователям всегда
+                          // покажет одно и то же ("Пользователь") и шумит.
+                          if (showRoles)
+                            _infoRow(
+                              context,
+                              icon: CupertinoIcons
+                                  .person_crop_circle_badge_checkmark,
+                              color: CupertinoColors.systemOrange,
+                              label: 'Роли',
+                              value: rolesText,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-                children: [
-                  _buildHeader(context),
-                  _buildActions(context),
-                  if (email.isNotEmpty || phone.isNotEmpty) ...[
-                    const AppGlassSectionLabel('Контакты'),
-                    AppGlassSection(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        if (phone.isNotEmpty)
-                          _infoRow(
-                            context,
-                            icon: CupertinoIcons.phone_fill,
-                            color: CupertinoColors.systemGreen,
-                            label: 'Телефон',
-                            value: phone,
-                            onTap: _dial,
-                            onLongPress: () => _copy(phone, 'Телефон'),
-                          ),
-                        if (email.isNotEmpty)
-                          _infoRow(
-                            context,
-                            icon: CupertinoIcons.mail_solid,
-                            color: CupertinoColors.systemBlue,
-                            label: 'Email',
-                            value: email,
-                            onTap: _email,
-                            onLongPress: () => _copy(email, 'Email'),
-                          ),
-                      ],
-                    ),
-                  ],
-                  if (user.birthday != null || showRoles) ...[
-                    const AppGlassSectionLabel('О сотруднике'),
-                    AppGlassSection(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        if (user.birthday != null)
-                          _infoRow(
-                            context,
-                            icon: CupertinoIcons.gift_fill,
-                            color: CupertinoColors.systemPink,
-                            label: 'День рождения',
-                            value: DateFormat(
-                              'd MMMM',
-                              'ru_RU',
-                            ).format(user.birthday!),
-                          ),
-                        // Роли — служебная информация, полезна только
-                        // администраторам; обычным пользователям всегда
-                        // покажет одно и то же ("Пользователь") и шумит.
-                        if (showRoles)
-                          _infoRow(
-                            context,
-                            icon: CupertinoIcons
-                                .person_crop_circle_badge_checkmark,
-                            color: CupertinoColors.systemOrange,
-                            label: 'Роли',
-                            value: rolesText,
-                          ),
-                      ],
-                    ),
-                  ],
-                ],
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

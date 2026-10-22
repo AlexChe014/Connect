@@ -9,8 +9,6 @@ import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
-import 'package:connect/widgets/home_shortcut_button.dart';
-import 'package:connect/widgets/menu_button.dart';
 import 'package:connect/widgets/read_receipt.dart';
 import 'package:connect/widgets/swipe_actions_row.dart';
 import 'package:flutter/cupertino.dart';
@@ -81,15 +79,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   final _swipeGroup = SwipeGroupController();
   String _query = '';
   _ChatFilter _filter = _ChatFilter.all;
-  VoidCallback? _releaseHomeSuppress;
 
   @override
   void initState() {
     super.initState();
-    // Список чатов — таб верхнего уровня, кнопке «на главный экран» тут не
-    // место в принципе (см. HomeShortcutButton) — держим её скрытой всё
-    // время, пока этот таб открыт, а не полагаемся на глубину стека.
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     _chat.addListener(_onChats);
     _chat.init();
     _chat.loadContacts();
@@ -97,7 +90,6 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     _chat.removeListener(_onChats);
     _searchCtrl.dispose();
     super.dispose();
@@ -215,7 +207,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.only(top: 4, bottom: 16),
+      padding: EdgeInsets.only(
+        top: 4,
+        bottom: MediaQuery.paddingOf(context).bottom + 16,
+      ),
       sliver: SliverList.separated(
         itemCount: filtered.length,
         separatorBuilder: (context, index) => Container(
@@ -321,53 +316,58 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: _chat.refreshChats,
-                child: CustomScrollView(
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Чаты'),
-                      leading: const MenuButton(),
-                      // Прозрачная: под шапкой остаётся системное размытие,
-                      // а заливка дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: _openComposeMenu,
-                        child: Icon(
-                          CupertinoIcons.add_circled,
-                          size: 28,
-                          color: CupertinoColors.label.resolveFrom(context),
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: _chat.refreshChats,
+                  child: CustomScrollView(
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Чаты'),
+                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+                        // Размытие — только при прокрутке (AppGlassBarBlur).
+                        backgroundColor: CupertinoColors.systemBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
+                        trailing: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: _openComposeMenu,
+                          child: Icon(
+                            // Карандаш, как в «Сообщениях»: новый чат — это
+                            // «написать», а не «добавить».
+                            CupertinoIcons.square_pencil,
+                            size: 26,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
                         ),
                       ),
-                    ),
-                    SliverToBoxAdapter(child: _buildSearchAndFilters()),
-                    _buildSliverBody(),
-                  ],
+                      SliverToBoxAdapter(child: _buildSearchAndFilters()),
+                      _buildSliverBody(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

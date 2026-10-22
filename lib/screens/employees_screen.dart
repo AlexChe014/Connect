@@ -253,75 +253,79 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   @override
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: () async {
-                  _debounce?.cancel();
-                  _appliedQ = _qController.text.trim();
-                  await _loadFirstPage();
-                },
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Сотрудники'),
-                      leading: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: () => Navigator.pop(context),
-                        child: Icon(
-                          CupertinoIcons.back,
-                          size: 26,
-                          color: label,
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: () async {
+                    _debounce?.cancel();
+                    _appliedQ = _qController.text.trim();
+                    await _loadFirstPage();
+                  },
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Сотрудники'),
+                        leading: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: () => Navigator.pop(context),
+                          child: Icon(
+                            CupertinoIcons.back,
+                            size: 26,
+                            color: label,
+                          ),
                         ),
+                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+                        // Размытие — только при прокрутке (AppGlassBarBlur).
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
                       ),
-                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-                      // дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                        child: AppGlass(
-                          borderRadius: BorderRadius.circular(12),
-                          shadows: AppGlass.controlShadow,
-                          child: CupertinoSearchTextField(
-                            controller: _qController,
-                            backgroundColor: const Color(0x00000000),
-                            placeholder: 'Фамилия, имя, отчество или почта',
-                            onSubmitted: (_) {
-                              _debounce?.cancel();
-                              _appliedQ = _qController.text.trim();
-                              _loadFirstPage();
-                            },
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                          child: AppGlass(
+                            borderRadius: BorderRadius.circular(12),
+                            shadows: AppGlass.controlShadow,
+                            child: CupertinoSearchTextField(
+                              controller: _qController,
+                              backgroundColor: const Color(0x00000000),
+                              placeholder: 'Фамилия, имя, отчество или почта',
+                              onSubmitted: (_) {
+                                _debounce?.cancel();
+                                _appliedQ = _qController.text.trim();
+                                _loadFirstPage();
+                              },
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    _buildResultsSliver(),
-                  ],
+                      _buildResultsSliver(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

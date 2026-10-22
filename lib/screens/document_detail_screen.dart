@@ -32,7 +32,10 @@ class DocumentDetailScreen extends StatefulWidget {
 
 class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
   Map<String, dynamic>? _document;
-  List<Map<String, dynamic>> _acceptors = [];
+
+  /// null — сервис не отдаёт согласующих (1С УХ отвечает ошибкой),
+  /// пустой список — никто ещё не согласовал.
+  List<Map<String, dynamic>>? _acceptors;
   bool _isLoading = true;
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -64,11 +67,14 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         guid: widget.guid,
       );
 
-      List<Map<String, dynamic>> acceptors = const [];
+      // Согласующих 1С отдаёт по guiddoc самого документа, а не по guid
+      // задачи из списка (guidlist) — с ним приходит пустой список.
+      final guidDoc = doc['guiddoc']?.toString().trim();
+      List<Map<String, dynamic>>? acceptors;
       try {
         acceptors = await DocumentsRepository.instance.getAcceptors(
           serviceId: widget.service.id,
-          guid: widget.guid,
+          guid: (guidDoc == null || guidDoc.isEmpty) ? widget.guid : guidDoc,
         );
       } catch (_) {
         // Согласующие могут быть пустыми/ошибка 1С — не блокируем карточку документа.
@@ -180,20 +186,28 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
     setState(() => _downloadingFileIndex = index);
     try {
+      // 1С отдаёт идентификатор файла в поле guidfile.
       final fileGuid =
-          (file['guid'] ?? file['fileguid'] ?? file['file_guid'] ?? file['id'])
+          (file['guidfile'] ?? file['guid'] ?? file['fileguid'] ?? file['id'])
               ?.toString()
               .trim();
+      if (fileGuid == null || fileGuid.isEmpty) {
+        throw ApiException(200, 'У файла нет идентификатора');
+      }
       final response = await DocumentsRepository.instance.getDocumentFile(
         serviceId: widget.service.id,
-        guid: (fileGuid == null || fileGuid.isEmpty) ? widget.guid : fileGuid,
+        guid: fileGuid,
       );
       await DocumentFileShare.share(
         response,
         fallbackName: file['namefile']?.toString() ?? 'Файл',
       );
     } catch (e, st) {
-      CrashReportingService.recordNonFatal(e, st, reason: 'document_file_download');
+      CrashReportingService.recordNonFatal(
+        e,
+        st,
+        reason: 'document_file_download',
+      );
       if (!mounted) return;
       _showError('Не удалось скачать файл', e);
     } finally {
@@ -228,11 +242,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       ('task', 'Задача'),
       ('comment', 'Комментарий'),
       ('title', 'Описание'),
-      ('number', 'Номер'),
+      // Номер уже есть в шапке, срок и статус не нужны.
       ('author', 'Автор'),
       ('sum', 'Сумма'),
-      ('time', 'Срок'),
-      ('status', 'Статус'),
     ];
 
     final entries = <MapEntry<String, String>>[];
@@ -274,49 +286,52 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     final showActions = !_isLoading && _errorMessage == null;
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.pop(context),
-          child: Icon(CupertinoIcons.back, size: 26, color: label),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: CupertinoNavigationBar(
+          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+          // Размытие — только при прокрутке (AppGlassBarBlur).
+          backgroundColor: groupedBg.withValues(alpha: 0),
+          automaticBackgroundVisibility: false,
+          enableBackgroundFilterBlur: blur,
+          border: null,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => Navigator.pop(context),
+            child: Icon(CupertinoIcons.back, size: 26, color: label),
+          ),
         ),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 15,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            // Свой context — под скаффолдом, где в MediaQuery уже учтена
-            // высота полупрозрачной шапки.
-            Builder(builder: _buildBody),
-            if (showActions)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _MeasureSize(
-                  onChange: (height) {
-                    if (height != _actionBarHeight) {
-                      setState(() => _actionBarHeight = height);
-                    }
-                  },
-                  child: _buildActionBar(),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 15,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              // Свой context — под скаффолдом, где в MediaQuery уже учтена
+              // высота полупрозрачной шапки.
+              Builder(builder: _buildBody),
+              if (showActions)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _MeasureSize(
+                    onChange: (height) {
+                      if (height != _actionBarHeight) {
+                        setState(() => _actionBarHeight = height);
+                      }
+                    },
+                    child: _buildActionBar(),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -442,12 +457,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             children: [
               for (final entry in entries)
                 CupertinoListTile(
-                  padding: const EdgeInsetsDirectional.fromSTEB(
-                    16,
-                    10,
-                    14,
-                    10,
-                  ),
+                  padding: const EdgeInsetsDirectional.fromSTEB(16, 10, 14, 10),
                   title: Text(
                     entry.key,
                     style: TextStyle(fontSize: 13, color: secondary),
@@ -511,12 +521,19 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             ],
           ),
         ],
-        if (_acceptors.isNotEmpty) ...[
-          const AppGlassSectionLabel('Согласующие'),
+        if (_acceptors != null) ...[
+          const AppGlassSectionLabel('Кем согласовано'),
           AppGlassSection(
             margin: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              for (final acceptor in _acceptors)
+              if (_acceptors!.isEmpty)
+                CupertinoListTile(
+                  title: Text(
+                    'Пока никто не согласовал',
+                    style: TextStyle(color: secondary),
+                  ),
+                ),
+              for (final acceptor in _acceptors!)
                 CupertinoListTile(
                   leading: const AppIconBadge(
                     icon: CupertinoIcons.checkmark_seal_fill,
@@ -524,10 +541,18 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                   ),
                   title: Text(DocumentPayloadUtils.labelForAcceptor(acceptor)),
                   subtitle: () {
-                    final status = DocumentPayloadUtils.acceptorStatus(
-                      acceptor,
-                    );
-                    return status == null ? null : Text(status);
+                    final details = [
+                      DocumentPayloadUtils.acceptorStatus(acceptor),
+                      DocumentPayloadUtils.acceptorDate(acceptor),
+                      DocumentPayloadUtils.acceptorComment(acceptor),
+                    ].whereType<String>().join(' · ');
+                    return details.isEmpty
+                        ? null
+                        : Text(
+                            details,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                          );
                   }(),
                 ),
             ],
@@ -584,9 +609,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                 DocumentPayloadUtils.datalist(document) ??
                     DocumentPayloadUtils.title(document),
                 style: TextStyle(
-                  fontSize: 20,
-                  height: 1.25,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                  height: 1.3,
+                  fontWeight: FontWeight.w600,
                   color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),

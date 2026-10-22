@@ -423,53 +423,56 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     );
     final label = CupertinoColors.label.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(
-          _selectionMode
-              ? 'Выбрано: ${_selectedGuids.length}'
-              : widget.service.displayName,
-        ),
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: _selectionMode
-              ? (_isSubmitting ? null : _clearSelection)
-              : () => Navigator.pop(context),
-          child: Icon(
-            _selectionMode ? CupertinoIcons.xmark : CupertinoIcons.back,
-            size: _selectionMode ? 22 : 26,
-            color: label,
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: CupertinoNavigationBar(
+          middle: Text(
+            _selectionMode
+                ? 'Выбрано: ${_selectedGuids.length}'
+                : widget.service.displayName,
+          ),
+          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+          // Размытие — только при прокрутке (AppGlassBarBlur).
+          backgroundColor: groupedBg.withValues(alpha: 0),
+          automaticBackgroundVisibility: false,
+          enableBackgroundFilterBlur: blur,
+          border: null,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: _selectionMode
+                ? (_isSubmitting ? null : _clearSelection)
+                : () => Navigator.pop(context),
+            child: Icon(
+              _selectionMode ? CupertinoIcons.xmark : CupertinoIcons.back,
+              size: _selectionMode ? 22 : 26,
+              color: label,
+            ),
           ),
         ),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            // Свой context — под скаффолдом, где в MediaQuery уже учтена
-            // высота полупрозрачной шапки.
-            Builder(builder: _buildBody),
-            if (_selectionMode)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _buildSelectionBar(),
-              ),
-          ],
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              // Свой context — под скаффолдом, где в MediaQuery уже учтена
+              // высота полупрозрачной шапки.
+              Builder(builder: _buildBody),
+              if (_selectionMode)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildSelectionBar(),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -59,7 +59,9 @@ class MailFloatingBar extends StatelessWidget {
 
   /// Сколько места снизу занимает панель вместе с отступами.
   static double reservedHeight(BuildContext context) =>
-      height + 16 + MediaQuery.paddingOf(context).bottom.clamp(12, 40);
+      height +
+      16 +
+      MediaQuery.paddingOf(context).bottom.clamp(12, double.infinity);
 
   final Widget child;
 
@@ -69,7 +71,8 @@ class MailFloatingBar extends StatelessWidget {
     // содержимое, а отступ под «полоску» дал бы зазор над клавишами.
     final bottom = MediaQuery.viewInsetsOf(context).bottom > 0
         ? 8.0
-        : MediaQuery.paddingOf(context).bottom.clamp(12.0, 40.0);
+        // Без верхней границы: во вкладке «Почта» снизу ещё и таббар.
+        : MediaQuery.paddingOf(context).bottom.clamp(12.0, double.infinity);
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 8, 16, bottom),
       child: SizedBox(height: height, child: child),

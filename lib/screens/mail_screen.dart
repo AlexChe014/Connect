@@ -19,9 +19,14 @@ class MailScreen extends StatefulWidget {
     super.key,
     this.showAppBar = true,
     this.autoOpenInbox = true,
+    this.isTab = false,
   });
 
   final bool showAppBar;
+
+  /// Экран — корень вкладки «Почта». Ящик тогда показывается прямо во
+  /// вкладке, а не через `pushReplacement`: тот заменил бы весь `/home`.
+  final bool isTab;
 
   /// Если есть хотя бы один подключённый ящик, сразу открывает его письма
   /// вместо списка ящиков — список нужен только чтобы добавить/отредактировать
@@ -71,6 +76,9 @@ class MailScreen extends StatefulWidget {
 class _MailScreenState extends State<MailScreen> {
   List<MailConnection> _connections = [];
   bool _isLoading = true;
+
+  /// Ящик, открытый прямо во вкладке (только при [MailScreen.isTab]).
+  MailConnection? _tabInbox;
   int? _userId;
 
   @override
@@ -99,6 +107,14 @@ class _MailScreenState extends State<MailScreen> {
           (c) => c.isDefault,
           orElse: () => items.first,
         );
+        if (widget.isTab) {
+          setState(() {
+            _connections = items;
+            _tabInbox = selected;
+            _isLoading = false;
+          });
+          return;
+        }
         Navigator.of(context).pushReplacement<void, void>(
           CupertinoPageRoute<void>(
             builder: (context) =>
@@ -182,69 +198,83 @@ class _MailScreenState extends State<MailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final inbox = _tabInbox;
+    if (inbox != null) {
+      return MailInboxScreen(
+        connection: inbox,
+        connections: _connections,
+        isTab: true,
+      );
+    }
     final label = CupertinoColors.label.resolveFrom(context);
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: _loadConnections,
-                child: CustomScrollView(
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Почта'),
-                      // Прозрачная: под шапкой остаётся системное размытие, а
-                      // заливка дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                      leading: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: () => Navigator.maybePop(context),
-                        child: Icon(
-                          CupertinoIcons.back,
-                          size: 26,
-                          color: label,
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: _loadConnections,
+                  child: CustomScrollView(
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Почта'),
+                        // Прозрачная: под шапкой остаётся системное размытие, а
+                        // заливка дала бы на цветном пятне видимую границу.
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
+                        leading: widget.isTab
+                            ? null
+                            : CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                onPressed: () => Navigator.maybePop(context),
+                                child: Icon(
+                                  CupertinoIcons.back,
+                                  size: 26,
+                                  color: label,
+                                ),
+                              ),
+                        trailing: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: _openCreateConnection,
+                          child: Icon(
+                            CupertinoIcons.add_circled,
+                            size: 26,
+                            color: label,
+                          ),
                         ),
                       ),
-                      trailing: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: _openCreateConnection,
-                        child: Icon(
-                          CupertinoIcons.add_circled,
-                          size: 28,
-                          color: label,
+                      if (!_isLoading && _connections.isNotEmpty)
+                        const SliverToBoxAdapter(
+                          child: AppGlassSectionLabel(
+                            'Почтовые ящики',
+                            padding: EdgeInsets.fromLTRB(20, 4, 20, 6),
+                          ),
                         ),
-                      ),
-                    ),
-                    if (!_isLoading && _connections.isNotEmpty)
-                      const SliverToBoxAdapter(
-                        child: AppGlassSectionLabel(
-                          'Почтовые ящики',
-                          padding: EdgeInsets.fromLTRB(20, 4, 20, 6),
-                        ),
-                      ),
-                    _buildContentSliver(),
-                  ],
+                      _buildContentSliver(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

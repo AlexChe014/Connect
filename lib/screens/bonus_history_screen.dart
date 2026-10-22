@@ -1,12 +1,13 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show RefreshIndicator;
 import 'package:intl/intl.dart';
 
 import '../models/bonus_program/point_operation.dart';
 import '../repositories/bonus_program_repository.dart';
 import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/bonus_glass.dart';
 
 /// История операций по баллам текущего сотрудника.
 class BonusHistoryScreen extends StatefulWidget {
@@ -112,88 +113,84 @@ class _BonusHistoryScreenState extends State<BonusHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('История баллов'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          color: CupertinoColors.label.resolveFrom(context),
-          decoration: TextDecoration.none,
-        ),
-        child: SafeArea(child: _buildBody()),
-      ),
+    return BonusGlassScaffold(
+      title: 'История баллов',
+      controller: _scrollController,
+      onRefresh: _loadFirstPage,
+      slivers: _buildSlivers(),
     );
   }
 
-  Widget _buildBody() {
-    if (_isInitialLoading) return const AppSkeletonList(count: 10);
+  List<Widget> _buildSlivers() {
+    if (_isInitialLoading) {
+      return [
+        AppGlassSliverList(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: 8,
+          itemBuilder: (context, index) => const AppSkeletonListTile(),
+        ),
+      ];
+    }
 
     if (_errorMessage != null) {
-      return AppEmptyState(
-        icon: CupertinoIcons.exclamationmark_triangle,
-        message: _errorMessage!,
-        onRetry: _loadFirstPage,
-      );
+      return [
+        SliverAppEmptyState(
+          icon: CupertinoIcons.exclamationmark_triangle,
+          message: _errorMessage!,
+          onRetry: _loadFirstPage,
+        ),
+      ];
     }
 
     if (_items.isEmpty) {
-      return RefreshIndicator.adaptive(
-        onRefresh: _loadFirstPage,
-        child: const AppEmptyState(
+      return const [
+        SliverAppEmptyState(
           icon: CupertinoIcons.time,
           message: 'Операций пока нет',
         ),
-      );
+      ];
     }
 
-    return RefreshIndicator.adaptive(
-      onRefresh: _loadFirstPage,
-      child: ListView.separated(
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        itemCount: _items.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          if (index >= _items.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CupertinoActivityIndicator()),
-            );
-          }
-          return _OperationTile(operation: _items[index]);
-        },
+    return [
+      AppGlassSliverList(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        separatorIndent: 64,
+        itemCount: _items.length,
+        itemBuilder: (context, index) =>
+            BonusOperationRow(operation: _items[index]),
       ),
-    );
+      if (_isLoadingMore)
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: CupertinoActivityIndicator()),
+          ),
+        ),
+    ];
   }
 }
 
-class _OperationTile extends StatelessWidget {
-  const _OperationTile({required this.operation});
+/// Строка операции: направление на мягкой подложке, название, пояснение
+/// и дата, сумма справа — начисления зелёным, как в «Кошельке».
+class BonusOperationRow extends StatelessWidget {
+  const BonusOperationRow({super.key, required this.operation});
 
   final PointOperation operation;
 
   @override
   Widget build(BuildContext context) {
     final isCredit = operation.isCredit;
-    final color = isCredit
-        ? CupertinoColors.systemGreen
-        : CupertinoColors.systemRed;
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final tint =
+        (isCredit ? CupertinoColors.systemGreen : CupertinoColors.systemRed)
+            .resolveFrom(context);
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     final date = operation.createdAt;
     final title =
         operation.operationTypeName ?? operation.description ?? 'Операция';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
       child: Row(
         children: [
           Container(
@@ -201,15 +198,15 @@ class _OperationTile extends StatelessWidget {
             height: 36,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
+              color: tint.withValues(alpha: isDark ? 0.24 : 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(
               isCredit
                   ? CupertinoIcons.arrow_down_left
                   : CupertinoIcons.arrow_up_right,
-              size: 18,
-              color: color,
+              size: 17,
+              color: tint,
             ),
           ),
           const SizedBox(width: 12),
@@ -223,7 +220,7 @@ class _OperationTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 if (operation.description != null &&
@@ -233,10 +230,7 @@ class _OperationTile extends StatelessWidget {
                     operation.description!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: CupertinoColors.secondaryLabel,
-                    ),
+                    style: TextStyle(fontSize: 13, color: secondary),
                   ),
                 ],
                 if (date != null) ...[
@@ -246,9 +240,9 @@ class _OperationTile extends StatelessWidget {
                       'd MMM yyyy, HH:mm',
                       'ru_RU',
                     ).format(date.toLocal()),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: CupertinoColors.tertiaryLabel,
+                      color: CupertinoColors.tertiaryLabel.resolveFrom(context),
                     ),
                   ),
                 ],
@@ -259,9 +253,11 @@ class _OperationTile extends StatelessWidget {
           Text(
             '${isCredit ? '+' : ''}${operation.pointsDelta}',
             style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: isCredit
+                  ? tint
+                  : CupertinoColors.label.resolveFrom(context),
             ),
           ),
         ],

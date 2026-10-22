@@ -294,52 +294,57 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: () => _loadServices(promptAccessCodeIfEmpty: false),
-                child: CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Согласование'),
-                      leading: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: () => Navigator.maybePop(context),
-                        child: Icon(
-                          CupertinoIcons.back,
-                          size: 26,
-                          color: CupertinoColors.label.resolveFrom(context),
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: () =>
+                      _loadServices(promptAccessCodeIfEmpty: false),
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Согласование'),
+                        leading: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: () => Navigator.maybePop(context),
+                          child: Icon(
+                            CupertinoIcons.back,
+                            size: 26,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
                         ),
+                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+                        // Размытие — только при прокрутке (AppGlassBarBlur).
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
                       ),
-                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-                      // дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                    ),
-                    ..._buildContentSlivers(),
-                  ],
+                      ..._buildContentSlivers(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -431,9 +436,7 @@ class _ServiceRow extends StatelessWidget {
                     style: TextStyle(
                       color: count > 0
                           ? CupertinoColors.white
-                          : CupertinoColors.secondaryLabel.resolveFrom(
-                              context,
-                            ),
+                          : CupertinoColors.secondaryLabel.resolveFrom(context),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),

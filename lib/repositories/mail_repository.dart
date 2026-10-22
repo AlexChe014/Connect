@@ -335,7 +335,10 @@ class MailRepository {
         'Сервер вернул почтовое подключение вместо письма',
       );
     }
-    return MailMessage.fromJson(data);
+    // В ответе `id` — IMAP UID письма, а не id записи в БД, который нужен
+    // ответу, пересылке и вложениям (иначе «No query results for model
+    // Email»). Возвращаем id, по которому письмо и запрашивали.
+    return MailMessage.fromJson(data).copyWith(id: messageId);
   }
 
   /// Поиск писем по теме и адресам среди всех подключений пользователя
@@ -559,62 +562,63 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось отправить письмо');
   }
 
+  // Поля — как в ReplyEmailRequest/ForwardEmailRequest бэкенда: текст
+  // ответа читается из `body_text`, текст пересылки — из `message`; поле
+  // `body` сервер молча отбрасывал, и письмо уходило пустым.
   Future<void> replyMail(ReplyMailRequest request) async {
-    if (request.attachments.isNotEmpty) {
-      final decoded = await ApiClient.instance.postMultipart(
-        MailRoutes.smtpReplyUrl(request.messageId),
-        fields: {
-          'to': request.to,
-          'subject': request.subject,
-          if (request.body != null && request.body!.trim().isNotEmpty)
-            'body': request.body!,
-        },
-        files: request.attachments,
-      );
-      _unwrapMailData(decoded, 'Не удалось ответить на письмо');
-      return;
-    }
-    final body = <String, dynamic>{
+    final fields = <String, String>{
       'to': request.to,
       'subject': request.subject,
+      if (request.body != null && request.body!.trim().isNotEmpty)
+        'body_text': request.body!,
     };
-    if (request.body != null && request.body!.trim().isNotEmpty) {
-      body['body'] = request.body;
-    }
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.smtpReplyUrl(request.messageId),
-      body: body,
-    );
+    final decoded = request.attachments.isNotEmpty
+        ? await ApiClient.instance.postMultipart(
+            MailRoutes.smtpReplyUrl(request.messageId),
+            fields: fields,
+            files: request.attachments,
+          )
+        : await ApiClient.instance.post(
+            MailRoutes.smtpReplyUrl(request.messageId),
+            body: fields,
+          );
     _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
 
+  /// Сервер принимает в `to` ровно один адрес (`email`), поэтому нескольким
+  /// получателям пересылаем по отдельности. Исходное письмо с шапкой
+  /// «Пересланное сообщение» сервер добавляет сам — в `message` только
+  /// текст пользователя.
   Future<void> forwardMail(ForwardMailRequest request) async {
-    if (request.attachments.isNotEmpty) {
-      final decoded = await ApiClient.instance.postMultipart(
-        MailRoutes.smtpForwardUrl(request.messageId),
-        fields: {
-          'to': request.to,
-          'subject': request.subject,
-          if (request.body != null && request.body!.trim().isNotEmpty)
-            'body': request.body!,
-        },
-        files: request.attachments,
-      );
+    final recipients = MailMessage.splitAddresses(request.to)
+        .map(_bareAddress)
+        .where((a) => a.isNotEmpty)
+        .toList();
+    for (final to in recipients.isEmpty ? [request.to] : recipients) {
+      final fields = <String, String>{
+        'to': to,
+        'subject': request.subject,
+        if (request.body != null && request.body!.trim().isNotEmpty)
+          'message': request.body!,
+      };
+      final decoded = request.attachments.isNotEmpty
+          ? await ApiClient.instance.postMultipart(
+              MailRoutes.smtpForwardUrl(request.messageId),
+              fields: fields,
+              files: request.attachments,
+            )
+          : await ApiClient.instance.post(
+              MailRoutes.smtpForwardUrl(request.messageId),
+              body: fields,
+            );
       _unwrapMailData(decoded, 'Не удалось переслать письмо');
-      return;
     }
-    final body = <String, dynamic>{
-      'to': request.to,
-      'subject': request.subject,
-    };
-    if (request.body != null && request.body!.trim().isNotEmpty) {
-      body['body'] = request.body;
-    }
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.smtpForwardUrl(request.messageId),
-      body: body,
-    );
-    _unwrapMailData(decoded, 'Не удалось переслать письмо');
+  }
+
+  /// `Имя <a@x>` → `a@x`.
+  static String _bareAddress(String address) {
+    final match = RegExp(r'<([^>]+)>').firstMatch(address);
+    return (match?.group(1) ?? address).trim();
   }
 
   // --- Internal helpers ---

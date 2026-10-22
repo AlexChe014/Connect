@@ -6,13 +6,16 @@ import 'package:flutter/material.dart'
 import 'package:intl/intl.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import '../config/app_theme.dart';
 import '../config/notification_topics.dart';
 import '../models/notification_item.dart';
 import '../repositories/notifications_repository.dart';
 import '../services/app_navigation_service.dart';
 import '../services/notification_unread_service.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/news_glass.dart' show formatNewsDate;
 import 'notification_settings_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -186,46 +189,50 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<Widget> _buildContentSlivers() {
     if (_isInitialLoading) {
       return [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          sliver: SliverList.separated(
-            itemCount: 6,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => const AppSkeletonCardTile(),
-          ),
+        AppGlassSliverList(
+          itemCount: 6,
+          itemBuilder: (context, index) => const AppSkeletonListTile(),
         ),
       ];
     }
 
     if (_items.isEmpty) {
       return [
-        SliverFillRemaining(
-          child: AppEmptyState(
-            icon: CupertinoIcons.bell,
-            message: 'Пока нет уведомлений',
-            onRetry: _loadFirstPage,
-          ),
+        SliverAppEmptyState(
+          icon: CupertinoIcons.bell,
+          message: 'Пока нет уведомлений',
+          onRetry: _loadFirstPage,
         ),
       ];
     }
 
-    final dateFormat = DateFormat('d MMM, HH:mm', 'ru_RU');
+    // Группы по дням, как в Центре уведомлений: «Сегодня», «Вчера», дата.
+    // Без даты — в группу предыдущего уведомления, список отсортирован
+    // сервером.
+    final groups = <(String, List<NotificationItem>)>[];
+    for (final item in _items) {
+      final createdAt = item.createdAt;
+      final label = createdAt == null
+          ? (groups.isEmpty ? 'Ранее' : groups.last.$1)
+          : formatNewsDate(createdAt);
+      if (groups.isEmpty || groups.last.$1 != label) {
+        groups.add((label, [item]));
+      } else {
+        groups.last.$2.add(item);
+      }
+    }
+
+    final timeFormat = DateFormat('HH:mm', 'ru_RU');
 
     return [
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        sliver: SliverList.separated(
-          itemCount: _items.length + (_isLoadingMore ? 1 : 0),
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
+      for (final (label, items) in groups) ...[
+        SliverToBoxAdapter(child: AppGlassSectionLabel(label)),
+        AppGlassSliverList(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          separatorIndent: _NotificationTile.separatorIndent,
+          itemCount: items.length,
           itemBuilder: (context, index) {
-            if (index >= _items.length) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: CupertinoActivityIndicator()),
-              );
-            }
-
-            final item = _items[index];
+            final item = items[index];
             return VisibilityDetector(
               key: Key('notification-${item.id}'),
               onVisibilityChanged: (info) {
@@ -234,69 +241,109 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: _NotificationTile(
                 item: item,
                 isHighlighted: !item.isRead || _freshIds.contains(item.id),
-                dateFormat: dateFormat,
+                timeFormat: timeFormat,
                 onTap: () => _openItem(item),
               ),
             );
           },
         ),
+      ],
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: _isLoadingMore
+              ? const Center(child: CupertinoActivityIndicator())
+              : const SizedBox(height: 8),
+        ),
       ),
     ];
   }
 
+  Widget _navButton({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool isLoading = false,
+  }) {
+    return CupertinoButton(
+      padding: const EdgeInsets.only(left: 14),
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: isLoading
+          ? const CupertinoActivityIndicator()
+          : Icon(
+              icon,
+              size: 24,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: SafeArea(
-          top: false,
-          bottom: false,
-          child: RefreshIndicator.adaptive(
-            onRefresh: _loadFirstPage,
-            child: CustomScrollView(
-              controller: _scrollController,
-              slivers: [
-                CupertinoSliverNavigationBar(
-                  largeTitle: const Text('Уведомления'),
-                  backgroundColor: CupertinoColors.systemGroupedBackground
-                      .withValues(alpha: 0.9),
-                  border: null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: _openSettings,
-                        child: const Icon(
-                          CupertinoIcons.slider_horizontal_3,
-                          size: 24,
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: _loadFirstPage,
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Уведомления'),
+                        leading: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: () => Navigator.maybePop(context),
+                          child: Icon(
+                            CupertinoIcons.back,
+                            size: 26,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ),
+                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+                        // Размытие — только при прокрутке (AppGlassBarBlur).
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _navButton(
+                              icon: CupertinoIcons.slider_horizontal_3,
+                              onPressed: _openSettings,
+                            ),
+                            _navButton(
+                              icon: CupertinoIcons.checkmark_circle,
+                              onPressed: _isMarkingAll ? null : _markAllRead,
+                              isLoading: _isMarkingAll,
+                            ),
+                          ],
                         ),
                       ),
-                      CupertinoButton(
-                        padding: const EdgeInsets.only(left: 14),
-                        minimumSize: Size.zero,
-                        onPressed: _isMarkingAll ? null : _markAllRead,
-                        child: _isMarkingAll
-                            ? const CupertinoActivityIndicator()
-                            : const Icon(
-                                CupertinoIcons.check_mark_circled,
-                                size: 24,
-                              ),
-                      ),
+                      ..._buildContentSlivers(),
                     ],
                   ),
                 ),
-                ..._buildContentSlivers(),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -304,19 +351,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
+/// Строка уведомления: значок темы на мягкой подложке, заголовок и текст,
+/// справа время; у нового — синяя точка.
 class _NotificationTile extends StatelessWidget {
   const _NotificationTile({
     required this.item,
     required this.isHighlighted,
-    required this.dateFormat,
+    required this.timeFormat,
     required this.onTap,
   });
+
+  /// Отступ разделителя — под текст, мимо значка.
+  static const separatorIndent = 68.0;
 
   final NotificationItem item;
 
   /// Новое: не прочитано или стало прочитанным за этот показ экрана.
   final bool isHighlighted;
-  final DateFormat dateFormat;
+  final DateFormat timeFormat;
   final VoidCallback onTap;
 
   @override
@@ -327,107 +379,93 @@ class _NotificationTile extends StatelessWidget {
             ? NotificationTopics.survey
             : null);
     final icon = topic?.icon ?? CupertinoIcons.bell_fill;
-    final color = topic?.color ?? CupertinoColors.systemGrey;
+    final tint = CupertinoDynamicColor.resolve(
+      topic?.color ?? CupertinoColors.systemGrey,
+      context,
+    );
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final isUnread = isHighlighted;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, size: 18, color: CupertinoColors.white),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                // Мягкая подложка, как у AppIconBadge: на тёмном 15% не видно.
+                color: tint.withValues(alpha: isDark ? 0.24 : 0.15),
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
+              child: Icon(icon, size: 20, color: tint),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.25,
+                            fontWeight: isUnread
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ),
+                      ),
+                      if (item.createdAt != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8, top: 1),
                           child: Text(
-                            item.title,
-                            maxLines: 2,
-                            softWrap: true,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: isUnread
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              color: CupertinoColors.label.resolveFrom(context),
-                            ),
+                            timeFormat.format(item.createdAt!.toLocal()),
+                            style: TextStyle(fontSize: 13, color: secondary),
                           ),
                         ),
-                        if (isUnread)
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(left: 8, top: 4),
-                            decoration: const BoxDecoration(
-                              color: CupertinoColors.activeBlue,
-                              shape: BoxShape.circle,
-                            ),
+                      if (isUnread)
+                        Container(
+                          width: 9,
+                          height: 9,
+                          margin: const EdgeInsets.only(left: 8, top: 5),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
                           ),
-                      ],
+                        ),
+                    ],
+                  ),
+                  if (item.body.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      item.body,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.3,
+                        color: secondary,
+                      ),
                     ),
-                    if (item.body.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        item.body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (item.createdAt != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        dateFormat.format(item.createdAt!.toLocal()),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: CupertinoColors.tertiaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(top: 6, left: 4),
-                child: Icon(
-                  CupertinoIcons.chevron_forward,
-                  size: 16,
-                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

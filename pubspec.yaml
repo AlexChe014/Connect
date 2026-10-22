@@ -64,6 +64,7 @@ dependencies:
   laravel_reverb: ^0.7.1
   firebase_crashlytics: ^5.4.0
   open_filex: ^5.0.0
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

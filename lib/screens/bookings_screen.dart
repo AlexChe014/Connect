@@ -558,53 +558,57 @@ class _BookingsScreenState extends State<BookingsScreen> {
   @override
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: _isBootLoading ? _bootstrap : _loadResults,
-                child: CustomScrollView(
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Бронирование'),
-                      leading: Navigator.canPop(context)
-                          ? CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              onPressed: () => Navigator.pop(context),
-                              child: Icon(
-                                CupertinoIcons.back,
-                                size: 26,
-                                color: label,
-                              ),
-                            )
-                          : null,
-                      // Прозрачная: под шапкой остаётся системное размытие,
-                      // а заливка дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                    ),
-                    ..._buildContentSlivers(context),
-                  ],
+    return AppGlassBarBlur(
+      threshold: AppGlassBarBlur.largeTitleThreshold,
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: _isBootLoading ? _bootstrap : _loadResults,
+                  child: CustomScrollView(
+                    slivers: [
+                      CupertinoSliverNavigationBar(
+                        largeTitle: const Text('Бронирование'),
+                        leading: Navigator.canPop(context)
+                            ? CupertinoButton(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                onPressed: () => Navigator.pop(context),
+                                child: Icon(
+                                  CupertinoIcons.back,
+                                  size: 26,
+                                  color: label,
+                                ),
+                              )
+                            : null,
+                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
+                        // Размытие — только при прокрутке (AppGlassBarBlur).
+                        backgroundColor: CupertinoColors.systemGroupedBackground
+                            .resolveFrom(context)
+                            .withValues(alpha: 0),
+                        automaticBackgroundVisibility: false,
+                        enableBackgroundFilterBlur: blur,
+                        border: null,
+                      ),
+                      ..._buildContentSlivers(context),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

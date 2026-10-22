@@ -2,6 +2,9 @@ import 'package:flutter/cupertino.dart';
 
 import '../config/notification_topics.dart';
 import '../services/notification_preferences_service.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
+import '../widgets/booking_glass_form.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key});
@@ -40,96 +43,47 @@ class _NotificationSettingsScreenState
     await NotificationPreferencesService.instance.setEnabled(topicId, value);
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 29,
-      height: 29,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Icon(icon, size: 16, color: CupertinoColors.white),
-    );
-  }
+  Widget _iconBadge(IconData icon, Color color) =>
+      AppIconBadge(icon: icon, color: color);
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Уведомления'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: SafeArea(
-          child: _isLoading
-              ? const Center(child: CupertinoActivityIndicator(radius: 14))
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Text(
-                        'PUSH-УВЕДОМЛЕНИЯ',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                          letterSpacing: 0.2,
-                        ),
+    return BookingGlassScaffold(
+      title: 'Уведомления',
+      children: _isLoading
+          ? const [
+              SizedBox(height: 160),
+              Center(child: CupertinoActivityIndicator(radius: 14)),
+            ]
+          : [
+              const AppGlassSectionLabel(
+                'Push-уведомления',
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 6),
+              ),
+              AppGlassSection(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  for (final topic in NotificationTopics.all)
+                    CupertinoListTile(
+                      leading: _iconBadge(topic.icon, topic.color),
+                      title: Text(topic.title, maxLines: 2, softWrap: true),
+                      subtitle: Text(
+                        topic.description,
+                        maxLines: 2,
+                        softWrap: true,
+                      ),
+                      trailing: CupertinoSwitch(
+                        value: _values[topic.id] ?? true,
+                        onChanged: (value) => _toggle(topic.id, value),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    CupertinoListSection.insetGrouped(
-                      margin: EdgeInsets.zero,
-                      children: [
-                        for (final topic in NotificationTopics.all)
-                          CupertinoListTile(
-                            leading: _iconBadge(topic.icon, topic.color),
-                            title: Text(
-                              topic.title,
-                              maxLines: 2,
-                              softWrap: true,
-                            ),
-                            subtitle: Text(
-                              topic.description,
-                              maxLines: 2,
-                              softWrap: true,
-                            ),
-                            trailing: CupertinoSwitch(
-                              value: _values[topic.id] ?? true,
-                              onChanged: (value) => _toggle(topic.id, value),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: Text(
-                        'Выключенные категории не будут присылать push. '
-                        'Настройка хранится на этом устройстве.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ),
+                ],
+              ),
+              const BookingFootnote(
+                'Выключенные категории не будут присылать push. '
+                'Настройка хранится на этом устройстве.',
+              ),
+            ],
     );
   }
 }

@@ -9,7 +9,8 @@ import '../repositories/surveys_repository.dart';
 import '../services/survey_pending_service.dart';
 import '../utils/app_feedback.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/app_loading.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/booking_glass_form.dart';
 
 /// Прохождение опроса по токену получателя (`/surveys/public/{token}`).
 class SurveyFormScreen extends StatefulWidget {
@@ -259,139 +260,163 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
   @override
   Widget build(BuildContext context) {
     final title = _form?.survey.title ?? widget.title ?? '';
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(
-          title.isEmpty ? 'Опрос' : title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          color: CupertinoColors.label.resolveFrom(context),
-          decoration: TextDecoration.none,
-        ),
-        child: SafeArea(child: _buildBody()),
-      ),
+    return BookingGlassScaffold(
+      title: title.isEmpty ? 'Опрос' : title,
+      children: _buildBody(),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) return const AppPageLoader();
+  List<Widget> _buildBody() {
+    if (_isLoading) {
+      return const [
+        SizedBox(height: 160),
+        Center(child: CupertinoActivityIndicator(radius: 14)),
+      ];
+    }
 
     final form = _form;
     if (form == null) {
-      return AppEmptyState(
-        icon: CupertinoIcons.exclamationmark_triangle,
-        message: _loadError ?? 'Не удалось загрузить опрос',
-        onRetry: _load,
-      );
+      return [
+        const SizedBox(height: 80),
+        AppEmptyState(
+          icon: CupertinoIcons.exclamationmark_triangle,
+          message: _loadError ?? 'Не удалось загрузить опрос',
+          onRetry: _load,
+        ),
+      ];
     }
 
     final successMessage = _successMessage;
     if (successMessage != null) {
-      return _SurveyResultView(
-        icon: CupertinoIcons.checkmark_seal_fill,
-        color: CupertinoColors.systemGreen,
-        title: 'Ответы отправлены',
-        message: successMessage,
-      );
+      return [
+        _SurveyResultView(
+          icon: CupertinoIcons.checkmark_seal_fill,
+          color: CupertinoColors.systemGreen,
+          title: 'Ответы отправлены',
+          message: successMessage,
+        ),
+      ];
     }
     if (form.alreadyCompleted) {
-      return const _SurveyResultView(
-        icon: CupertinoIcons.checkmark_seal_fill,
-        color: CupertinoColors.systemGreen,
-        title: 'Опрос пройден',
-        message: 'Вы уже ответили на этот опрос. Спасибо за участие!',
-      );
+      return const [
+        _SurveyResultView(
+          icon: CupertinoIcons.checkmark_seal_fill,
+          color: CupertinoColors.systemGreen,
+          title: 'Опрос пройден',
+          message: 'Вы уже ответили на этот опрос. Спасибо за участие!',
+        ),
+      ];
     }
     if (!form.isOpen) {
-      return const _SurveyResultView(
-        icon: CupertinoIcons.lock_fill,
-        color: CupertinoColors.systemGrey,
-        title: 'Опрос закрыт',
-        message: 'Приём ответов по этому опросу завершён.',
-      );
+      return const [
+        _SurveyResultView(
+          icon: CupertinoIcons.lock_fill,
+          color: CupertinoColors.systemGrey,
+          title: 'Опрос закрыт',
+          message: 'Приём ответов по этому опросу завершён.',
+        ),
+      ];
     }
 
     final survey = form.survey;
     final closesAt = form.closesAt;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      children: [
-        if (survey.title.isNotEmpty)
-          Text(
-            survey.title,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
-        if (survey.description != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            survey.description!,
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.35,
-              color: CupertinoColors.secondaryLabel.resolveFrom(context),
-            ),
-          ),
-        ],
-        if (survey.isAnonymous || closesAt != null) ...[
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (survey.isAnonymous)
-                const _InfoChip(
-                  icon: CupertinoIcons.eye_slash_fill,
-                  label: 'Анонимный опрос',
+    final questionCount = form.questions.length;
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (survey.title.isNotEmpty)
+              Text(
+                survey.title,
+                style: const TextStyle(
+                  fontSize: 26,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
                 ),
-              if (closesAt != null)
-                _InfoChip(
-                  icon: CupertinoIcons.clock_fill,
-                  label:
-                      'До ${DateFormat('d MMMM, HH:mm', 'ru_RU').format(closesAt)}',
+              ),
+            if (survey.description != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                survey.description!,
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.35,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
+              ),
             ],
-          ),
-        ],
-        const SizedBox(height: 16),
-        for (var i = 0; i < form.questions.length; i++)
-          Padding(
-            key: _questionKeys[form.questions[i].id],
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _QuestionCard(
-              index: i + 1,
-              question: form.questions[i],
-              error: _fieldErrors[form.questions[i].id],
-              child: _buildInput(form.questions[i]),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _InfoChip(
+                  icon: CupertinoIcons.list_bullet,
+                  label: _questionsLabel(questionCount),
+                ),
+                if (survey.isAnonymous)
+                  const _InfoChip(
+                    icon: CupertinoIcons.eye_slash_fill,
+                    label: 'Анонимно',
+                  ),
+                if (closesAt != null)
+                  _InfoChip(
+                    icon: CupertinoIcons.clock_fill,
+                    label:
+                        'До ${DateFormat('d MMMM, HH:mm', 'ru_RU').format(closesAt)}',
+                  ),
+              ],
             ),
-          ),
-        if (_submitError != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            _submitError!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: CupertinoColors.systemRed),
-          ),
-        ],
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: CupertinoButton.filled(
-            onPressed: _isSubmitting ? null : _submit,
-            child: _isSubmitting
-                ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                : Text(survey.submitButtonText ?? 'Отправить'),
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      for (var i = 0; i < questionCount; i++)
+        Padding(
+          key: _questionKeys[form.questions[i].id],
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: _QuestionCard(
+            index: i + 1,
+            question: form.questions[i],
+            error: _fieldErrors[form.questions[i].id],
+            child: _buildInput(form.questions[i]),
           ),
         ),
-      ],
-    );
+      if (_submitError != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+          child: Text(
+            _submitError!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: CupertinoColors.systemRed.resolveFrom(context),
+            ),
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: AppPrimaryButton(
+          label: survey.submitButtonText ?? 'Отправить',
+          isLoading: _isSubmitting,
+          onPressed: _submit,
+        ),
+      ),
+    ];
+  }
+
+  static String _questionsLabel(int count) {
+    final mod10 = count % 10;
+    final mod100 = count % 100;
+    final word = mod10 == 1 && mod100 != 11
+        ? 'вопрос'
+        : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? 'вопроса'
+        : 'вопросов';
+    return '$count $word';
   }
 
   Widget _buildInput(SurveyQuestion q) {
@@ -476,66 +501,105 @@ class _QuestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasError = error != null;
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final red = CupertinoColors.systemRed.resolveFrom(context);
     return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: hasError ? CupertinoColors.systemRed : const Color(0x00000000),
-        ),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text.rich(
-            TextSpan(
+      // Красная кромка поверх стекла — сразу видно, какой вопрос пропущен.
+      foregroundDecoration: hasError
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: red, width: 1.5),
+            )
+          : null,
+      child: AppFlatGlassCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextSpan(
-                  text: '$index. ',
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(
+                      alpha: isDark ? 0.28 : 0.14,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: question.label),
+                          if (question.isRequired)
+                            TextSpan(
+                              text: ' *',
+                              style: TextStyle(color: red),
+                            ),
+                        ],
+                      ),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (question.description != null) ...[
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 36),
+                child: Text(
+                  question.description!,
                   style: TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
                     color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
-                TextSpan(text: question.label),
-                if (question.isRequired)
-                  const TextSpan(
-                    text: ' *',
-                    style: TextStyle(color: CupertinoColors.systemRed),
+              ),
+            ],
+            const SizedBox(height: 14),
+            child,
+            if (hasError) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.exclamationmark_circle_fill,
+                    size: 15,
+                    color: red,
                   ),
-              ],
-            ),
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              height: 1.3,
-            ),
-          ),
-          if (question.description != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              question.description!,
-              style: TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      error!,
+                      style: TextStyle(fontSize: 13, color: red),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ],
-          const SizedBox(height: 12),
-          child,
-          if (hasError) ...[
-            const SizedBox(height: 8),
-            Text(
-              error!,
-              style: const TextStyle(
-                fontSize: 13,
-                color: CupertinoColors.systemRed,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -560,7 +624,11 @@ class _TextInput extends StatelessWidget {
       minLines: maxLines > 1 ? 2 : 1,
       maxLines: maxLines,
       textCapitalization: TextCapitalization.sentences,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
+        borderRadius: BorderRadius.circular(14),
+      ),
     );
   }
 }
@@ -591,6 +659,7 @@ class _OptionsInput extends StatelessWidget {
     return Column(
       children: [
         for (final option in options)
+          // Варианты — отдельные «плашки», выбранная подсвечена синим.
           _OptionRow(
             label: option.label,
             multiple: multiple,
@@ -622,31 +691,53 @@ class _OptionRow extends StatelessWidget {
               ? CupertinoIcons.checkmark_square_fill
               : CupertinoIcons.square)
         : (selected
-              ? CupertinoIcons.largecircle_fill_circle
+              ? CupertinoIcons.checkmark_circle_fill
               : CupertinoIcons.circle);
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Semantics(
       checked: selected,
       button: true,
       label: label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 22,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.primary.withValues(alpha: isDark ? 0.24 : 0.10)
+                  : CupertinoColors.tertiarySystemFill.resolveFrom(context),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
                 color: selected
-                    ? AppColors.primary
-                    : CupertinoColors.systemGrey2.resolveFrom(context),
+                    ? AppColors.primary.withValues(alpha: 0.6)
+                    : const Color(0x00000000),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(label, style: const TextStyle(fontSize: 15)),
-              ),
-            ],
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 22,
+                  color: selected
+                      ? AppColors.primary
+                      : CupertinoColors.systemGrey2.resolveFrom(context),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -729,7 +820,7 @@ class _NpsInput extends StatelessWidget {
                     onTap: () => onChanged(score == value ? null : score),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
-                      height: 38,
+                      height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: score == value
@@ -737,7 +828,7 @@ class _NpsInput extends StatelessWidget {
                             : CupertinoColors.tertiarySystemFill.resolveFrom(
                                 context,
                               ),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         '$score',
@@ -784,19 +875,26 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = CupertinoColors.secondaryLabel.resolveFrom(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 12.5, color: color)),
-        ],
+    return AppGlass(
+      borderRadius: BorderRadius.circular(16),
+      shadows: AppGlass.controlShadow,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -818,21 +916,33 @@ class _SurveyResultView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 64, color: color),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    final tint = CupertinoDynamicColor.resolve(color, context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+      child: Column(
+        children: [
+          // Значок в стеклянном медальоне с мягкой подложкой своего цвета.
+          AppGlass(
+            borderRadius: BorderRadius.circular(56),
+            child: Container(
+              width: 112,
+              height: 112,
+              alignment: Alignment.center,
+              color: tint.withValues(alpha: isDark ? 0.24 : 0.14),
+              child: Icon(icon, size: 56, color: tint),
             ),
-            const SizedBox(height: 8),
-            Text(
+          ),
+          const SizedBox(height: 24),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -841,13 +951,13 @@ class _SurveyResultView extends StatelessWidget {
                 color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
-            const SizedBox(height: 24),
-            CupertinoButton.filled(
-              onPressed: () => Navigator.of(context).maybePop(),
-              child: const Text('Готово'),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 32),
+          AppPrimaryButton(
+            label: 'Готово',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+        ],
       ),
     );
   }

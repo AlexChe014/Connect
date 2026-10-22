@@ -58,6 +58,9 @@ class DocumentPendingService extends ChangeNotifier {
   }
 
   final Map<int, int> counts = {};
+
+  /// Сколько документов ждут действия во всех сервисах — бейдж вкладки «Ещё».
+  int get totalCount => counts.values.fold(0, (sum, c) => sum + c);
   final Set<int> errors = {};
   final Set<int> loading = {};
   int _generation = 0;
