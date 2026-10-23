@@ -1,20 +1,15 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_theme.dart';
 import '../models/bookings/create_booking_request.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
-import '../repositories/connector_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
-import '../services/api_client.dart';
 import '../utils/booking_time_utils.dart';
-import '../utils/connector_launch.dart';
-import '../utils/connector_url_utils.dart';
+import '../utils/connector_link_join.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_network_image.dart';
@@ -797,29 +792,7 @@ class _JoinMeetingChip extends StatelessWidget {
   /// Встреча уже идёт — кнопка залита, чтобы бросалась в глаза.
   final bool isLive;
 
-  Future<void> _open(BuildContext context) async {
-    final room = connectorRoomFromUrl(url);
-    if (room != null) {
-      try {
-        final session = await ConnectorRepository.instance.join(room);
-        await openConnectorSession(session);
-        return;
-      } catch (e) {
-        if (!context.mounted) return;
-        final message = e is ApiException
-            ? e.message
-            : 'Не удалось подключиться к конференции';
-        ScaffoldMessenger.maybeOf(
-          context,
-        )?.showSnackBar(SnackBar(content: Text(message)));
-        return;
-      }
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
+  Future<void> _open(BuildContext context) => joinMeetingLink(context, url);
 
   @override
   Widget build(BuildContext context) {

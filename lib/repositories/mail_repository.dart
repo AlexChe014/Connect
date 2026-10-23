@@ -140,6 +140,19 @@ class UpdateMailConnectionRequest {
   }
 }
 
+/// Файл, прикладываемый к письму. Хранит байты, а не готовый
+/// [http.MultipartFile]: тот можно отправить только один раз, а пересылка
+/// нескольким адресатам уходит отдельными запросами.
+class MailUpload {
+  final String filename;
+  final List<int> bytes;
+
+  const MailUpload({required this.filename, required this.bytes});
+
+  http.MultipartFile toMultipart() =>
+      http.MultipartFile.fromBytes('attachments[]', bytes, filename: filename);
+}
+
 class SendMailRequest {
   final int connectionId;
   final String to;
@@ -150,7 +163,7 @@ class SendMailRequest {
   /// `cc.*`/`bcc.*` как email.
   final List<String> cc;
   final List<String> bcc;
-  final List<http.MultipartFile> attachments;
+  final List<MailUpload> attachments;
 
   const SendMailRequest({
     required this.connectionId,
@@ -173,7 +186,7 @@ class ReplyMailRequest {
   /// `cc.*`/`bcc.*` как email.
   final List<String> cc;
   final List<String> bcc;
-  final List<http.MultipartFile> attachments;
+  final List<MailUpload> attachments;
 
   const ReplyMailRequest({
     required this.messageId,
@@ -197,7 +210,7 @@ class ForwardMailRequest {
   /// `cc.*`/`bcc.*` как email.
   final List<String> cc;
   final List<String> bcc;
-  final List<http.MultipartFile> attachments;
+  final List<MailUpload> attachments;
 
   const ForwardMailRequest({
     required this.connectionId,
@@ -580,7 +593,7 @@ class MailRepository {
     final decoded = await ApiClient.instance.postMultipart(
       MailRoutes.smtpSendUrl,
       fields: fields,
-      files: request.attachments,
+      files: [for (final a in request.attachments) a.toMultipart()],
     );
     // Live API returns {success: true, data: true} on success (not an Email
     // object, despite api-docs.json), so only the success flag can be checked.
@@ -605,7 +618,7 @@ class MailRepository {
               ..._multipartList('cc', request.cc),
               ..._multipartList('bcc', request.bcc),
             },
-            files: request.attachments,
+            files: [for (final a in request.attachments) a.toMultipart()],
           )
         : await ApiClient.instance.post(
             MailRoutes.smtpReplyUrl(request.messageId),
