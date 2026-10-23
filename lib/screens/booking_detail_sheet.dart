@@ -1,17 +1,13 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_theme.dart';
 import '../models/bookings/booking_detail.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
-import '../repositories/connector_repository.dart';
-import '../services/api_client.dart';
 import '../utils/booking_time_utils.dart';
-import '../utils/connector_launch.dart';
-import '../utils/connector_url_utils.dart';
+import '../utils/connector_link_join.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
@@ -197,29 +193,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     return Uri.tryParse(description) != null ? description : null;
   }
 
-  Future<void> _openLink(String url) async {
-    final room = connectorRoomFromUrl(url);
-    if (room != null) {
-      try {
-        final session = await ConnectorRepository.instance.join(room);
-        await openConnectorSession(session);
-        return;
-      } catch (e) {
-        if (!mounted) return;
-        final message = e is ApiException
-            ? e.message
-            : 'Не удалось подключиться к конференции';
-        ScaffoldMessenger.maybeOf(
-          context,
-        )?.showSnackBar(SnackBar(content: Text(message)));
-        return;
-      }
-    }
-
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
+  Future<void> _openLink(String url) => joinMeetingLink(context, url);
 
   /// Строка деталей: мельче строк форм (15 вместо 17) — это справка
   /// под заголовком, она не должна спорить с темой встречи.

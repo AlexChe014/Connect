@@ -1,7 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -385,13 +384,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       final replyTo = widget.replyTo;
       final forwardOf = widget.forwardOf;
       final files = _attachments
-          .map(
-            (a) => http.MultipartFile.fromBytes(
-              'attachments[]',
-              a.bytes,
-              filename: a.filename,
-            ),
-          )
+          .map((a) => MailUpload(filename: a.filename, bytes: a.bytes))
           .toList();
       final cc = _ccController.emails;
       final bcc = _bccController.emails;

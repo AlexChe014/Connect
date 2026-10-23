@@ -21,7 +21,12 @@ void main() {
         const ReplyMailRequest(messageId: 2, to: 'a@b.ru', subject: 'Re'),
       );
       await repository.forwardMail(
-        const ForwardMailRequest(messageId: 2, to: 'a@b.ru', subject: 'Fwd'),
+        const ForwardMailRequest(
+          connectionId: 1,
+          messageId: 2,
+          to: 'a@b.ru',
+          subject: 'Fwd',
+        ),
       );
     }, () => MockClient((_) async => response(true)));
   });
@@ -146,5 +151,43 @@ void main() {
     expect(paths, hasLength(2));
     expect(paths.first, endsWith('/smtp/get/sendable'));
     expect(paths.last, endsWith('/smtp/send'));
+  });
+  test('forward to several recipients re-sends attachments to each', () async {
+    final sends = <http.BaseRequest>[];
+    await http.runWithClient(
+      () async {
+        await repository.forwardMail(
+          const ForwardMailRequest(
+            connectionId: 7,
+            messageId: 2,
+            to: 'a@b.ru, Иван <c@d.ru>',
+            subject: 'Fwd',
+            body: 'Message',
+            cc: ['e@f.ru'],
+            attachments: [
+              MailUpload(filename: 'a.pdf', bytes: [1, 2, 3]),
+            ],
+          ),
+        );
+      },
+      () => MockClient((request) async {
+        final path = request.url.path;
+        if (path.endsWith('/smtp/get/sendable')) {
+          return response([
+            {'id': 7, 'email': 'second@b.ru', 'is_default': true},
+          ]);
+        }
+        sends.add(request);
+        return response(true);
+      }),
+    );
+    expect(sends, hasLength(2));
+    final bodies = sends.map((r) => latin1.decode((r as http.Request).bodyBytes));
+    expect(bodies.first, contains('a@b.ru'));
+    expect(bodies.first, contains('e@f.ru'));
+    expect(bodies.last, contains('c@d.ru'));
+    expect(bodies.last, isNot(contains('e@f.ru')));
+    expect(bodies, everyElement(contains('filename="a.pdf"')));
+    expect(bodies, everyElement(contains('name="connection_id"')));
   });
 }
