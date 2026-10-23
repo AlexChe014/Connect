@@ -135,9 +135,7 @@ class AppGlassGlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     return Positioned(
       top: 0,
       left: 0,

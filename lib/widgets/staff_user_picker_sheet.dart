@@ -46,9 +46,7 @@ class StaffUserPickerSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         final mediaQuery = MediaQuery.of(context);
         // Клавиатура (автофокус в поиске снят, но пользователь может открыть

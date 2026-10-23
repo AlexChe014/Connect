@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/document_pending_service.dart';
@@ -229,9 +230,7 @@ class _MoreScreenState extends State<MoreScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -384,8 +383,7 @@ class _MoreScreenState extends State<MoreScreen> {
                     child: BackdropFilter(
                       filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                       child: ColoredBox(
-                        color: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
+                        color: AppColors.groupedBackground
                             .resolveFrom(context)
                             .withValues(alpha: 0.7),
                       ),

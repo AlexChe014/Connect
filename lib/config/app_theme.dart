@@ -24,6 +24,28 @@ abstract final class AppColors {
   /// акцент в переписке: сразу видно, где ваши сообщения.
   static const outgoingBubble = primary;
 
+  // Фоны экранов и карточек. В тёмной теме не чистый чёрный, а графит
+  // с холодным оттенком: на #000 стеклу нечего размывать, карточки
+  // держатся только на кромке, а свечение под шапкой обрывается пятном.
+  static const screenBackground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF0F1115),
+  );
+  static const groupedBackground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFF2F2F7),
+    darkColor: Color(0xFF0F1115),
+  );
+  static const groupedSurface = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF1C1E22),
+  );
+
+  /// Бегунок сегментного переключателя.
+  static const segmentThumb = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF3A3D43),
+  );
+
   // Liquid Glass: заливка и кромка плавающих панелей и карточек.
   // Динамические — читать через `.resolveFrom(context)`.
   static const glassFill = CupertinoDynamicColor.withBrightness(
@@ -194,19 +216,19 @@ class _Palette {
     error: AppColors.error,
   );
 
-  /// Системные тёмные цвета iOS: фон чёрный, карточки и шторки
-  /// secondarySystemGroupedBackground, разделители separator.
+  /// Графитовая тёмная палитра — те же фоны, что у
+  /// [AppColors.groupedBackground] и [AppColors.groupedSurface].
   static const dark = _Palette(
     brightness: Brightness.dark,
-    surface: Color(0xFF1C1C1E),
-    background: Color(0xFF000000),
+    surface: Color(0xFF1C1E22),
+    background: Color(0xFF0F1115),
     onSurface: Color(0xFFF2F2F7),
     onSurfaceVariant: Color(0xFFAEAEB2),
-    surfaceElevated: Color(0xFF2C2C2E),
-    surfaceContainerHighest: Color(0xFF2C2C2E),
+    surfaceElevated: Color(0xFF26292E),
+    surfaceContainerHighest: Color(0xFF26292E),
     secondaryContainer: Color(0xFF0E2A4D),
-    outline: Color(0xFF38383A),
-    outlineStrong: Color(0xFF48484A),
+    outline: Color(0xFF2E3138),
+    outlineStrong: Color(0xFF3E424A),
     error: Color(0xFFFF453A),
   );
 }

@@ -868,9 +868,7 @@ class _DiskScreenState extends State<DiskScreen> {
     final task = _task;
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

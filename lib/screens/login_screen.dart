@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/app_theme.dart';
 import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../config/home_tabs.dart';
@@ -133,9 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
@@ -215,7 +214,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                     fontSize: 13,
                                     height: 1.35,
                                     color: CupertinoColors.secondaryLabel
-                                        .resolveFrom(context)
                                         .resolveFrom(context),
                                   ),
                                 ),
@@ -260,7 +258,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                       : CupertinoIcons.eye_slash,
                                   size: 20,
                                   color: CupertinoColors.secondaryLabel
-                                      .resolveFrom(context)
                                       .resolveFrom(context),
                                 ),
                               ),

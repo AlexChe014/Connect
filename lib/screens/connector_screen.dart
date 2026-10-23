@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/app_theme.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_title_bar.dart';
@@ -61,9 +62,7 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

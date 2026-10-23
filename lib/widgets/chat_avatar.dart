@@ -5,7 +5,6 @@ import 'package:connect/config/app_theme.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/birthday_directory.dart';
 import 'package:connect/utils/user_display_name.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -176,9 +175,7 @@ class BirthdayBadge extends StatelessWidget {
         height: size,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
+          color: AppColors.groupedSurface.resolveFrom(context),
           shape: BoxShape.circle,
         ),
         child: Text('🎂', style: TextStyle(fontSize: size * 0.62)),

@@ -419,9 +419,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
 
     return AppGlassBarBlur(

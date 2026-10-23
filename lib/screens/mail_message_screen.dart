@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
@@ -543,8 +544,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         // BackdropFilter не размывает — без плотной подложки текст письма
         // просвечивал сквозь подписи кнопок.
         child: ColoredBox(
-          color: CupertinoColors.systemBackground
-              .resolveFrom(context)
+          color: AppColors.screenBackground
               .resolveFrom(context)
               .withValues(alpha: 0.75),
           child: Row(
@@ -586,9 +586,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
   @override
   Widget build(BuildContext context) {
     final message = _message;
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
 
     return AppGlassBarBlur(

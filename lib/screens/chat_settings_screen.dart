@@ -174,9 +174,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.7,
@@ -462,7 +460,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         child: CupertinoSlidingSegmentedControl<int>(
           groupValue: _galleryTab,
           backgroundColor: Colors.transparent,
-          thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
+          thumbColor: AppColors.segmentThumb.resolveFrom(context),
           onValueChanged: (value) {
             if (value != null) setState(() => _galleryTab = value);
           },
@@ -773,9 +771,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final selfId = _service.selfUserId;
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
 
     return CupertinoPageScaffold(
       backgroundColor: groupedBg,

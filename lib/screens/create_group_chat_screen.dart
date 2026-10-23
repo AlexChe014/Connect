@@ -167,9 +167,7 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
         ..sort((a, b) => a.fullName.compareTo(b.fullName));
     }
     final contactsLoading = _chat.isContactsLoading && allContacts.isEmpty;
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
 
     return CupertinoPageScaffold(
       backgroundColor: groupedBg,

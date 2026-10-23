@@ -450,13 +450,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final startingCall = _callService.isStartingCall;
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       navigationBar: CupertinoNavigationBar(
         // Полупрозрачная — сообщения уходят под размытую шапку.
-        backgroundColor: CupertinoColors.systemGroupedBackground
-            .resolveFrom(context)
+        backgroundColor: AppColors.groupedBackground
             .resolveFrom(context)
             .withValues(alpha: 0.7),
         automaticBackgroundVisibility: false,
@@ -819,9 +816,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) => SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.5,
         child: SafeArea(
@@ -865,9 +860,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.6,
@@ -1277,9 +1270,7 @@ class _ForwardTargetTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
+        color: AppColors.groupedSurface.resolveFrom(context),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1854,9 +1845,7 @@ class _MessageTile extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: CupertinoColors.secondarySystemGroupedBackground
-                  .resolveFrom(context)
-                  .resolveFrom(context),
+              color: AppColors.groupedSurface.resolveFrom(context),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
@@ -1888,7 +1877,7 @@ class _MessageTile extends StatelessWidget {
         : CrossAxisAlignment.start;
     final bubble = m.isOutgoing
         ? AppColors.outgoingBubble
-        : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+        : AppColors.groupedSurface.resolveFrom(context);
     // Стикер рисуется без пузыря — цитата и подписи над ним на фоне чата.
     final onBubble = m.isOutgoing && !m.isSticker
         ? CupertinoColors.white
@@ -2053,7 +2042,7 @@ class _MessageTile extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: CupertinoColors.systemBackground.resolveFrom(
+                            color: AppColors.groupedSurface.resolveFrom(
                               context,
                             ),
                             borderRadius: BorderRadius.circular(12),

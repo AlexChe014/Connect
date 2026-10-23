@@ -1121,7 +1121,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground.resolveFrom(context),
+        backgroundColor: AppColors.screenBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

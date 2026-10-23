@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import '../config/app_theme.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
@@ -324,9 +325,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

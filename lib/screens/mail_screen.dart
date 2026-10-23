@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show RefreshIndicator, ScaffoldMessenger, SnackBar;
 
+import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
 import '../repositories/profile_repository.dart';
@@ -210,9 +211,7 @@ class _MailScreenState extends State<MailScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

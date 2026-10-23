@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import 'chat_avatar.dart';
 
@@ -15,7 +16,7 @@ class EmployeeAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ring = CupertinoColors.systemBackground.resolveFrom(context);
+    final ring = AppColors.screenBackground.resolveFrom(context);
     final dot = (radius * 0.6).clamp(12.0, 18.0);
     final cake = dot * 1.5;
     // Точка на окружности под 45°: от края квадрата r·(1 − 1/√2).

@@ -427,7 +427,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground.resolveFrom(context),
+        backgroundColor: AppColors.screenBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -522,9 +522,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.7,
@@ -780,9 +778,7 @@ class _ContactTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
+        color: AppColors.groupedSurface.resolveFrom(context),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
@@ -957,7 +953,7 @@ class _ChatRow extends StatelessWidget {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: CupertinoColors.systemBackground.resolveFrom(
+                          color: AppColors.screenBackground.resolveFrom(
                             context,
                           ),
                         ),
@@ -995,7 +991,6 @@ class _ChatRow extends StatelessWidget {
                                     text: 'Черновик: ',
                                     style: TextStyle(
                                       color: CupertinoColors.destructiveRed
-                                          .resolveFrom(context)
                                           .resolveFrom(context),
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -1008,7 +1003,6 @@ class _ChatRow extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 color: CupertinoColors.secondaryLabel
-                                    .resolveFrom(context)
                                     .resolveFrom(context),
                                 height: 1.25,
                               ),
@@ -1020,7 +1014,6 @@ class _ChatRow extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 color: CupertinoColors.secondaryLabel
-                                    .resolveFrom(context)
                                     .resolveFrom(context),
                                 height: 1.25,
                               ),
@@ -1073,7 +1066,6 @@ class _ChatRow extends StatelessWidget {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: CupertinoColors.tertiaryLabel
-                                    .resolveFrom(context)
                                     .resolveFrom(context),
                               ),
                             ),

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
@@ -489,7 +490,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         style: TextStyle(
                                           fontSize: 13,
                                           color: CupertinoColors.secondaryLabel
-                                              .resolveFrom(context)
                                               .resolveFrom(context),
                                         ),
                                       ),
@@ -503,7 +503,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   CupertinoIcons.chevron_forward,
                                   size: 16,
                                   color: CupertinoColors.tertiaryLabel
-                                      .resolveFrom(context)
                                       .resolveFrom(context),
                                 ),
                               ),
@@ -648,9 +647,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: CupertinoColors.systemRed.resolveFrom(context),
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(
-                      color: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .resolveFrom(context),
+                      color: AppColors.groupedBackground.resolveFrom(context),
                       width: 1.5,
                     ),
                   ),
@@ -674,9 +671,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       child: SafeArea(
         top: false,
         bottom: false,
@@ -686,8 +681,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             slivers: [
               AppSliverTitleBar(
                 title: const Text('Профиль'),
-                backgroundColor: CupertinoColors.systemGroupedBackground
-                    .resolveFrom(context),
+                backgroundColor: AppColors.groupedBackground.resolveFrom(
+                  context,
+                ),
                 trailing: ListenableBuilder(
                   listenable: NotificationUnreadService.instance,
                   builder: (context, _) => _buildNotificationsButton(context),
@@ -725,9 +721,7 @@ class _ProfileHeaderCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
+          color: AppColors.groupedSurface.resolveFrom(context),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(

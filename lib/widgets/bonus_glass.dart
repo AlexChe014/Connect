@@ -62,9 +62,7 @@ class BonusGlassScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
     // Прозрачная: заливка дала бы на цветном пятне видимую границу.
     final barBg = groupedBg.withValues(alpha: 0);

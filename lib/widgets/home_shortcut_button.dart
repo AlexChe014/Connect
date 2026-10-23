@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../config/app_theme.dart';
 import '../services/app_navigation_service.dart';
 import '../services/root_stack_observer.dart';
 
@@ -102,7 +103,7 @@ class _HomeButton extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: CupertinoColors.systemBackground.resolveFrom(context),
+          color: AppColors.groupedSurface.resolveFrom(context),
           boxShadow: [
             BoxShadow(
               color: CupertinoColors.black.withValues(alpha: 0.15),

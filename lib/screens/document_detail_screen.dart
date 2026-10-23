@@ -281,9 +281,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
     final showActions = !_isLoading && _errorMessage == null;
 

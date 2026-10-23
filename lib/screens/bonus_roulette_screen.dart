@@ -383,9 +383,7 @@ class _FestiveGlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(

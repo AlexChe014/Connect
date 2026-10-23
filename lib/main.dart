@@ -373,9 +373,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     return Scaffold(
       // Тот же серый, что у вкладок: плавающее меню лежит на нём.
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       // Списки уходят под плавающую капсулу, а не обрываются над ней серой
       // полосой; высоту меню вкладки получают в MediaQuery.padding.bottom.
       extendBody: true,
@@ -480,9 +478,7 @@ class _FloatingTabBar extends StatelessWidget {
         height: 62,
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
+          color: AppColors.groupedSurface.resolveFrom(context),
           borderRadius: BorderRadius.circular(31),
           boxShadow: const [
             BoxShadow(

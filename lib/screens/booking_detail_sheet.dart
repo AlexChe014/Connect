@@ -36,9 +36,7 @@ class BookingDetailSheet extends StatefulWidget {
       // Ручка рисуется внутри шторки: системная лежит на отдельной
       // полосе, и цветное пятно под ней обрывалось ровной границей.
       showDragHandle: false,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       clipBehavior: Clip.antiAlias,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -547,7 +545,6 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                                         style: TextStyle(
                                           fontWeight: FontWeight.w500,
                                           color: CupertinoColors.systemRed
-                                              .resolveFrom(context)
                                               .resolveFrom(context),
                                         ),
                                       ),

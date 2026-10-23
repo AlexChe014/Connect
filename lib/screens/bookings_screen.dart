@@ -466,8 +466,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                         context: context,
                         isScrollControlled: true,
                         showDragHandle: true,
-                        backgroundColor: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
+                        backgroundColor: AppColors.groupedBackground
                             .resolveFrom(context),
                         clipBehavior: Clip.antiAlias,
                         shape: const RoundedRectangleBorder(
@@ -562,9 +561,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

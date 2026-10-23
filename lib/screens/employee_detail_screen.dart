@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
 import '../repositories/profile_repository.dart';
@@ -388,9 +389,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
     final showRoles = (_viewerIsAdmin || _isOwnProfile) && rolesText != null;
     final company = (user.company ?? '').trim();
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
 
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(

@@ -31,9 +31,7 @@ class AchievementTypePickerSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         final mediaQuery = MediaQuery.of(context);
         final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top - 24)

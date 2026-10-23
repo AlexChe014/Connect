@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show RefreshIndicator, ScaffoldMessenger, SnackBar;
 
+import '../config/app_theme.dart';
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
@@ -297,9 +298,7 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-          context,
-        ),
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
