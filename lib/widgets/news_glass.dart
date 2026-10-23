@@ -1,14 +1,17 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../config/app_theme.dart';
 import '../models/news_item.dart';
 import '../utils/file_size_format.dart';
+import 'app_glass.dart';
 import 'app_icon_badge.dart';
 import 'app_network_image.dart';
 import 'chat_avatar.dart';
@@ -80,7 +83,7 @@ class NewsAuthorLine extends StatelessWidget {
   }
 }
 
-/// Фото поста 16:9: снимок целиком (contain) на размытой копии самого
+/// Фото поста (по умолчанию 16:9): снимок целиком (contain) на размытой копии самого
 /// себя — портретные фото не обрезаются, а карточка не прыгает по высоте.
 class NewsCoverImage extends StatelessWidget {
   const NewsCoverImage({
@@ -88,38 +91,62 @@ class NewsCoverImage extends StatelessWidget {
     required this.url,
     this.moreCount = 0,
     this.borderRadius = 16,
+    this.aspectRatio = 16 / 9,
   });
 
   final String url;
+  final double aspectRatio;
 
   /// Сколько ещё фото в посте — плашка «+N» в углу.
   final int moreCount;
   final double borderRadius;
 
+  /// Ширина, до которой раскодируются фото ленты: карточка не шире экрана.
+  /// Одна и та же для всех слоёв и для [_NaturalCoverImage], чтобы снимок
+  /// декодировался один раз и делил одну запись кэша.
+  static int cacheWidth(BuildContext context) =>
+      (MediaQuery.sizeOf(context).width *
+              MediaQuery.devicePixelRatioOf(context))
+          .round();
+
   @override
   Widget build(BuildContext context) {
+    final cacheWidth = NewsCoverImage.cacheWidth(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: AspectRatio(
-        aspectRatio: 16 / 9,
+        aspectRatio: aspectRatio,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-              child: AppNetworkImage(
-                url: url,
-                width: double.infinity,
-                height: double.infinity,
+            if (AppGlass.blurSupported)
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: AppNetworkImage(
+                  url: url,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.cover,
+                  memCacheWidth: cacheWidth,
+                ),
+              )
+            else
+              // Дешёвое «размытие» без фильтра: крошечная копия снимка,
+              // растянутая с билинейной фильтрацией.
+              CachedNetworkImage(
+                imageUrl: url,
+                memCacheWidth: 24,
                 fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                errorWidget: (context, url, error) => const SizedBox.shrink(),
               ),
-            ),
-            const ColoredBox(color: Color(0x2E000000)),
+            const ColoredBox(color: AppColors.scrimFaint),
             AppNetworkImage(
               url: url,
               width: double.infinity,
               height: double.infinity,
               fit: BoxFit.contain,
+              memCacheWidth: cacheWidth,
             ),
             if (moreCount > 0)
               Positioned(
@@ -142,34 +169,37 @@ class _PhotoCountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      color: AppColors.scrim,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            CupertinoIcons.photo_on_rectangle,
+            size: 13,
+            color: CupertinoColors.white,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.white,
+            ),
+          ),
+        ],
+      ),
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          color: const Color(0x66000000),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                CupertinoIcons.photo_on_rectangle,
-                size: 13,
-                color: CupertinoColors.white,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      child: AppGlass.blurSupported
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: badge,
+            )
+          : badge,
     );
   }
 }
@@ -194,7 +224,7 @@ class _NewsPhotoGalleryState extends State<NewsPhotoGallery> {
     if (urls.length == 1) {
       return GestureDetector(
         onTap: () => widget.onOpen(0),
-        child: NewsCoverImage(url: urls.first),
+        child: _NaturalCoverImage(url: urls.first),
       );
     }
     return Column(
@@ -234,6 +264,75 @@ class _NewsPhotoGalleryState extends State<NewsPhotoGallery> {
         ),
       ],
     );
+  }
+}
+
+/// Одиночное фото в посте — в собственных пропорциях, без размытых полос.
+/// Совсем узкие и совсем широкие снимки ограничены, для них полосы остаются.
+class _NaturalCoverImage extends StatefulWidget {
+  const _NaturalCoverImage({required this.url});
+
+  final String url;
+
+  @override
+  State<_NaturalCoverImage> createState() => _NaturalCoverImageState();
+}
+
+class _NaturalCoverImageState extends State<_NaturalCoverImage> {
+  static const _minRatio = 4 / 5;
+  static const _maxRatio = 2.4;
+
+  ImageStream? _stream;
+  late final _listener = ImageStreamListener(_onImage, onError: (_, _) {});
+  double? _ratio;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_NaturalCoverImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _ratio = null;
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    final url = widget.url.trim();
+    if (url.isEmpty) return;
+    // Тот же ключ, что у [NewsCoverImage]: иначе ради пропорций в памяти
+    // висел бы ещё и полноразмерный снимок.
+    final stream = ResizeImage.resizeIfNeeded(
+      NewsCoverImage.cacheWidth(context),
+      null,
+      CachedNetworkImageProvider(url),
+    ).resolve(createLocalImageConfiguration(context));
+    if (stream.key == _stream?.key) return;
+    _stream?.removeListener(_listener);
+    _stream = stream..addListener(_listener);
+  }
+
+  void _onImage(ImageInfo info, bool _) {
+    final image = info.image;
+    if (!mounted || image.height == 0) return;
+    setState(() {
+      _ratio = (image.width / image.height).clamp(_minRatio, _maxRatio);
+    });
+  }
+
+  @override
+  void dispose() {
+    _stream?.removeListener(_listener);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NewsCoverImage(url: widget.url, aspectRatio: _ratio ?? 16 / 9);
   }
 }
 
@@ -297,7 +396,9 @@ class _NewsDocumentRowState extends State<NewsDocumentRow> {
       padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 14, 10),
       leading: AppIconBadge(
         icon: CupertinoIcons.doc_text_fill,
-        color: isPdf ? CupertinoColors.systemRed : CupertinoColors.systemGrey,
+        color: isPdf
+            ? CupertinoColors.systemRed.resolveFrom(context)
+            : CupertinoColors.systemGrey.resolveFrom(context),
       ),
       title: Text(
         document.name,

@@ -37,7 +37,8 @@ class ConnectorSession {
   factory ConnectorSession.fromJson(Map<String, dynamic> json) {
     return ConnectorSession(
       room: (json['room'] as String?)?.trim() ?? '',
-      publicUrl: (json['public_url'] as String?)?.trim() ??
+      publicUrl:
+          (json['public_url'] as String?)?.trim() ??
           (json['url'] as String?)?.trim() ??
           '',
       jitsiServerUrl: (json['jitsi_server_url'] as String?)?.trim() ?? '',

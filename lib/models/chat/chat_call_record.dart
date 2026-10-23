@@ -24,7 +24,8 @@ class ChatCallRecord {
   /// Разбирает объект `call` из сообщения (`{id|call_id, status, duration}`).
   static ChatCallRecord? tryParse(Object? raw, {Object? fallbackCallId}) {
     final map = raw is Map ? raw : const <String, dynamic>{};
-    final callId = _str(map['call_id']) ?? _str(map['id']) ?? _str(fallbackCallId);
+    final callId =
+        _str(map['call_id']) ?? _str(map['id']) ?? _str(fallbackCallId);
     if (callId == null) return null;
     return ChatCallRecord(
       callId: callId,

@@ -11,4 +11,3 @@ class AuthRoutes {
 
   static String get logoutUrl => '${ApiConfig.baseUrl}$logout';
 }
-

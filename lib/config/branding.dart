@@ -63,11 +63,8 @@ class _AssetLogo extends StatelessWidget {
       BrandingAssets.loginLogoPng,
       height: height,
       fit: fit,
-      errorBuilder: (context, error, stackTrace) => Icon(
-        CupertinoIcons.news,
-        size: height * 0.85,
-        color: scheme.primary,
-      ),
+      errorBuilder: (context, error, stackTrace) =>
+          Icon(CupertinoIcons.news, size: height * 0.85, color: scheme.primary),
     );
   }
 }

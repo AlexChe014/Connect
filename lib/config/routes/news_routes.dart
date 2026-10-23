@@ -11,7 +11,8 @@ class NewsRoutes {
   static String get allUrl => '${ApiConfig.baseUrl}$all';
   static String get createUrl => '${ApiConfig.baseUrl}$create';
 
-  static String getUrl(String newsId) => '${ApiConfig.baseUrl}$_prefix/get/$newsId';
+  static String getUrl(String newsId) =>
+      '${ApiConfig.baseUrl}$_prefix/get/$newsId';
 
   static String updateUrl(String newsId) =>
       '${ApiConfig.baseUrl}$_prefix/update/$newsId';

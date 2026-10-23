@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show
+        Colors,
         RefreshIndicator,
         ScaffoldMessenger,
         SnackBar,
@@ -1120,7 +1121,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground,
+        backgroundColor: AppColors.screenBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -1265,7 +1266,7 @@ class _MessageTile extends StatelessWidget {
     final row = ColoredBox(
       color: isSelected
           ? AppColors.primary.withValues(alpha: 0.1)
-          : const Color(0x00000000),
+          : Colors.transparent,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -1411,7 +1412,7 @@ class _MessageTile extends StatelessWidget {
         children: [
           SlidableAction(
             onPressed: (_) => onDelete(),
-            backgroundColor: CupertinoColors.systemRed,
+            backgroundColor: CupertinoColors.systemRed.resolveFrom(context),
             foregroundColor: CupertinoColors.white,
             icon: CupertinoIcons.trash,
             label: 'Удалить',
@@ -1450,7 +1451,7 @@ class _SearchComposeBar extends StatelessWidget {
                   child: CupertinoSearchTextField(
                     controller: controller,
                     placeholder: 'Поиск писем',
-                    backgroundColor: const Color(0x00000000),
+                    backgroundColor: Colors.transparent,
                     onChanged: onChanged,
                   ),
                 ),

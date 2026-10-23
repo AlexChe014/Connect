@@ -281,9 +281,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
     final showActions = !_isLoading && _errorMessage == null;
 
@@ -342,7 +340,6 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     final actionLabel = widget.service.isSigningService
         ? 'Подписать'
         : 'Согласовать';
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: 12),
@@ -366,9 +363,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0x1FFFFFFF)
-                        : const Color(0x0F000000),
+                    color: AppColors.glassInputFill.resolveFrom(context),
                     borderRadius: BorderRadius.circular(18),
                   ),
                 ),
@@ -487,9 +482,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             children: [
               for (final side in sides)
                 CupertinoListTile(
-                  leading: const AppIconBadge(
+                  leading: AppIconBadge(
                     icon: CupertinoIcons.person_2_fill,
-                    color: CupertinoColors.systemIndigo,
+                    color: CupertinoColors.systemIndigo.resolveFrom(context),
                   ),
                   title: Text(side['partner']?.toString() ?? 'Сторона'),
                   subtitle: (side['value']?.toString() ?? '').isEmpty
@@ -506,9 +501,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             children: [
               for (final entry in files.asMap().entries)
                 CupertinoListTile(
-                  leading: const AppIconBadge(
+                  leading: AppIconBadge(
                     icon: CupertinoIcons.paperclip,
-                    color: CupertinoColors.systemGrey,
+                    color: CupertinoColors.systemGrey.resolveFrom(context),
                   ),
                   title: Text(entry.value['namefile']?.toString() ?? 'Файл'),
                   trailing: _downloadingFileIndex == entry.key
@@ -535,9 +530,9 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                 ),
               for (final acceptor in _acceptors!)
                 CupertinoListTile(
-                  leading: const AppIconBadge(
+                  leading: AppIconBadge(
                     icon: CupertinoIcons.checkmark_seal_fill,
-                    color: CupertinoColors.systemGreen,
+                    color: CupertinoColors.systemGreen.resolveFrom(context),
                   ),
                   title: Text(DocumentPayloadUtils.labelForAcceptor(acceptor)),
                   subtitle: () {
@@ -582,8 +577,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                         ? CupertinoIcons.pencil
                         : CupertinoIcons.checkmark_seal_fill,
                     color: widget.service.isSigningService
-                        ? CupertinoColors.systemBlue
-                        : CupertinoColors.systemGreen,
+                        ? CupertinoColors.systemBlue.resolveFrom(context)
+                        : CupertinoColors.systemGreen.resolveFrom(context),
                   ),
                   const SizedBox(width: 10),
                   Expanded(

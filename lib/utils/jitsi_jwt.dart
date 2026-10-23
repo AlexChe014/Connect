@@ -22,31 +22,25 @@ String generateJitsiJwt({
   }
 
   final displayName = '${surname.trim()} ${name.trim()}'.trim();
-  final exp = DateTime.now()
-      .toUtc()
-      .add(Duration(minutes: JitsiConfig.tokenLifetimeMinutes))
-      .millisecondsSinceEpoch ~/
+  final exp =
+      DateTime.now()
+          .toUtc()
+          .add(Duration(minutes: JitsiConfig.tokenLifetimeMinutes))
+          .millisecondsSinceEpoch ~/
       1000;
 
-  final jwt = JWT(
-    {
-      'context': {
-        'user': {
-          'name': displayName,
-        },
-        'features': {
-          'livestreaming': true,
-          'recording': true,
-        },
-      },
-      'aud': appId,
-      'iss': appId,
-      'sub': JitsiConfig.serverAddress,
-      'room': roomName,
-      'exp': exp,
-      'moderator': isInitiator,
+  final jwt = JWT({
+    'context': {
+      'user': {'name': displayName},
+      'features': {'livestreaming': true, 'recording': true},
     },
-  );
+    'aud': appId,
+    'iss': appId,
+    'sub': JitsiConfig.serverAddress,
+    'room': roomName,
+    'exp': exp,
+    'moderator': isInitiator,
+  });
 
   return jwt.sign(SecretKey(secret), algorithm: JWTAlgorithm.HS256);
 }

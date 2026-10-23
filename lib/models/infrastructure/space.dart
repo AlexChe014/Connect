@@ -24,11 +24,12 @@ class Space {
       isActive: isActiveRaw == true || isActiveRaw == 1 || isActiveRaw == '1',
       types: typesRaw is List
           ? typesRaw
-              .whereType<Map>()
-              .map((e) => BookingObjectType.fromJson(e.cast<String, dynamic>()))
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (e) => BookingObjectType.fromJson(e.cast<String, dynamic>()),
+                )
+                .toList()
           : const [],
     );
   }
 }
-

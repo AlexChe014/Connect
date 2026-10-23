@@ -29,7 +29,8 @@ class PointTransferConfig {
       ),
       minPoints:
           ApiPaginatedEnvelope.parseInt(json['transfer_min_points']) ?? 10,
-      maxPoints: ApiPaginatedEnvelope.parseInt(json['transfer_max_points']) ?? 0,
+      maxPoints:
+          ApiPaginatedEnvelope.parseInt(json['transfer_max_points']) ?? 0,
     );
   }
 

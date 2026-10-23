@@ -70,6 +70,14 @@ String _formatLastMessageTime(DateTime d) {
       : formatted;
 }
 
+/// В 1С у документа только день, без времени: сегодняшний показываем
+/// «сегодня», а не «00:00».
+String _formatDocumentDay(DateTime d) {
+  final local = d.toLocal();
+  if (_dateOnly(local) == _dateOnly(DateTime.now())) return 'сегодня';
+  return _formatLastMessageTime(local);
+}
+
 class ChatsListScreen extends StatefulWidget {
   const ChatsListScreen({super.key});
 
@@ -199,14 +207,14 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
               ? CupertinoIcons.pin_slash
               : CupertinoIcons.pin_fill,
           label: _approvalsPinned ? 'Открепить' : 'Закрепить',
-          color: CupertinoColors.systemOrange,
+          color: CupertinoColors.systemOrange.resolveFrom(context),
           onTap: _toggleApprovalsPin,
         ),
       ],
       child: _ApprovalsRow(
         pending: _pending,
         isPinned: _approvalsPinned,
-        time: latest != null ? _formatLastMessageTime(latest) : '',
+        time: latest != null ? _formatDocumentDay(latest) : '',
         onTap: _openApprovals,
         onLongPress: _showApprovalsActions,
       ),
@@ -339,7 +347,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     ? CupertinoIcons.pin_slash
                     : CupertinoIcons.pin_fill,
                 label: c.isPinned ? 'Открепить' : 'Закрепить',
-                color: CupertinoColors.systemOrange,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
                 onTap: () => _togglePin(c),
               ),
               SwipeAction(
@@ -347,7 +355,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     ? CupertinoIcons.bell
                     : CupertinoIcons.bell_slash_fill,
                 label: c.isMuted ? 'Со звуком' : 'Без звука',
-                color: CupertinoColors.systemGrey,
+                color: CupertinoColors.systemGrey.resolveFrom(context),
                 onTap: () => _chat.toggleMute(c.id),
               ),
               SwipeAction(
@@ -355,7 +363,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     ? CupertinoIcons.star_slash
                     : CupertinoIcons.star_fill,
                 label: c.isFavorite ? 'Убрать' : 'Избранное',
-                color: CupertinoColors.systemYellow,
+                color: CupertinoColors.systemYellow.resolveFrom(context),
                 onTap: () => _chat.toggleFavorite(c.id),
               ),
             ],
@@ -427,7 +435,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground,
+        backgroundColor: AppColors.screenBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -522,9 +530,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.7,
@@ -690,14 +696,14 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
             child: Text(
               'Начать диалог',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.label,
+                color: CupertinoColors.label.resolveFrom(context),
               ),
             ),
           ),
@@ -729,8 +735,10 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
                       allContacts.isEmpty && _search.isEmpty
                           ? 'Нет доступных контактов'
                           : 'Ничего не найдено',
-                      style: const TextStyle(
-                        color: CupertinoColors.secondaryLabel,
+                      style: TextStyle(
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   )
@@ -778,9 +786,7 @@ class _ContactTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
+        color: AppColors.groupedSurface.resolveFrom(context),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
@@ -798,10 +804,10 @@ class _ContactTile extends StatelessWidget {
                   chat.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
               ),
@@ -931,7 +937,7 @@ class _ChatRow extends StatelessWidget {
     // Без заливки: кнопки свайпа рисуются только в открывшейся полосе
     // (см. SwipeActionsRow), а под строками просвечивает цветное пятно.
     return ColoredBox(
-      color: const Color(0x00000000),
+      color: Colors.transparent,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -955,7 +961,7 @@ class _ChatRow extends StatelessWidget {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: CupertinoColors.systemBackground.resolveFrom(
+                          color: AppColors.screenBackground.resolveFrom(
                             context,
                           ),
                         ),
@@ -977,10 +983,10 @@ class _ChatRow extends StatelessWidget {
                       chat.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     if (subtitle.isNotEmpty) ...[
@@ -1135,6 +1141,7 @@ class _ApprovalsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = pending.totalCount;
     final tertiary = CupertinoColors.tertiaryLabel.resolveFrom(context);
+    final accent = CupertinoColors.systemOrange.resolveFrom(context);
     return Semantics(
       button: true,
       label: count > 0 ? 'Согласование, документов: $count' : 'Согласование',
@@ -1152,14 +1159,21 @@ class _ApprovalsRow extends StatelessWidget {
                 width: 48,
                 height: 48,
                 alignment: Alignment.center,
+                // Мягкая подложка того же оттенка и яркая иконка — как
+                // системные бейджи iOS, не перетягивает внимание с чатов.
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: CupertinoColors.systemOrange.resolveFrom(context),
+                  color: accent.withValues(
+                    alpha: CupertinoTheme.brightnessOf(context) ==
+                            Brightness.dark
+                        ? 0.24
+                        : 0.15,
+                  ),
                 ),
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.doc_text_fill,
                   size: 24,
-                  color: CupertinoColors.white,
+                  color: accent,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1167,14 +1181,14 @@ class _ApprovalsRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Согласование',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     const SizedBox(height: 3),

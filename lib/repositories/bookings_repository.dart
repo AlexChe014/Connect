@@ -16,10 +16,7 @@ import 'package:connect/services/api_client.dart';
 
 import 'package:connect/services/api_envelope.dart';
 
-
-
 class BookingsRepository {
-
   BookingsRepository._();
 
   static final BookingsRepository instance = BookingsRepository._();
@@ -40,55 +37,38 @@ class BookingsRepository {
 
   /// Создание обычной или повторяющейся брони (`POST /booking/create`).
   Future<BookingDetail> createBooking(CreateBookingRequest request) async {
-
     final decoded = await ApiClient.instance.postForm(
-
       BookingsRoutes.createUrl,
 
       fields: request.toFormEntries(),
-
     );
 
     final data = ApiEnvelope.unwrapDataMap(
-
       decoded,
 
       defaultErrorMessage: 'Не удалось создать бронирование',
-
     );
 
     return BookingDetail.fromJson(data);
-
   }
-
-
 
   /// Обновление брони (`POST /booking/update/{id}`).
 
   Future<BookingDetail> updateBooking({
-
     required int bookingId,
 
     required UpdateBookingRequest request,
-
   }) async {
-
     final fields = request.toFormEntries();
 
     if (fields.isEmpty) {
-
       throw ApiException(400, 'Нет полей для обновления бронирования');
-
     }
 
-
-
     final decoded = await ApiClient.instance.postForm(
-
       BookingsRoutes.updateUrl(bookingId),
 
       fields: fields,
-
     );
 
     // Бэкенд для этого эндпоинта по факту не всегда возвращает обновлённый
@@ -105,10 +85,7 @@ class BookingsRepository {
     }
 
     return getBookingById(bookingId);
-
   }
-
-
 
   /// Удаление брони (`GET /booking/delete/{id}`).
 
@@ -117,55 +94,40 @@ class BookingsRepository {
   /// [deleteAll] — удалить всю серию повторяющихся броней (`delete_all=1`).
 
   Future<void> deleteBooking({
-
     required int bookingId,
 
     bool deleteAll = false,
-
   }) async {
-
     final decoded = await ApiClient.instance.get(
-
       BookingsRoutes.deleteUrl(bookingId),
 
       queryParameters: deleteAll ? const {'delete_all': '1'} : null,
-
     );
 
     ApiEnvelope.unwrapData(
-
       decoded,
 
       defaultErrorMessage: 'Не удалось удалить бронирование',
-
     );
-
   }
-
-
 
   /// Карточка брони по id (`GET /booking/get/{id}`).
 
   Future<BookingDetail> getBookingById(int bookingId) async {
-
-    final decoded = await ApiClient.instance.get(BookingsRoutes.getByIdUrl(bookingId));
+    final decoded = await ApiClient.instance.get(
+      BookingsRoutes.getByIdUrl(bookingId),
+    );
 
     final data = ApiEnvelope.unwrapDataMap(
-
       decoded,
 
       defaultErrorMessage: 'Не удалось получить бронирование',
-
     );
 
     return BookingDetail.fromJson(data);
-
   }
 
-
-
   Future<List<BookableObject>> getFreeObjects({
-
     required int modelType,
 
     required int datetimeStartSeconds,
@@ -177,11 +139,8 @@ class BookingsRepository {
     int? capacity,
 
     List<int> equipmentIds = const [],
-
   }) async {
-
     final url = _buildGetFreeUrl(
-
       modelType: modelType,
 
       datetimeStartSeconds: datetimeStartSeconds,
@@ -193,81 +152,53 @@ class BookingsRepository {
       capacity: capacity,
 
       equipmentIds: equipmentIds,
-
     );
-
-
 
     final decoded = await ApiClient.instance.get(url);
 
     final list = ApiEnvelope.unwrapDataList(
-
       decoded,
 
       defaultErrorMessage: 'Не удалось получить доступные объекты',
-
     );
 
     return list
-
         .whereType<Map>()
-
         .map((e) => BookableObject.fromJson(e.cast<String, dynamic>()))
-
         .where((o) => o.isActive)
-
         .toList();
-
   }
 
-
-
   Future<List<UserBooking>> getBookingsByUserForRange({
-
     required int userId,
 
     required int datetimeStartSeconds,
 
     required int datetimeEndSeconds,
-
   }) async {
-
     final url = _buildGetByUserUrl(
-
       userId: userId,
 
       datetimeStartSeconds: datetimeStartSeconds,
 
       datetimeEndSeconds: datetimeEndSeconds,
-
     );
-
-
 
     final decoded = await ApiClient.instance.get(url);
 
     final list = ApiEnvelope.unwrapDataList(
-
       decoded,
 
       defaultErrorMessage: 'Не удалось получить бронирования пользователя',
-
     );
 
     return list
-
         .whereType<Map>()
-
         .map((e) => UserBooking.fromJson(e.cast<String, dynamic>()))
-
         .toList();
-
   }
 
-
-
   String _buildGetFreeUrl({
-
     required int modelType,
 
     required int datetimeStartSeconds,
@@ -279,13 +210,10 @@ class BookingsRepository {
     int? capacity,
 
     required List<int> equipmentIds,
-
   }) {
-
     final baseUrl = BookingsRoutes.getFreeUrl;
 
     final pairs = <String, String>{
-
       'model_type': modelType.toString(),
 
       'datetime_start': datetimeStartSeconds.toString(),
@@ -295,61 +223,49 @@ class BookingsRepository {
       'space': spaceId.toString(),
 
       if (capacity != null) 'capacity': capacity.toString(),
-
     }.entries.map((e) => MapEntry(e.key, e.value)).toList();
 
-
-
-    final extra = equipmentIds.map((id) => MapEntry('equipment[]', id.toString()));
-
-
+    final extra = equipmentIds.map(
+      (id) => MapEntry('equipment[]', id.toString()),
+    );
 
     final query = <String>[
+      ...pairs.map(
+        (e) =>
+            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+      ),
 
-      ...pairs.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}'),
-
-      ...extra.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}'),
-
+      ...extra.map(
+        (e) =>
+            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+      ),
     ].join('&');
 
     return query.isEmpty ? baseUrl : '$baseUrl?$query';
-
   }
 
-
-
   String _buildGetByUserUrl({
-
     required int userId,
 
     required int datetimeStartSeconds,
 
     required int datetimeEndSeconds,
-
   }) {
-
     final baseUrl = BookingsRoutes.getByUserUrl(userId.toString());
 
     final pairs = <String, String>{
-
       'datetime_start': datetimeStartSeconds.toString(),
 
       'datetime_end': datetimeEndSeconds.toString(),
-
     };
 
-
-
     final query = pairs.entries
-
-        .map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-
+        .map(
+          (e) =>
+              '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+        )
         .join('&');
 
     return query.isEmpty ? baseUrl : '$baseUrl?$query';
-
   }
-
 }
-
-

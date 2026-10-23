@@ -31,9 +31,7 @@ class AchievementTypePickerSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         final mediaQuery = MediaQuery.of(context);
         final maxHeight = (mediaQuery.size.height - mediaQuery.padding.top - 24)
@@ -85,23 +83,27 @@ class _AchievementTypePickerSheetState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
               child: Text(
                 'Выберите достижение',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
-                  color: CupertinoColors.label,
+                  color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),
             ),
             Expanded(
               child: widget.types.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Нет доступных достижений',
-                        style: TextStyle(color: CupertinoColors.secondaryLabel),
+                        style: TextStyle(
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -148,7 +150,6 @@ class _PickerTypeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     // Заливка и кромка как у AppGlass, но без размытия: строк в списке
     // много, а BackdropFilter под каждой дорог.
     return Container(
@@ -156,11 +157,9 @@ class _PickerTypeTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isSelected
             ? CupertinoColors.tertiarySystemFill.resolveFrom(context)
-            : (isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF)),
+            : AppColors.glassFill.resolveFrom(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-        ),
+        border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
         boxShadow: isSelected ? null : AppGlass.controlShadow,
       ),
       clipBehavior: Clip.antiAlias,
@@ -171,9 +170,9 @@ class _PickerTypeTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              const AppIconBadge(
+              AppIconBadge(
                 icon: CupertinoIcons.rosette,
-                color: CupertinoColors.systemGreen,
+                color: CupertinoColors.systemGreen.resolveFrom(context),
               ),
               const SizedBox(width: 12),
               Expanded(

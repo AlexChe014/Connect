@@ -16,7 +16,7 @@ import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/cupertino_empty_state.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show ScaffoldMessenger, SnackBar, showModalBottomSheet;
+    show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:connect/widgets/app_icon_badge.dart';
@@ -174,9 +174,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.7,
@@ -382,43 +380,43 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   _FileAccent _fileAccentFor(String? fileName) {
     final ext = (fileName ?? '').split('.').last.toLowerCase();
     if (ext == 'pdf') {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.doc_richtext,
-        CupertinoColors.systemRed,
+        CupertinoColors.systemRed.resolveFrom(context),
         'PDF',
       );
     }
     if (['zip', 'rar', '7z'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.archivebox,
-        CupertinoColors.systemOrange,
+        CupertinoColors.systemOrange.resolveFrom(context),
         'Архив',
       );
     }
     if (['mp3', 'wav', 'm4a', 'aac'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.music_note,
-        CupertinoColors.systemPink,
+        CupertinoColors.systemPink.resolveFrom(context),
         'Аудио',
       );
     }
     if (['mp4', 'mov', 'avi', 'mkv'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.videocam_fill,
-        CupertinoColors.systemPurple,
+        CupertinoColors.systemPurple.resolveFrom(context),
         'Видео',
       );
     }
     if (['doc', 'docx', 'txt', 'rtf'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.doc_text_fill,
-        CupertinoColors.systemBlue,
+        CupertinoColors.systemBlue.resolveFrom(context),
         'Документ',
       );
     }
-    return const _FileAccent(
+    return _FileAccent(
       CupertinoIcons.doc_fill,
-      CupertinoColors.systemGrey,
+      CupertinoColors.systemGrey.resolveFrom(context),
       'Файл',
     );
   }
@@ -461,8 +459,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         shadows: AppGlass.controlShadow,
         child: CupertinoSlidingSegmentedControl<int>(
           groupValue: _galleryTab,
-          backgroundColor: const Color(0x00000000),
-          thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
+          backgroundColor: Colors.transparent,
+          thumbColor: AppColors.segmentThumb.resolveFrom(context),
           onValueChanged: (value) {
             if (value != null) setState(() => _galleryTab = value);
           },
@@ -718,7 +716,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: _listSubtitleStyle.copyWith(
-                  color: CupertinoColors.activeBlue,
+                  color: CupertinoColors.activeBlue.resolveFrom(context),
                 ),
               ),
               additionalInfo: Text(
@@ -773,67 +771,83 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final selfId = _service.selfUserId;
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: AppTitleBar(
-        title: const Text('Настройки чата'),
-        // Полупрозрачная — содержимое уходит под размытую шапку.
-        backgroundColor: groupedBg.withValues(alpha: 0.7),
-        blur: true,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            // Мягкое цветное пятно за шапкой: стеклу есть что размывать,
-            // иначе на ровном сером оно выглядит как обычная карточка.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 420,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.22),
-                      AppColors.primary.withValues(alpha: 0.08),
-                      groupedBg.withValues(alpha: 0),
-                    ],
-                  ),
+    // Заголовка нет: шапка экрана — аватар и имя. Имя появляется в панели,
+    // только когда оно само уехало под неё.
+    return AppGlassBarBlur(
+      builder: (context, blur) => AppGlassBarBlur(
+        threshold: _titleRevealOffset,
+        builder: (context, showTitle) => CupertinoPageScaffold(
+          backgroundColor: groupedBg,
+          navigationBar: AppTitleBar(
+            blur: blur,
+            // Скрытое имя не должно перехватывать нажатия на аватар,
+            // заходящий под шапку.
+            title: IgnorePointer(
+              ignoring: !showTitle,
+              child: Center(
+                child: AnimatedOpacity(
+                  opacity: showTitle ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Text(_chat.title, style: _barTitleStyle),
                 ),
               ),
             ),
-            if (_busy)
-              const Center(child: CupertinoActivityIndicator(radius: 14))
-            else
-              Builder(
-                // Свой context — под скаффолдом, где в MediaQuery уже учтена
-                // высота полупрозрачной шапки.
-                builder: (context) => ListView(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.paddingOf(context).top + 20,
-                    bottom: MediaQuery.paddingOf(context).bottom + 32,
-                  ),
-                  children: _buildContent(context, selfId),
-                ),
+            // Иконка заодно уравновешивает «назад», и имя стоит по центру.
+            trailing: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: _togglePin,
+              child: Icon(
+                _chat.isPinned ? CupertinoIcons.pin_fill : CupertinoIcons.pin,
+                color: _chat.isPinned ? AppColors.primary : null,
               ),
-          ],
+            ),
+          ),
+          child: DefaultTextStyle(
+            style: TextStyle(
+              fontFamily: '.SF Pro Text',
+              decoration: TextDecoration.none,
+              color: CupertinoColors.label.resolveFrom(context),
+              fontSize: 16,
+            ),
+            child: Stack(
+              children: [
+                const AppGlassGlow(),
+                if (_busy)
+                  const Center(child: CupertinoActivityIndicator(radius: 14))
+                else
+                  Builder(
+                    // Свой context — под скаффолдом, где в MediaQuery уже
+                    // учтена высота прозрачной шапки.
+                    builder: (context) => ListView(
+                      padding: EdgeInsets.only(
+                        // Аватар чуть заходит под пустую шапку — иначе над
+                        // ним остаётся целая строка пустого места.
+                        top: MediaQuery.paddingOf(context).top - 20,
+                        bottom: MediaQuery.paddingOf(context).bottom + 32,
+                      ),
+                      children: _buildContent(context, selfId),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+
+  /// Прокрутка, после которой имя под аватаром скрыто шапкой:
+  /// отступ −20 + аватар 88 + зазор 12 + половина строки имени.
+  static const _titleRevealOffset = 95.0;
+
+  static const _barTitleStyle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.4,
+  );
 
   List<Widget> _buildContent(BuildContext context, int? selfId) {
     return [
@@ -911,29 +925,14 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           ],
         ),
       ),
-      _glassSection(
-        children: [
-          CupertinoListTile(
-            leading: _iconBadge(
-              _chat.isPinned
-                  ? CupertinoIcons.pin_slash
-                  : CupertinoIcons.pin_fill,
-              CupertinoColors.systemOrange,
-            ),
-            title: Text(_chat.isPinned ? 'Открепить чат' : 'Закрепить чат'),
-            onTap: _togglePin,
-          ),
-        ],
-      ),
-      _buildGalleryTabs(context),
-      _buildGalleryContent(context),
+      // Закрепление — иконкой в шапке.
       if (_canManage && _chat.isGroup)
         _glassSection(
           children: [
             CupertinoListTile(
               leading: _iconBadge(
                 CupertinoIcons.person_add_solid,
-                CupertinoColors.systemGreen,
+                CupertinoColors.systemGreen.resolveFrom(context),
               ),
               title: const Text('Добавить участников'),
               trailing: const CupertinoListTileChevron(),
@@ -941,6 +940,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             ),
           ],
         ),
+      _buildGalleryTabs(context),
+      _buildGalleryContent(context),
       if (_chat.isGroup && _chat.members.isNotEmpty) ...[
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
@@ -977,7 +978,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                         m.userId == selfId
                             ? CupertinoIcons.square_arrow_right
                             : CupertinoIcons.minus_circle,
-                        color: CupertinoColors.systemRed,
+                        color: CupertinoColors.systemRed.resolveFrom(context),
                       ),
                     )
                   : null,
@@ -992,11 +993,13 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             CupertinoListTile(
               leading: _iconBadge(
                 CupertinoIcons.delete_solid,
-                CupertinoColors.systemRed,
+                CupertinoColors.systemRed.resolveFrom(context),
               ),
-              title: const Text(
+              title: Text(
                 'Удалить чат',
-                style: TextStyle(color: CupertinoColors.systemRed),
+                style: TextStyle(
+                  color: CupertinoColors.systemRed.resolveFrom(context),
+                ),
               ),
               onTap: _deleteChat,
             ),
@@ -1024,14 +1027,14 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
             child: Text(
               'Добавить участников',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.label,
+                color: CupertinoColors.label.resolveFrom(context),
               ),
             ),
           ),
@@ -1055,9 +1058,11 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
                               CupertinoIcons.checkmark_circle_fill,
                               color: AppColors.primary,
                             )
-                          : const Icon(
+                          : Icon(
                               CupertinoIcons.circle,
-                              color: CupertinoColors.systemGrey3,
+                              color: CupertinoColors.systemGrey3.resolveFrom(
+                                context,
+                              ),
                             ),
                       onTap: () {
                         setState(() {

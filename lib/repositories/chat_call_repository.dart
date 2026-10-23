@@ -47,7 +47,9 @@ class ChatCallRepository {
   static bool _isStateConflict(ApiException e) =>
       e.statusCode == 409 || e.statusCode == 410 || e.statusCode == 422;
 
-  Future<Map<String, dynamic>> _deviceBody([Map<String, dynamic>? extra]) async {
+  Future<Map<String, dynamic>> _deviceBody([
+    Map<String, dynamic>? extra,
+  ]) async {
     return {
       'device_id': await DeviceIdentity.instance.id(),
       'platform': DeviceIdentity.instance.platform,

@@ -11,6 +11,10 @@ import flutter_callkit_incoming
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, PKPushRegistryDelegate, CallkitIncomingAppDelegate {
   private var voipRegistry: PKPushRegistry?
   private var voipChannel: FlutterMethodChannel?
+  /// Пользователь уже в звонке (Dart: ChatCallService.isBusy). Новый VoIP-
+  /// звонок тогда не показываем в CallKit: полноценный входящий поверх
+  /// разговора мигает и забирает аудиосессию у Jitsi.
+  private var isInCall = false
   /// Отдельный provider только для «пустых» звонков: VoIP-пуш после выхода
   /// из аккаунта или служебный VoIP-пуш (отмена/ответ на другом устройстве).
   /// iOS требует сообщить о звонке на каждый VoIP-пуш.
@@ -66,6 +70,9 @@ import flutter_callkit_incoming
       case "setEnabled":
         let enabled = (call.arguments as? Bool) ?? false
         self?.setVoipPushEnabled(enabled)
+        result(nil)
+      case "setInCall":
+        self?.isInCall = (call.arguments as? Bool) ?? false
         result(nil)
       default:
         result(FlutterMethodNotImplemented)
@@ -180,6 +187,21 @@ import flutter_callkit_incoming
       if let callId = stringValue(dict["call_id"]) {
         endRingingCall(callId: callId, status: stringValue(dict["status"]) ?? pushType)
       }
+      reportPlaceholderCall(completion: completion)
+      return
+    }
+
+    // Уже в звонке: «пустой» звонок закрывает требование iOS, а решение
+    // (отклонить как «занято», запомнить для «Пока вы разговаривали…»)
+    // принимает Dart — IncomingCallService.handlePushData.
+    if isInCall {
+      NSLog("[callkit] VoIP push while in a call — forwarding to Dart as busy")
+      var forward: [String: Any] = [:]
+      for (key, value) in dict {
+        if let s = stringValue(value) { forward[key] = s }
+      }
+      forward["type"] = "chat_call"
+      voipChannel?.invokeMethod("incomingWhileInCall", arguments: forward)
       reportPlaceholderCall(completion: completion)
       return
     }

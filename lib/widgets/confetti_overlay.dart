@@ -6,8 +6,8 @@ import '../config/app_theme.dart';
 
 const List<Color> kConfettiColors = [
   AppColors.primary,
-  Color(0xFFFFC542),
-  Color(0xFF0B2545),
+  AppFestiveColors.confettiGold,
+  AppFestiveColors.confettiNavy,
   CupertinoColors.white,
 ];
 

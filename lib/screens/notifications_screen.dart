@@ -325,7 +325,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -410,7 +410,7 @@ class _NotificationTile extends StatelessWidget {
             : null);
     final icon = topic?.icon ?? CupertinoIcons.bell_fill;
     final tint = CupertinoDynamicColor.resolve(
-      topic?.color ?? CupertinoColors.systemGrey,
+      topic?.color ?? CupertinoColors.systemGrey.resolveFrom(context),
       context,
     );
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;

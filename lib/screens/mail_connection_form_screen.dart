@@ -408,7 +408,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
         children: [
           BookingSwitchRow(
             icon: CupertinoIcons.lock_shield_fill,
-            color: CupertinoColors.systemGreen,
+            color: CupertinoColors.systemGreen.resolveFrom(context),
             label: 'Использовать SSL',
             value: _useSsl,
             onChanged: (value) {
@@ -462,9 +462,9 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
             margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             children: [
               CupertinoListTile(
-                leading: const AppIconBadge(
+                leading: AppIconBadge(
                   icon: CupertinoIcons.mail_solid,
-                  color: CupertinoColors.systemBlue,
+                  color: CupertinoColors.systemBlue.resolveFrom(context),
                 ),
                 title: Text(existing.email),
                 subtitle: Text(_provider.title),

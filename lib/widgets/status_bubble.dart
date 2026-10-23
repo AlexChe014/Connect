@@ -15,6 +15,7 @@ class StatusBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = CupertinoDynamicColor.resolve(this.color, context);
     final fill = color.withValues(alpha: 0.12);
     return Column(
       mainAxisSize: MainAxisSize.min,

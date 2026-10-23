@@ -3,6 +3,9 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import '../config/app_theme.dart';
+import 'app_glass.dart';
+
 /// Шапка экрана одной строкой: «назад», заголовок слева и кнопки справа.
 ///
 /// Одна и та же на корневых и вложенных экранах: разная высота шапок
@@ -180,14 +183,19 @@ class _TitleBar extends StatelessWidget {
       ),
     );
 
-    final bg = bar.backgroundColor;
+    var bg = bar.backgroundColor;
+    if (bg == null && bar.blur && !AppGlass.blurSupported) {
+      bg = AppColors.groupedBackground
+          .resolveFrom(context)
+          .withValues(alpha: 0.96);
+    }
     if (bg != null) {
       content = ColoredBox(
         color: CupertinoDynamicColor.resolve(bg, context),
         child: content,
       );
     }
-    if (bar.blur) {
+    if (bar.blur && AppGlass.blurSupported) {
       content = ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),

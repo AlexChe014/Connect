@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
 import '../screens/chat_conversation_screen.dart';
@@ -256,7 +257,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -301,7 +302,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                             shadows: AppGlass.controlShadow,
                             child: CupertinoSearchTextField(
                               controller: _qController,
-                              backgroundColor: const Color(0x00000000),
+                              backgroundColor: Colors.transparent,
                               placeholder: 'Фамилия, имя, отчество или почта',
                               onSubmitted: (_) {
                                 _debounce?.cancel();

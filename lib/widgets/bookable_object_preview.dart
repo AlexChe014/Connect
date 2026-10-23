@@ -27,13 +27,15 @@ class BookableObjectPreview extends StatelessWidget {
                 width: imageSize,
                 height: imageSize,
                 decoration: BoxDecoration(
-                  color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
+                  color: CupertinoColors.systemBlue
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Icon(
                   CupertinoIcons.location_solid,
-                  color: CupertinoColors.systemBlue,
+                  color: CupertinoColors.systemBlue.resolveFrom(context),
                   size: compact ? 20 : 24,
                 ),
               )

@@ -21,10 +21,7 @@ class NewsRepository {
     );
   }
 
-  Future<NewsItem> getById(
-    String newsId, {
-    bool includePeople = false,
-  }) async {
+  Future<NewsItem> getById(String newsId, {bool includePeople = false}) async {
     final decoded = await ApiClient.instance.get(
       NewsRoutes.getUrl(newsId),
       queryParameters: includePeople
@@ -40,7 +37,7 @@ class NewsRepository {
 
   /// Список лайкнувших / посмотревших: `GET .../likes/{id}` и `.../views/{id}`.
   Future<({List<NewsAuthor> likers, List<NewsAuthor> viewers, NewsItem news})>
-      getPeople(String newsId) async {
+  getPeople(String newsId) async {
     List<NewsAuthor> likers = const [];
     List<NewsAuthor> viewers = const [];
 

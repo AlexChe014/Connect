@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show RefreshIndicator, ScaffoldMessenger, SnackBar;
+    show Colors, RefreshIndicator, ScaffoldMessenger, SnackBar;
 
 import '../config/app_theme.dart';
 import '../models/documents/document_service.dart';
@@ -180,10 +180,10 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 textAlign: TextAlign.center,
                 textInputAction: TextInputAction.done,
                 style: const TextStyle(fontSize: 20, letterSpacing: 8),
-                placeholderStyle: const TextStyle(
+                placeholderStyle: TextStyle(
                   fontSize: 15,
                   letterSpacing: 0,
-                  color: CupertinoColors.placeholderText,
+                  color: CupertinoColors.placeholderText.resolveFrom(context),
                 ),
                 onSubmitted: (_) =>
                     Navigator.pop(context, controller.text.trim()),
@@ -419,9 +419,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
 
     return AppGlassBarBlur(
@@ -600,7 +598,7 @@ class _DocumentRow extends StatelessWidget {
       child: ColoredBox(
         color: selected
             ? AppColors.primary.withValues(alpha: 0.08)
-            : const Color(0x00000000),
+            : Colors.transparent,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
           child: Row(
@@ -621,8 +619,8 @@ class _DocumentRow extends StatelessWidget {
                     : AppIconBadge(
                         icon: CupertinoIcons.doc_text_fill,
                         color: isSigning
-                            ? CupertinoColors.systemBlue
-                            : CupertinoColors.systemGreen,
+                            ? CupertinoColors.systemBlue.resolveFrom(context)
+                            : CupertinoColors.systemGreen.resolveFrom(context),
                       ),
               ),
               const SizedBox(width: 12),

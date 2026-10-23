@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:connect/config/call_config.dart';
+import 'package:connect/models/call_conference.dart';
 import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
@@ -17,10 +18,16 @@ import 'package:url_launcher/url_launcher.dart';
 /// [failed] — разговор не состоялся: собеседник так и не вошёл в комнату.
 typedef JitsiLeaveCallback = void Function(String? callId, {bool failed});
 
-/// Запуск видеоконференции через Jitsi Meet Flutter SDK.
+/// Видеоконференция через Jitsi Meet Flutter SDK (форк в
+/// packages/jitsi_meet_flutter_sdk).
+///
+/// Конференция рисуется не нативным экраном Jitsi, а встроенным во Flutter
+/// видом ([JitsiMeetConferenceView]) внутри собственного экрана звонка
+/// (CallOverlayHost): шапка, кнопки, сворачивание в окошко — наши, Jitsi
+/// отвечает только за видео и звук. Состояние для экрана — [conference].
 ///
 /// На desktop/web — fallback на браузер (SDK только Android/iOS).
-class JitsiMeetingService {
+class JitsiMeetingService extends ChangeNotifier {
   JitsiMeetingService._();
   static final JitsiMeetingService instance = JitsiMeetingService._();
 
@@ -28,25 +35,22 @@ class JitsiMeetingService {
   /// jitsi-meet, раздел "External API url used to receive branding specific
   /// information"). Отдаём как data:-URI, без отдельного хостинга под JSON.
   ///
-  /// ВАЖНО: бо́льшая часть полей этого JSON (`customTheme` — акцентные
-  /// цвета кнопок, `logoImageUrl` — водяной знак, `backgroundColor` — фон
-  /// видео) в исходниках jitsi-meet обрабатывается только веб-клиентом
-  /// (react/features/dynamic-branding/middleware.web.ts,
-  /// .../base/react/components/web/Watermarks.tsx) — у нативного
-  /// iOS/Android SDK, которым пользуется наше приложение, нет своего кода,
-  /// который бы их читал, поэтому там эти поля молча игнорируются.
-  /// Единственное поле, которое нативный SDK реально учитывает
+  /// Нативный SDK из этого JSON учитывает только `avatarBackgrounds`
   /// (middleware.native.ts → base/avatar/functions.ts:getAvatarColor) —
-  /// `avatarBackgrounds`: цвет кружка-аватарки участника, когда у него
-  /// выключена камера. Красим его в синий приложения — с учётом, что
-  /// камера/микрофон теперь по умолчанию выключены, аватарку будет видно
-  /// почти в каждом звонке.
+  /// цвет кружка-аватарки участника с выключенной камерой в плитках Jitsi.
+  /// Остальные поля (`customTheme`, `logoImageUrl`, `backgroundColor`)
+  /// читает только веб-клиент.
   static final String _brandingDataUri = () {
     final json = jsonEncode({
       'avatarBackgrounds': ['#1677FF'],
     });
     return 'data:application/json;base64,${base64Encode(utf8.encode(json))}';
   }();
+
+  /// Тип служебного сообщения между нашими приложениями о камере и
+  /// микрофоне (Jitsi не сообщает о чужой камере). По нему 1:1 без видео
+  /// показывает экран с аватаром вместо пустого кадра.
+  static const String _stateMessageType = 'connect.call-state';
 
   final JitsiMeet _jitsi = JitsiMeet();
   bool _joining = false;
@@ -57,22 +61,31 @@ class JitsiMeetingService {
   bool _peerJoined = false;
   Timer? _peerJoinTimer;
   Timer? _peerRejoinTimer;
+  Timer? _closeTimer;
   JitsiLeaveCallback? _onLeave;
   VoidCallback? _releaseHomeSuppress;
+  CallConference? _conference;
 
-  /// Нативный экран конференции открыт (от входа до выхода/закрытия).
-  bool get isInConference => _inConference || _joining;
+  /// Текущая конференция для экрана звонка; `null` — звонка нет.
+  CallConference? get conference => _conference;
+
+  /// Экран конференции открыт (от входа до выхода/закрытия).
+  bool get isInConference => _conference != null || _joining;
 
   bool get isSupported {
     if (kIsWeb) return false;
     return Platform.isAndroid || Platform.isIOS;
   }
 
+  /// [title]/[avatarUrl] — собеседник 1:1 для экрана звонка; без них
+  /// берётся тема встречи или имя первого вошедшего участника.
   Future<void> joinSession(
     ConnectorSession session, {
     String? callId,
     bool endWhenLeave = false,
     JitsiLeaveCallback? onLeave,
+    String? title,
+    String? avatarUrl,
   }) async {
     final room = session.room.trim();
     if (room.isEmpty) {
@@ -89,16 +102,22 @@ class JitsiMeetingService {
       return;
     }
 
+    final current = _conference;
+    if (current != null &&
+        current.room == room &&
+        current.phase != CallPhase.ending) {
+      // Уже в этой комнате (например, «Присоединиться» на плашке чата при
+      // свёрнутом звонке) — просто разворачиваем.
+      expand();
+      return;
+    }
+
     if (_joining) return;
     _joining = true;
-    _activeCallId = callId;
-    _endWhenLeave = endWhenLeave;
-    _onLeave = onLeave;
-    _leaveNotified = false;
-    _peerJoined = false;
-    _peerJoinTimer?.cancel();
 
     try {
+      if (current != null) await _leaveCurrent();
+
       final granted = await CallPermissions.ensureMediaOnly();
       if (!granted) {
         throw ApiException(
@@ -107,20 +126,28 @@ class JitsiMeetingService {
         );
       }
 
-      // Скрываем кнопку "на главный экран" на всё время звонка, а не только
-      // на экране "Звоним…" — иначе после hangUp() она уже включена под
-      // нативным UI Jitsi и сразу проявляется.
+      _activeCallId = callId;
+      _endWhenLeave = endWhenLeave;
+      _onLeave = onLeave;
+      _leaveNotified = false;
+      _inConference = false;
+      _peerJoined = false;
+      _peerJoinTimer?.cancel();
+      _peerRejoinTimer?.cancel();
+      _closeTimer?.cancel();
+
+      // Кнопка "на главный экран" скрыта всё время звонка: под свёрнутым
+      // окошком звонка ей не место, а полноэкранный звонок её перекрывает.
       _releaseHomeSuppress?.call();
       _releaseHomeSuppress = HomeShortcutButton.suppress();
 
-      // Снимаем фокус с полей ввода Flutter (обычно — поле сообщения в чате).
-      // Нативный экран Jitsi открывается поверх Flutter, но фокус/first
-      // responder у нашего TextField остаётся: клавиатура всплывает поверх
-      // звонка (в т.ч. при возврате приложения из фона после ответа через
-      // CallKit), а закрыть её из UI Jitsi нельзя.
+      // Снимаем фокус с полей ввода Flutter (обычно — поле сообщения в чате):
+      // иначе клавиатура всплывает поверх звонка (в т.ч. при возврате из
+      // фона после ответа через CallKit).
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
 
+      final topic = session.topic?.trim();
       final options = JitsiMeetConferenceOptions(
         serverURL: server,
         room: room,
@@ -137,46 +164,12 @@ class JitsiMeetingService {
           'hideConferenceSubject': true,
           'prejoinConfig': {'enabled': false},
           'defaultLanguage': 'ru',
-          'subject': session.topic ?? '',
+          'subject': topic ?? '',
           'dynamicBrandingUrl': _brandingDataUri,
-          // Явно гарантируем, что окошко с собственным видео не спрятано —
-          // в групповом звонке настройки доступны пользователю (settings.
-          // enabled ниже), и он мог сам выключить self-view в прошлый раз;
-          // Jitsi запоминает этот выбор локально между звонками.
+          // Окошко с собственным видео: Jitsi запоминает выключенный
+          // self-view локально между звонками — явно включаем.
           'disableSelfView': false,
-          // Вкладка профиля — не "устройства"/"язык", прячем как вторичную
-          // настройку и в 1:1, и в групповом звонке.
           'disableProfile': true,
-          // 1:1 — только завершение (настройки/участники/чат скрыты).
-          // Групповой звонок — базовый набор кнопок Jitsi; панель участников
-          // видна всем, но управление ими (kick-out и т.п.) Jitsi показывает
-          // только модератору автоматически.
-          'toolbarButtons': endWhenLeave
-              ? const [
-                  'microphone',
-                  'camera',
-                  'toggle-camera',
-                  'desktop',
-                  'hangup',
-                ]
-              : const [
-                  'microphone',
-                  'camera',
-                  'toggle-camera',
-                  'desktop',
-                  'chat',
-                  'raisehand',
-                  'reactions',
-                  'tileview',
-                  'fullscreen',
-                  'videoquality',
-                  'participants-pane',
-                  'settings',
-                  'stats',
-                  'shortcuts',
-                  'select-background',
-                  'hangup',
-                ],
         },
         featureFlags: {
           // Звонком уже управляет наш flutter_callkit_incoming (см.
@@ -184,105 +177,56 @@ class JitsiMeetingService {
           // и встроенную CallKit-интеграцию Jitsi, две системы конфликтуют
           // и обычное завершение звонка показывается как "Встреча прервана".
           'call-integration.enabled': false,
-          'toggle-camera.enabled': true,
+          // Панель кнопок, шапка, таймер и PiP Jitsi не нужны — всё это
+          // рисует наш экран звонка. Jitsi остаётся видео: большой кадр
+          // говорящего и окошко своего видео (filmstrip).
+          'toolbox.enabled': false,
+          'conference-timer.enabled': false,
+          'meeting-name.enabled': false,
+          'pip.enabled': false,
+          // Иначе Jitsi включает immersive-режим и прячет системные панели
+          // у всего приложения — конференция теперь внутри MainActivity.
+          'fullscreen.enabled': false,
+          // Всплывашки Jitsi («X вошёл», «Вас не слышно») — в его стиле
+          // поверх нашего экрана; о входе/выходе сообщает наш экран.
+          'notifications.enabled': false,
+          'filmstrip.enabled': true,
+          'tile-view.enabled': false,
+          'car-mode.enabled': false,
           'unsaferoomwarning.enabled': false,
           'add-people.enabled': false,
           'invite.enabled': false,
           'welcomepage.enabled': false,
+          'prejoinpage.enabled': false,
           'live-streaming.enabled': false,
-          'recording.enabled': !endWhenLeave,
-          'toolbox.enabled': true,
-          'toolbox.alwaysVisible': true,
+          'recording.enabled': false,
           'calendar.enabled': false,
           'help.enabled': false,
-          // Управление участниками (кикнуть и т.п.) — доступно только
-          // модератору, Jitsi сам скрывает эти действия от остальных.
-          'kick-out.enabled': !endWhenLeave,
           'lobby-mode.enabled': false,
-          'meeting-name.enabled': false,
           'meeting-password.enabled': false,
           'security-options.enabled': false,
           'server-url-change.enabled': false,
           'speakerstats.enabled': false,
           'breakout-rooms.enabled': false,
           'close-captions.enabled': false,
-          'raise-hand.enabled': !endWhenLeave,
-          'reactions.enabled': !endWhenLeave,
-          'tile-view.enabled': !endWhenLeave,
-          'participants-pane.enabled': !endWhenLeave,
-          'settings.enabled': !endWhenLeave,
+          // Чат Jitsi открывается с нашей кнопки «Чат» во встрече.
           'chat.enabled': !endWhenLeave,
-          'overflow-menu.enabled': !endWhenLeave,
-          'video-share.enabled': true,
-          // Filmstrip — это не только миниатюры остальных участников, но и
-          // окошко с собственным видео (self-view). Раньше в 1:1-звонке
-          // (endWhenLeave=true) filmstrip целиком выключался, чтобы не
-          // показывать дублирующую миниатюру собеседника — но тем самым
-          // пропадало и окошко "видишь себя". Включаем всегда; миниатюры
-          // остальных участников в 1:1 всё равно не нужны — их там просто
-          // нет (собеседник и так на весь экран).
-          'filmstrip.enabled': true,
+          'android.screensharing.enabled': !endWhenLeave,
+          'video-share.enabled': false,
         },
       );
 
-      final response = await _jitsi.join(
-        options,
-        JitsiMeetEventListener(
-          conferenceJoined: (url) {
-            AppLogger.d('Jitsi joined: $url', name: 'meeting');
-            _inConference = true;
-            if (_endWhenLeave && !_peerJoined) _armPeerJoinWatchdog();
-          },
-          participantJoined: (email, name, role, participantId) {
-            // До conferenceJoined может прийти событие о нас самих.
-            if (!_inConference) return;
-            _peerJoined = true;
-            _peerJoinTimer?.cancel();
-            _peerRejoinTimer?.cancel();
-          },
-          conferenceTerminated: (url, error) {
-            AppLogger.d(
-              'Jitsi terminated: $url error=$error',
-              name: 'meeting',
-            );
-            _notifyLeft();
-          },
-          readyToClose: () {
-            AppLogger.d('Jitsi readyToClose', name: 'meeting');
-            _notifyLeft();
-          },
-          participantLeft: (participantId) {
-            if (!_endWhenLeave) return;
-            // Обычное завершение собеседником приходит пушем/вебхуком сразу;
-            // здесь ждём — это может быть реконнект (смена сети), см.
-            // CallConfig.peerRejoinGrace.
-            AppLogger.d(
-              'Jitsi participantLeft: $participantId — waiting for rejoin',
-              name: 'meeting',
-            );
-            _peerRejoinTimer?.cancel();
-            _peerRejoinTimer = Timer(CallConfig.peerRejoinGrace, () {
-              if (_leaveNotified) return;
-              AppLogger.d(
-                'Jitsi: peer did not return — ending 1:1 call',
-                name: 'meeting',
-              );
-              _notifyLeft();
-              // ignore: discarded_futures
-              hangUp();
-            });
-          },
-        ),
+      _jitsi.setListener(_buildListener());
+      _conference = CallConference(
+        options: options,
+        room: room,
+        title:
+            _firstNonEmpty([title, topic]) ??
+            (endWhenLeave ? '' : 'Видеовстреча'),
+        avatarUrl: avatarUrl,
+        isDirect: endWhenLeave,
       );
-
-      if (!response.isSuccess) {
-        throw ApiException(
-          500,
-          response.message?.trim().isNotEmpty == true
-              ? response.message!
-              : 'Не удалось открыть видеоконференцию',
-        );
-      }
+      notifyListeners();
     } catch (e) {
       _releaseHomeSuppress?.call();
       _releaseHomeSuppress = null;
@@ -292,7 +236,201 @@ class JitsiMeetingService {
     }
   }
 
+  JitsiMeetEventListener _buildListener() {
+    return JitsiMeetEventListener(
+      conferenceJoined: (url) {
+        AppLogger.d('Jitsi joined: $url', name: 'meeting');
+        _inConference = true;
+        final c = _conference;
+        if (c == null) return;
+        if (c.isDirect) {
+          if (!_peerJoined) c.phase = CallPhase.waiting;
+        } else {
+          c.phase = CallPhase.active;
+          c.startedAt ??= DateTime.now();
+        }
+        if (_endWhenLeave && !_peerJoined) _armPeerJoinWatchdog();
+        unawaited(_jitsi.refreshAudioRoute());
+        notifyListeners();
+      },
+      participantJoined: (email, name, role, participantId) {
+        // До conferenceJoined может прийти событие о нас самих.
+        if (!_inConference) return;
+        final c = _conference;
+        final id = participantId?.trim() ?? '';
+        if (c == null || id.isEmpty) return;
+        final displayName = name?.trim() ?? '';
+        final participant = c.participants.putIfAbsent(
+          id,
+          () => CallParticipant(id: id, name: displayName),
+        );
+        if (displayName.isNotEmpty) participant.name = displayName;
+        if (c.title.isEmpty && displayName.isNotEmpty) c.title = displayName;
+
+        _peerJoined = true;
+        _peerJoinTimer?.cancel();
+        _peerRejoinTimer?.cancel();
+        if (c.phase != CallPhase.ending) c.phase = CallPhase.active;
+        c.startedAt ??= DateTime.now();
+        _sendState(to: id);
+        notifyListeners();
+      },
+      participantLeft: (participantId) {
+        final c = _conference;
+        if (c != null && participantId != null) {
+          c.participants.remove(participantId);
+        }
+        if (!_endWhenLeave) {
+          notifyListeners();
+          return;
+        }
+        // Обычное завершение собеседником приходит пушем/вебхуком сразу;
+        // здесь ждём — это может быть реконнект (смена сети), см.
+        // CallConfig.peerRejoinGrace.
+        AppLogger.d(
+          'Jitsi participantLeft: $participantId — waiting for rejoin',
+          name: 'meeting',
+        );
+        if (c != null &&
+            c.participants.isEmpty &&
+            c.phase == CallPhase.active) {
+          c.phase = CallPhase.reconnecting;
+        }
+        notifyListeners();
+        _peerRejoinTimer?.cancel();
+        _peerRejoinTimer = Timer(CallConfig.peerRejoinGrace, () {
+          if (_leaveNotified) return;
+          AppLogger.d(
+            'Jitsi: peer did not return — ending 1:1 call',
+            name: 'meeting',
+          );
+          _notifyLeft();
+          // ignore: discarded_futures
+          hangUp();
+        });
+      },
+      audioMutedChanged: (muted) {
+        final c = _conference;
+        if (c == null) return;
+        c.audioMuted = muted;
+        _sendState();
+        notifyListeners();
+      },
+      videoMutedChanged: (muted) {
+        final c = _conference;
+        if (c == null) return;
+        c.videoMuted = muted;
+        _sendState();
+        notifyListeners();
+      },
+      endpointTextMessageReceived: (senderId, message) {
+        _onStateMessage(senderId, message);
+      },
+      screenShareToggled: (participantId, sharing) {
+        final c = _conference;
+        // Событие приходит и о чужих демонстрациях — свою узнаём по тому,
+        // что это не кто-то из собеседников.
+        if (c == null || c.participants.containsKey(participantId)) return;
+        c.screenSharing = sharing;
+        notifyListeners();
+      },
+      chatMessageReceived: (senderId, message, isPrivate, timestamp) {
+        final c = _conference;
+        if (c == null || c.chatOpen) return;
+        c.unreadChat++;
+        notifyListeners();
+      },
+      chatToggled: (isOpen) {
+        final c = _conference;
+        if (c == null) return;
+        c.chatOpen = isOpen;
+        if (isOpen) c.unreadChat = 0;
+        notifyListeners();
+      },
+      audioRouteChanged: (route, available) {
+        final c = _conference;
+        if (c == null) return;
+        c.audioRoute = CallAudioRoute.parse(route);
+        c.availableRoutes = available
+            .map(CallAudioRoute.parse)
+            .where((r) => r != CallAudioRoute.unknown)
+            .toList();
+        notifyListeners();
+      },
+      conferenceTerminated: (url, error) {
+        AppLogger.d('Jitsi terminated: $url error=$error', name: 'meeting');
+        _notifyLeft();
+        // Обычно следом приходит readyToClose; если нет — закрываемся сами.
+        _scheduleClose(const Duration(milliseconds: 1500));
+      },
+      readyToClose: () {
+        AppLogger.d('Jitsi readyToClose', name: 'meeting');
+        _notifyLeft();
+        _scheduleClose(const Duration(milliseconds: 700));
+      },
+    );
+  }
+
+  // --- Кнопки экрана звонка ---
+
+  Future<void> toggleMicrophone() async {
+    final c = _conference;
+    if (c == null) return;
+    c.audioMuted = !c.audioMuted;
+    notifyListeners();
+    await _jitsi.setAudioMuted(c.audioMuted);
+  }
+
+  Future<void> toggleCamera() async {
+    final c = _conference;
+    if (c == null) return;
+    c.videoMuted = !c.videoMuted;
+    notifyListeners();
+    await _jitsi.setVideoMuted(c.videoMuted);
+  }
+
+  Future<void> flipCamera() => _jitsi.toggleCamera();
+
+  Future<void> setAudioRoute(CallAudioRoute route) =>
+      _jitsi.setAudioRoute(route.name);
+
+  /// Системный выбор устройства (iOS): AirPods, машина, динамик…
+  Future<void> showAudioRoutePicker() => _jitsi.setAudioRoute('picker');
+
+  Future<void> toggleScreenShare() async {
+    final c = _conference;
+    if (c == null) return;
+    await _jitsi.toggleScreenShare(!c.screenSharing);
+  }
+
+  Future<void> openChat() async {
+    final c = _conference;
+    if (c == null) return;
+    c.unreadChat = 0;
+    notifyListeners();
+    await _jitsi.openChat();
+  }
+
+  void minimize() {
+    final c = _conference;
+    if (c == null || c.minimized || c.phase == CallPhase.ending) return;
+    c.minimized = true;
+    notifyListeners();
+  }
+
+  void expand() {
+    final c = _conference;
+    if (c == null || !c.minimized) return;
+    c.minimized = false;
+    notifyListeners();
+  }
+
   Future<void> hangUp() async {
+    final c = _conference;
+    if (c != null && c.phase != CallPhase.ending) {
+      c.phase = CallPhase.ending;
+      notifyListeners();
+    }
     try {
       await _jitsi.hangUp();
     } catch (e, st) {
@@ -303,6 +441,17 @@ class JitsiMeetingService {
         stackTrace: st,
       );
     }
+    // Нет readyToClose (сеть пропала, SDK завис) — не держим экран.
+    if (c != null) {
+      _scheduleClose(const Duration(seconds: 3), onlyIfLater: true);
+    }
+  }
+
+  /// Перед входом в другую комнату: выйти из текущей и дождаться закрытия.
+  Future<void> _leaveCurrent() async {
+    await hangUp();
+    _notifyLeft();
+    _closeNow();
   }
 
   /// 1:1: собеседник принял звонок, но так и не вошёл в комнату (упало
@@ -340,6 +489,75 @@ class JitsiMeetingService {
     }
   }
 
+  DateTime? _closeAt;
+
+  /// Показать «Звонок завершён» и убрать экран (вместе с ним уходит и
+  /// встроенный вид Jitsi — нативная часть выходит из комнаты).
+  void _scheduleClose(Duration delay, {bool onlyIfLater = false}) {
+    final c = _conference;
+    if (c == null) return;
+    final at = DateTime.now().add(delay);
+    if (onlyIfLater && _closeAt != null && _closeAt!.isBefore(at)) return;
+    if (c.phase != CallPhase.ending) {
+      c.phase = CallPhase.ending;
+      notifyListeners();
+    }
+    _closeAt = at;
+    _closeTimer?.cancel();
+    _closeTimer = Timer(delay, _closeNow);
+  }
+
+  void _closeNow() {
+    _closeTimer?.cancel();
+    _closeTimer = null;
+    _closeAt = null;
+    if (_conference == null) return;
+    _conference = null;
+    _jitsi.setListener(null);
+    notifyListeners();
+  }
+
+  /// Сообщаем собеседникам (нашим приложениям) про свои камеру и микрофон.
+  void _sendState({String? to}) {
+    final c = _conference;
+    if (c == null || !_inConference || c.participants.isEmpty) return;
+    final message = jsonEncode({
+      'type': _stateMessageType,
+      'video': !c.videoMuted,
+      'audio': !c.audioMuted,
+    });
+    unawaited(_jitsi.sendEndpointTextMessage(to: to, message: message));
+  }
+
+  void _onStateMessage(String senderId, String message) {
+    final c = _conference;
+    if (c == null) return;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(message);
+    } catch (_) {
+      return;
+    }
+    if (decoded is! Map || decoded['type'] != _stateMessageType) return;
+    final participant = c.participants.putIfAbsent(
+      senderId,
+      () => CallParticipant(id: senderId, name: ''),
+    );
+    final video = decoded['video'];
+    final audio = decoded['audio'];
+    if (video is bool) participant.videoOn = video;
+    if (audio is bool) participant.audioOn = audio;
+    notifyListeners();
+  }
+
+  static String? _firstNonEmpty(List<String?> values) {
+    for (final v in values) {
+      final t = v?.trim();
+      if (t != null && t.isNotEmpty) return t;
+    }
+    return null;
+  }
+
   Future<void> _openInBrowser(ConnectorSession session) async {
     final jwt = session.jwt?.trim();
     final room = session.room.trim();
@@ -347,9 +565,9 @@ class JitsiMeetingService {
 
     Uri? uri;
     if (jwt != null && jwt.isNotEmpty && room.isNotEmpty && server.isNotEmpty) {
-      uri = Uri.parse('$server/$room').replace(
-        queryParameters: {'jwt': jwt, 'lang': 'ru'},
-      );
+      uri = Uri.parse(
+        '$server/$room',
+      ).replace(queryParameters: {'jwt': jwt, 'lang': 'ru'});
     } else {
       final public = session.publicUrl.trim();
       if (public.isNotEmpty) uri = Uri.tryParse(public);

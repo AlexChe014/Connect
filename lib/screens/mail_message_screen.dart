@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
@@ -61,6 +62,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
   bool _isLoading = true;
   bool _isDeleting = false;
   bool _showDetails = false;
+
+  /// В тёмной теме письмо показывается в исходных цветах, на белом.
+  bool _originalMailColors = false;
   VoidCallback? _releaseHomeSuppress;
 
   @override
@@ -508,9 +512,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
           children: [
             for (final attachment in _listedAttachments(message))
               CupertinoListTile(
-                leading: const AppIconBadge(
+                leading: AppIconBadge(
                   icon: CupertinoIcons.doc_fill,
-                  color: CupertinoColors.systemGrey,
+                  color: CupertinoColors.systemGrey.resolveFrom(context),
                 ),
                 title: Text(
                   attachment.filename,
@@ -543,7 +547,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         // BackdropFilter не размывает — без плотной подложки текст письма
         // просвечивал сквозь подписи кнопок.
         child: ColoredBox(
-          color: CupertinoColors.systemBackground
+          color: AppColors.screenBackground
               .resolveFrom(context)
               .withValues(alpha: 0.75),
           child: Row(
@@ -582,12 +586,35 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
   }
 
+  /// Солнце / луна в шапке: в тёмной теме HTML-письмо перекрашивается, а
+  /// если вёрстка от этого пострадала — его можно вернуть в исходные цвета.
+  Widget? _buildMailColorsToggle(
+    BuildContext context,
+    MailMessage? message,
+    Color color,
+  ) {
+    if (message == null ||
+        !MailBodyContent.rendersHtml(message) ||
+        CupertinoTheme.brightnessOf(context) != Brightness.dark) {
+      return null;
+    }
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: () =>
+          setState(() => _originalMailColors = !_originalMailColors),
+      child: Icon(
+        _originalMailColors ? CupertinoIcons.moon : CupertinoIcons.sun_max,
+        size: AppTitleBar.iconSize,
+        color: color,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final message = _message;
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
 
     return AppGlassBarBlur(
@@ -605,7 +632,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
               color: label,
             ),
           ),
-          trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
+          trailing: _isDeleting
+              ? const CupertinoActivityIndicator()
+              : _buildMailColorsToggle(context, message, label),
         ),
         child: DefaultTextStyle(
           style: TextStyle(
@@ -645,6 +674,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                             : const EdgeInsets.all(16),
                         child: MailBodyContent(
                           message: message,
+                          keepOriginalColors: _originalMailColors,
                           loadAttachment: (attachment) =>
                               MailRepository.instance.downloadAttachment(
                                 connectionId: widget.connection.id,

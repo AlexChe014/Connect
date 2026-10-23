@@ -65,17 +65,27 @@ class AuthService {
       response = await http
           .post(
             uri,
-            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
             body: jsonEncode(requestBody),
           )
           .timeout(Duration(seconds: ApiConfig.timeoutSeconds));
     } catch (e, st) {
-      AppLogger.e('Auth login request failed: POST $uri', name: 'network.auth', error: e, stackTrace: st);
+      AppLogger.e(
+        'Auth login request failed: POST $uri',
+        name: 'network.auth',
+        error: e,
+        stackTrace: st,
+      );
       final mapped = mapNetworkError(e);
       if (mapped is NetworkException) {
         throw AuthException(mapped.message);
       }
-      throw AuthException('Не удалось выполнить вход. Проверьте интернет и попробуйте снова.');
+      throw AuthException(
+        'Не удалось выполнить вход. Проверьте интернет и попробуйте снова.',
+      );
     }
 
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -110,7 +120,9 @@ class AuthService {
       final payload = decoded['data'];
       if (success != true || payload is! Map<String, dynamic>) {
         final message =
-            decoded['message'] as String? ?? decoded['error'] as String? ?? 'Ошибка авторизации';
+            decoded['message'] as String? ??
+            decoded['error'] as String? ??
+            'Ошибка авторизации';
         AppLogger.e(
           'Auth login: success=false or invalid data\n'
           'status: ${response.statusCode}\n'
@@ -141,7 +153,8 @@ class AuthService {
       String message = 'Ошибка авторизации';
       try {
         final json = jsonDecode(body) as Map<String, dynamic>;
-        message = json['message'] as String? ?? json['error'] as String? ?? message;
+        message =
+            json['message'] as String? ?? json['error'] as String? ?? message;
       } catch (_) {}
 
       AppLogger.e(

@@ -10,7 +10,7 @@ class MailProviderPickerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const BookingGlassScaffold(
+    return BookingGlassScaffold(
       title: 'Новый почтовый ящик',
       children: [
         AppGlassSectionLabel(
@@ -22,17 +22,17 @@ class MailProviderPickerScreen extends StatelessWidget {
           children: [
             _ProviderTile(
               provider: MailProviderKind.yandex,
-              color: CupertinoColors.systemRed,
+              color: CupertinoColors.systemRed.resolveFrom(context),
               icon: CupertinoIcons.mail_solid,
             ),
             _ProviderTile(
               provider: MailProviderKind.mailru,
-              color: CupertinoColors.systemBlue,
+              color: CupertinoColors.systemBlue.resolveFrom(context),
               icon: CupertinoIcons.at,
             ),
             _ProviderTile(
               provider: MailProviderKind.corporate,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
               icon: CupertinoIcons.building_2_fill,
             ),
           ],

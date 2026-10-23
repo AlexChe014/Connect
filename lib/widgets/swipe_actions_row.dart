@@ -217,9 +217,7 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
                                     decoration: ShapeDecoration(
                                       color: action.color,
                                       shape: RoundedSuperellipseBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          24,
-                                        ),
+                                        borderRadius: BorderRadius.circular(24),
                                       ),
                                     ),
                                     child: Center(

@@ -8,6 +8,9 @@ abstract final class AppColors {
 
   static const primary = Color(0xFF1677FF);
   static const onPrimary = Colors.white;
+
+  /// Второстепенный текст на фирменной заливке и градиентах.
+  static const onPrimaryMuted = Color(0xD9FFFFFF);
   static const surface = Colors.white;
   static const background = Colors.white;
   static const onSurface = Color(0xFF111827);
@@ -20,6 +23,104 @@ abstract final class AppColors {
   /// Свои сообщения в чате и кнопка отправки — единственный цветной
   /// акцент в переписке: сразу видно, где ваши сообщения.
   static const outgoingBubble = primary;
+
+  // Фоны экранов и карточек. В тёмной теме не чистый чёрный, а графит
+  // с холодным оттенком: на #000 стеклу нечего размывать, карточки
+  // держатся только на кромке, а свечение под шапкой обрывается пятном.
+  static const screenBackground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF0F1115),
+  );
+  static const groupedBackground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFF2F2F7),
+    darkColor: Color(0xFF0F1115),
+  );
+  static const groupedSurface = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF1C1E22),
+  );
+
+  /// Бегунок сегментного переключателя.
+  static const segmentThumb = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF3A3D43),
+  );
+
+  // Liquid Glass: заливка и кромка плавающих панелей и карточек.
+  // Динамические — читать через `.resolveFrom(context)`.
+  static const glassFill = CupertinoDynamicColor.withBrightness(
+    color: Color(0xCCFFFFFF),
+    darkColor: Color(0x80303032),
+  );
+  static const glassGradientTop = CupertinoDynamicColor.withBrightness(
+    color: Color(0xCCFFFFFF),
+    darkColor: Color(0x803A3A3C),
+  );
+  static const glassGradientBottom = CupertinoDynamicColor.withBrightness(
+    color: Color(0x99FFFFFF),
+    darkColor: Color(0x661C1C1E),
+  );
+
+  /// Заливка плавающей панели там, где размытие выключено
+  /// ([AppGlass.blurSupported]): без него контент под панелью не должен
+  /// читаться сквозь неё.
+  static const glassSolidFill = CupertinoDynamicColor.withBrightness(
+    color: Color(0xF5FFFFFF),
+    darkColor: Color(0xF22C2C2E),
+  );
+  static const glassBorder = CupertinoDynamicColor.withBrightness(
+    color: Color(0xB3FFFFFF),
+    darkColor: Color(0x26FFFFFF),
+  );
+
+  /// Поле ввода внутри стеклянной панели.
+  static const glassInputFill = CupertinoDynamicColor.withBrightness(
+    color: Color(0x0F000000),
+    darkColor: Color(0x1FFFFFFF),
+  );
+
+  // Скелетон загрузки и заглушка картинки, которая не загрузилась.
+  static const skeletonBase = CupertinoDynamicColor.withBrightness(
+    color: outline,
+    darkColor: Color(0xFF2C2C2E),
+  );
+  static const skeletonHighlight = CupertinoDynamicColor.withBrightness(
+    color: surfaceElevated,
+    darkColor: Color(0xFF3A3A3C),
+  );
+  static const placeholderFill = CupertinoDynamicColor.withBrightness(
+    color: surfaceElevated,
+    darkColor: Color(0xFF1C1C1E),
+  );
+  static const placeholderIcon = CupertinoDynamicColor.withBrightness(
+    color: Color(0x8052525B),
+    darkColor: Color(0x80AEAEB2),
+  );
+
+  // Тени: крупная плавающая панель, мелкий элемент, тонкий контур.
+  static const shadowPanel = Color(0x1F000000);
+  static const shadowControl = Color(0x14000000);
+  static const shadowHairline = Color(0x0A000000);
+
+  // Затемнение поверх фото и модальных подложек — от темы не зависит.
+  static const scrimFaint = Color(0x2E000000);
+  static const scrim = Color(0x66000000);
+  static const scrimStrong = Color(0x8C000000);
+  static const scrimButton = Color(0x99000000);
+
+  /// Аватар без фото — нейтральный серый градиент.
+  static const avatarPlaceholderGradient = [
+    Color(0xFFA5ABB8),
+    Color(0xFF858994),
+  ];
+
+  /// Подложка HTML-письма. Письма свёрстаны под белый фон: в тёмной теме
+  /// их цвета инвертируются, и белый становится этим графитом. Если
+  /// пользователь вернул письму исходные цвета — подложка снова белая.
+  static const mailBodyBackground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF1C1E22),
+  );
 
   static const double radius = 12;
   static const double buttonRadius = 12;
@@ -35,7 +136,82 @@ abstract final class AppColors {
   ];
 }
 
+/// Праздничная палитра бонусной программы: колесо, карточки, медали,
+/// конфетти. Декоративная, одинаковая в светлой и тёмной теме.
+abstract final class AppFestiveColors {
+  AppFestiveColors._();
+
+  /// Рамка текущего приза и стрелка колеса.
+  static const warmAccent = Color(0xFFFF7A45);
+  static const orange = Color(0xFFFF9F43);
+  static const pink = Color(0xFFFF5E8A);
+  static const violet = Color(0xFF7B5CFF);
+
+  /// Кнопка «Крутить», карточка рулетки.
+  static const buttonGradient = [orange, pink];
+
+  /// Карточка баланса.
+  static const balanceGradient = [AppColors.primary, violet];
+
+  // Пятно за шапкой рулетки: оранжевый → розовый → сиреневый.
+  static const glowOrange = Color(0xFFFFB547);
+  static const glowPink = Color(0xFFFF6FA3);
+  static const glowViolet = Color(0xFFB57CFF);
+
+  // Лучи «солнышка» за колесом.
+  static const sunburstCore = Color(0xFFFFC94D);
+  static const sunburstEdge = Color(0xFFFF8A65);
+
+  /// Тень под колесом.
+  static const wheelShadow = Color(0xFF141C22);
+
+  /// Медаль полученного достижения.
+  static const medalGradient = [Color(0xFFFFD966), Color(0xFFE0A200)];
+
+  static const confettiGold = Color(0xFFFFC542);
+  static const confettiNavy = Color(0xFF0B2545);
+}
+
 /// Единая шкала отступов, чтобы padding/gap не подбирались на глаз по экрану.
+/// Экран звонка. Тёмный в обеих темах, как звонок в iOS: видео и аватар
+/// читаются лучше на тёмном, а светлый экран слепит в темноте у уха.
+abstract final class AppCallColors {
+  AppCallColors._();
+
+  // Фон: глубокий синий сверху в графит снизу.
+  static const backgroundTop = Color(0xFF14213D);
+  static const backgroundBottom = Color(0xFF0B0E14);
+
+  // Мягкие пятна света за аватаром — стеклу кнопок есть что размывать.
+  static const glowBlue = Color(0xFF1677FF);
+  static const glowViolet = Color(0xFF6E5BFF);
+  static const glowCyan = Color(0xFF22B8CF);
+
+  /// Подложка карточки с видео, пока Jitsi не отрисовал первый кадр.
+  static const stage = Color(0xFF040404);
+
+  // Круглые стеклянные кнопки.
+  static const buttonFill = Color(0x2EFFFFFF);
+  static const buttonBorder = Color(0x33FFFFFF);
+
+  /// Включённое состояние («микрофон выключен», «динамик») — светлая
+  /// кнопка с тёмной иконкой, как в Телефоне iOS.
+  static const buttonActiveFill = Color(0xF2FFFFFF);
+  static const buttonActiveIcon = Color(0xFF111827);
+  static const hangUp = Color(0xFFFF3B30);
+  static const accept = Color(0xFF34C759);
+
+  static const textPrimary = Colors.white;
+  static const textSecondary = Color(0xB3FFFFFF);
+  static const textTertiary = Color(0x80FFFFFF);
+
+  /// Значок «микрофон выключен» у собеседника.
+  static const mutedBadge = Color(0xFFFF453A);
+
+  /// Тень свёрнутого окошка звонка над приложением.
+  static const miniShadow = Color(0x66000000);
+}
+
 abstract final class AppSpacing {
   AppSpacing._();
 
@@ -45,6 +221,67 @@ abstract final class AppSpacing {
   static const double lg = 16;
   static const double xl = 24;
   static const double xxl = 32;
+}
+
+/// Цвета, которые различаются в светлой и тёмной теме Material-части
+/// (диалоги, пикеры, поля ввода). Cupertino-экраны берут цвета из
+/// динамических `CupertinoColors` и [AppColors.glassFill] и т.п.
+class _Palette {
+  const _Palette({
+    required this.brightness,
+    required this.surface,
+    required this.background,
+    required this.onSurface,
+    required this.onSurfaceVariant,
+    required this.surfaceElevated,
+    required this.surfaceContainerHighest,
+    required this.secondaryContainer,
+    required this.outline,
+    required this.outlineStrong,
+    required this.error,
+  });
+
+  final Brightness brightness;
+  final Color surface;
+  final Color background;
+  final Color onSurface;
+  final Color onSurfaceVariant;
+  final Color surfaceElevated;
+  final Color surfaceContainerHighest;
+  final Color secondaryContainer;
+  final Color outline;
+  final Color outlineStrong;
+  final Color error;
+
+  static const light = _Palette(
+    brightness: Brightness.light,
+    surface: AppColors.surface,
+    background: AppColors.background,
+    onSurface: AppColors.onSurface,
+    onSurfaceVariant: AppColors.onSurfaceVariant,
+    surfaceElevated: AppColors.surfaceElevated,
+    surfaceContainerHighest: Color(0xFFF9FAFB),
+    secondaryContainer: Color(0xFFE8F1FF),
+    outline: AppColors.outline,
+    outlineStrong: AppColors.outlineStrong,
+    error: AppColors.error,
+  );
+
+  /// Графитовая тёмная палитра — те же фоны, что у
+  /// [AppColors.groupedBackground] и [AppColors.groupedSurface].
+  static const dark = _Palette(
+    brightness: Brightness.dark,
+    surface: Color(0xFF1C1E22),
+    background: Color(0xFF0F1115),
+    onSurface: Color(0xFFF2F2F7),
+    onSurfaceVariant: Color(0xFFAEAEB2),
+    surfaceElevated: Color(0xFF26292E),
+    surfaceContainerHighest: Color(0xFF26292E),
+    secondaryContainer: Color(0xFF0E2A4D),
+    outline: Color(0xFF2E3138),
+    outlineStrong: Color(0xFF3E424A),
+    error: Color(0xFFFF453A),
+  );
 }
 
 abstract final class AppTheme {
@@ -62,34 +299,54 @@ abstract final class AppTheme {
     systemNavigationBarContrastEnforced: true,
   );
 
-  static ThemeData get light {
+  /// Тёмный фон → светлые системные иконки.
+  static const SystemUiOverlayStyle systemUiOverlayDark = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: true,
+  );
+
+  static SystemUiOverlayStyle systemUiOverlayFor(Brightness brightness) =>
+      brightness == Brightness.dark ? systemUiOverlayDark : systemUiOverlay;
+
+  static ThemeData get light => _build(_Palette.light);
+
+  static ThemeData get dark => _build(_Palette.dark);
+
+  static ThemeData _build(_Palette p) {
     const radius = AppColors.radius;
     final borderRadius = BorderRadius.circular(radius);
 
     OutlineInputBorder inputBorder({Color? color, double width = 1}) {
       return OutlineInputBorder(
         borderRadius: borderRadius,
-        borderSide: BorderSide(
-          color: color ?? AppColors.outlineStrong,
-          width: width,
-        ),
+        borderSide: BorderSide(color: color ?? p.outlineStrong, width: width),
       );
     }
 
-    final colorScheme = const ColorScheme.light(
+    // Через copyWith от базовой схемы: незаданные surfaceContainer* и т.п.
+    // наследуют surface, как раньше у ColorScheme.light.
+    final base = p.brightness == Brightness.dark
+        ? const ColorScheme.dark()
+        : const ColorScheme.light();
+    final colorScheme = base.copyWith(
       primary: AppColors.primary,
       onPrimary: AppColors.onPrimary,
       secondary: AppColors.primary,
       onSecondary: AppColors.onPrimary,
-      secondaryContainer: Color(0xFFE8F1FF),
+      secondaryContainer: p.secondaryContainer,
       onSecondaryContainer: AppColors.primary,
-      surface: AppColors.surface,
-      onSurface: AppColors.onSurface,
-      onSurfaceVariant: AppColors.onSurfaceVariant,
-      surfaceContainerHighest: Color(0xFFF9FAFB),
-      outline: AppColors.outline,
-      outlineVariant: AppColors.outlineStrong,
-      error: AppColors.error,
+      surface: p.surface,
+      onSurface: p.onSurface,
+      onSurfaceVariant: p.onSurfaceVariant,
+      surfaceContainerHighest: p.surfaceContainerHighest,
+      outline: p.outline,
+      outlineVariant: p.outlineStrong,
+      error: p.error,
     );
 
     final buttonShape = RoundedRectangleBorder(
@@ -98,10 +355,10 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: p.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: AppColors.background,
-      canvasColor: AppColors.background,
+      scaffoldBackgroundColor: p.background,
+      canvasColor: p.background,
       // Крупные заголовки экранов (CupertinoSliverNavigationBar): системные
       // 34 pt выглядели слишком громоздко рядом с карточками — чуть меньше.
       cupertinoOverrideTheme: const CupertinoThemeData(
@@ -117,40 +374,36 @@ abstract final class AppTheme {
           ),
         ),
       ),
-      textTheme: const TextTheme(
+      textTheme: TextTheme(
         headlineSmall: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 24,
           fontWeight: FontWeight.w700,
           height: 1.25,
         ),
         titleLarge: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 20,
           fontWeight: FontWeight.w700,
           height: 1.3,
         ),
         titleMedium: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 16,
           fontWeight: FontWeight.w600,
           height: 1.3,
         ),
         titleSmall: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 14,
           fontWeight: FontWeight.w600,
           height: 1.3,
         ),
-        bodyLarge: TextStyle(
-          color: AppColors.onSurface,
-          fontSize: 16,
-          height: 1.4,
-        ),
-        bodyMedium: TextStyle(color: AppColors.onSurface, height: 1.4),
-        bodySmall: TextStyle(color: AppColors.onSurfaceVariant, height: 1.4),
-        labelMedium: TextStyle(color: AppColors.onSurfaceVariant),
-        labelSmall: TextStyle(color: AppColors.onSurfaceVariant),
+        bodyLarge: TextStyle(color: p.onSurface, fontSize: 16, height: 1.4),
+        bodyMedium: TextStyle(color: p.onSurface, height: 1.4),
+        bodySmall: TextStyle(color: p.onSurfaceVariant, height: 1.4),
+        labelMedium: TextStyle(color: p.onSurfaceVariant),
+        labelSmall: TextStyle(color: p.onSurfaceVariant),
       ),
       splashColor: AppColors.primary.withValues(alpha: 0.08),
       highlightColor: AppColors.primary.withValues(alpha: 0.05),
@@ -162,83 +415,79 @@ abstract final class AppTheme {
           TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
         },
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: AppColors.surfaceElevated,
-        foregroundColor: AppColors.onSurface,
+        backgroundColor: p.surfaceElevated,
+        foregroundColor: p.onSurface,
         surfaceTintColor: Colors.transparent,
-        systemOverlayStyle: systemUiOverlay,
-        shape: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
+        systemOverlayStyle: systemUiOverlayFor(p.brightness),
+        shape: Border(bottom: BorderSide(color: p.outline, width: 1)),
         titleTextStyle: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
-      drawerTheme: const DrawerThemeData(
-        backgroundColor: AppColors.surface,
+      drawerTheme: DrawerThemeData(
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
       ),
-      dividerTheme: const DividerThemeData(
-        thickness: 1,
-        space: 1,
-        color: AppColors.outline,
-      ),
-      listTileTheme: const ListTileThemeData(
-        iconColor: AppColors.onSurface,
-        textColor: AppColors.onSurface,
+      dividerTheme: DividerThemeData(thickness: 1, space: 1, color: p.outline),
+      listTileTheme: ListTileThemeData(
+        iconColor: p.onSurface,
+        textColor: p.onSurface,
         selectedColor: AppColors.primary,
         horizontalTitleGap: 12,
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: AppColors.surface,
+        color: p.surface,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: borderRadius,
-          side: const BorderSide(color: AppColors.outline),
+          side: BorderSide(color: p.outline),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: p.surface,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,
         ),
-        labelStyle: const TextStyle(color: AppColors.onSurfaceVariant),
-        hintStyle: const TextStyle(color: AppColors.onSurfaceVariant),
+        labelStyle: TextStyle(color: p.onSurfaceVariant),
+        hintStyle: TextStyle(color: p.onSurfaceVariant),
         border: inputBorder(),
         enabledBorder: inputBorder(),
         focusedBorder: inputBorder(color: AppColors.primary, width: 1.5),
-        errorBorder: inputBorder(color: AppColors.error),
-        focusedErrorBorder: inputBorder(color: AppColors.error, width: 1.5),
+        errorBorder: inputBorder(color: p.error),
+        focusedErrorBorder: inputBorder(color: p.error, width: 1.5),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
-          disabledBackgroundColor: AppColors.outline,
-          disabledForegroundColor: AppColors.onSurfaceVariant,
+          disabledBackgroundColor: p.outline,
+          disabledForegroundColor: p.onSurfaceVariant,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           minimumSize: const Size(64, 48),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          disabledForegroundColor: AppColors.onSurfaceVariant,
+          disabledForegroundColor: p.onSurfaceVariant,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           minimumSize: const Size(64, 48),
-          side: const BorderSide(color: AppColors.outlineStrong),
+          side: BorderSide(color: p.outlineStrong),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -246,7 +495,7 @@ abstract final class AppTheme {
           foregroundColor: AppColors.primary,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -258,7 +507,7 @@ abstract final class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           minimumSize: const Size(64, 48),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -272,19 +521,19 @@ abstract final class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         selectedColor: AppColors.primary.withValues(alpha: 0.12),
-        disabledColor: AppColors.outline,
-        labelStyle: const TextStyle(color: AppColors.onSurface),
-        secondaryLabelStyle: const TextStyle(color: AppColors.onSurface),
+        disabledColor: p.outline,
+        labelStyle: TextStyle(color: p.onSurface),
+        secondaryLabelStyle: TextStyle(color: p.onSurface),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        side: const BorderSide(color: AppColors.outlineStrong),
+        side: BorderSide(color: p.outlineStrong),
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
       dropdownMenuTheme: DropdownMenuThemeData(
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.surface,
+          fillColor: p.surface,
           border: inputBorder(),
           enabledBorder: inputBorder(),
           focusedBorder: inputBorder(color: AppColors.primary, width: 1.5),
@@ -296,40 +545,37 @@ abstract final class AppTheme {
           return Colors.transparent;
         }),
         checkColor: WidgetStateProperty.all(AppColors.onPrimary),
-        side: const BorderSide(color: AppColors.outlineStrong, width: 1.5),
+        side: BorderSide(color: p.outlineStrong, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return AppColors.onPrimary;
-          return AppColors.outlineStrong;
+          return p.outlineStrong;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return AppColors.primary.withValues(alpha: 0.55);
           }
-          return AppColors.outline;
+          return p.outline;
         }),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.primary,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
-        titleTextStyle: const TextStyle(
-          color: AppColors.onSurface,
+        titleTextStyle: TextStyle(
+          color: p.onSurface,
           fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
-        contentTextStyle: const TextStyle(
-          color: AppColors.onSurface,
-          fontSize: 14,
-        ),
+        contentTextStyle: TextStyle(color: p.onSurface, fontSize: 14),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: AppColors.surface,
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         shape: RoundedRectangleBorder(
@@ -340,7 +586,7 @@ abstract final class AppTheme {
       // выше таб-бара, поля ввода чата и кнопок «домой»/«написать».
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xF2232326),
-        contentTextStyle: const TextStyle(
+        contentTextStyle: TextStyle(
           fontFamily: '.SF Pro Text',
           fontSize: 15,
           height: 1.3,
@@ -353,12 +599,12 @@ abstract final class AppTheme {
         insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 84),
       ),
       datePickerTheme: DatePickerThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
       timePickerTheme: TimePickerThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
     );

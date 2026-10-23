@@ -55,8 +55,8 @@ class _AppSkeletonBoxState extends State<AppSkeletonBox>
 
   @override
   Widget build(BuildContext context) {
-    final base = AppColors.outline;
-    final highlight = AppColors.surfaceElevated;
+    final base = AppColors.skeletonBase.resolveFrom(context);
+    final highlight = AppColors.skeletonHighlight.resolveFrom(context);
 
     return AnimatedBuilder(
       animation: _controller,
@@ -174,9 +174,7 @@ class AppSkeletonCardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
+        color: AppColors.groupedSurface.resolveFrom(context),
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

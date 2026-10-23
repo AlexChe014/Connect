@@ -70,14 +70,19 @@ class BookableObject {
     favoriteTypeId: favoriteTypeId,
   );
 
-  String? get previewImageUrl => media.firstWhere(
-        (m) => (m.previewUrl ?? '').isNotEmpty,
-        orElse: () => const BookableObjectMedia(id: 0),
-      ).previewUrl ??
-      media.firstWhere(
-        (m) => (m.originalUrl ?? '').isNotEmpty,
-        orElse: () => const BookableObjectMedia(id: 0),
-      ).originalUrl;
+  String? get previewImageUrl =>
+      media
+          .firstWhere(
+            (m) => (m.previewUrl ?? '').isNotEmpty,
+            orElse: () => const BookableObjectMedia(id: 0),
+          )
+          .previewUrl ??
+      media
+          .firstWhere(
+            (m) => (m.originalUrl ?? '').isNotEmpty,
+            orElse: () => const BookableObjectMedia(id: 0),
+          )
+          .originalUrl;
 
   factory BookableObject.fromJson(Map<String, dynamic> json) {
     final isActiveRaw = json['is_active'];
@@ -110,4 +115,3 @@ class BookableObject {
     return const [];
   }
 }
-

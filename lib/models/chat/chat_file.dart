@@ -70,8 +70,7 @@ class ChatFile {
           (json['mime_type'] as String?)?.trim() ??
           'application/octet-stream',
       size: _parseInt(json['size']) ?? 0,
-      isDuplicate:
-          json['is_duplicate'] == true || json['isDuplicate'] == true,
+      isDuplicate: json['is_duplicate'] == true || json['isDuplicate'] == true,
       createdAt: _parseDate(json['created_at'] ?? json['createdAt']),
     );
   }

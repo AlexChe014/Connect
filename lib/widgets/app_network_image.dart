@@ -17,6 +17,7 @@ class AppNetworkImage extends StatelessWidget {
     this.borderRadius = 0,
     this.errorIcon = CupertinoIcons.photo,
     this.httpHeaders,
+    this.memCacheWidth,
   });
 
   final String? url;
@@ -27,16 +28,21 @@ class AppNetworkImage extends StatelessWidget {
   final IconData errorIcon;
   final Map<String, String>? httpHeaders;
 
+  /// Ширина раскодирования в пикселях. Без неё снимок с камеры лежит в
+  /// памяти целиком (десятки МБ) и быстро вытесняет остальные из кэша.
+  final int? memCacheWidth;
+
   @override
   Widget build(BuildContext context) {
     final trimmed = url?.trim();
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: (trimmed == null || trimmed.isEmpty)
-          ? _errorPlaceholder()
+          ? _errorPlaceholder(context)
           : CachedNetworkImage(
               imageUrl: trimmed,
               httpHeaders: httpHeaders,
+              memCacheWidth: memCacheWidth,
               width: width,
               height: height,
               fit: fit,
@@ -45,20 +51,20 @@ class AppNetworkImage extends StatelessWidget {
                 height: height ?? 16,
                 borderRadius: 0,
               ),
-              errorWidget: (context, url, error) => _errorPlaceholder(),
+              errorWidget: (context, url, error) => _errorPlaceholder(context),
             ),
     );
   }
 
-  Widget _errorPlaceholder() {
+  Widget _errorPlaceholder(BuildContext context) {
     return SizedBox(
       width: width,
       height: height,
       child: ColoredBox(
-        color: AppColors.surfaceElevated,
+        color: AppColors.placeholderFill.resolveFrom(context),
         child: Icon(
           errorIcon,
-          color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+          color: AppColors.placeholderIcon.resolveFrom(context),
         ),
       ),
     );

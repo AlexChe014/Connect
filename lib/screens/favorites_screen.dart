@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../config/app_theme.dart';
 import '../models/bookings/bookable_object.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
@@ -213,8 +214,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
         shadows: AppGlass.controlShadow,
         child: CupertinoSlidingSegmentedControl<_FavoritesSegment>(
           groupValue: _segment,
-          backgroundColor: const Color(0x00000000),
-          thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
+          backgroundColor: Colors.transparent,
+          thumbColor: AppColors.segmentThumb.resolveFrom(context),
           children: const {
             _FavoritesSegment.users: Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
@@ -292,7 +293,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

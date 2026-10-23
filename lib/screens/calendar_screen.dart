@@ -502,7 +502,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',

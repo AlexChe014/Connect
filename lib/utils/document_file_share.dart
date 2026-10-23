@@ -33,18 +33,19 @@ class DocumentFileShare {
   }) async {
     // 1С отвечает {file, name, ext}: имя приходит без расширения, а без
     // него Files/QuickLook не понимают тип файла.
-    final rawName = (response['namefile'] ??
-            response['filename'] ??
-            response['name'] ??
-            fallbackName)
-        .toString()
-        .trim();
+    final rawName =
+        (response['namefile'] ??
+                response['filename'] ??
+                response['name'] ??
+                fallbackName)
+            .toString()
+            .trim();
     final ext = response['ext']?.toString().trim().replaceFirst('.', '') ?? '';
     final baseName = rawName.isEmpty ? 'Файл' : rawName;
     final fileName =
         ext.isEmpty || baseName.toLowerCase().endsWith('.${ext.toLowerCase()}')
-            ? baseName
-            : '$baseName.$ext';
+        ? baseName
+        : '$baseName.$ext';
 
     for (final key in _base64Keys) {
       final raw = response[key];

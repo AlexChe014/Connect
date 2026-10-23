@@ -99,7 +99,7 @@ class _SurveysScreenState extends State<SurveysScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -285,10 +285,10 @@ class _SurveyTile extends StatelessWidget {
     final pending = invitation.isPending(now);
     final isNew = invitation.isNew(now);
     final color = invitation.isCompleted
-        ? CupertinoColors.systemGreen
+        ? CupertinoColors.systemGreen.resolveFrom(context)
         : pending
-        ? CupertinoColors.systemPurple
-        : CupertinoColors.systemGrey;
+        ? CupertinoColors.systemPurple.resolveFrom(context)
+        : CupertinoColors.systemGrey.resolveFrom(context);
     final subtitle = _subtitle;
     return CupertinoListTile(
       padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 14, 12),

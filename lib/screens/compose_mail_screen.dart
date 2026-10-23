@@ -621,9 +621,9 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       children: [
         for (var index = 0; index < _attachments.length; index++)
           CupertinoListTile(
-            leading: const AppIconBadge(
+            leading: AppIconBadge(
               icon: CupertinoIcons.doc_fill,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             title: Text(
               _attachments[index].filename,
@@ -644,9 +644,9 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             ),
           ),
         CupertinoListTile(
-          leading: const AppIconBadge(
+          leading: AppIconBadge(
             icon: CupertinoIcons.paperclip,
-            color: CupertinoColors.systemGrey,
+            color: CupertinoColors.systemGrey.resolveFrom(context),
           ),
           title: Text(
             _attachments.isEmpty ? 'Прикрепить файлы' : 'Добавить ещё',

@@ -355,10 +355,10 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
           Text(
             _news.title,
             style: const TextStyle(
-              fontSize: 22,
+              fontSize: 19,
               fontWeight: FontWeight.w700,
               height: 1.25,
-              letterSpacing: -0.3,
+              letterSpacing: -0.2,
             ),
           ),
           if (photos.isNotEmpty) ...[
@@ -504,9 +504,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
 
     return AppGlassBarBlur(

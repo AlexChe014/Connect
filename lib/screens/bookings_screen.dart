@@ -466,7 +466,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                         context: context,
                         isScrollControlled: true,
                         showDragHandle: true,
-                        backgroundColor: CupertinoColors.systemGroupedBackground
+                        backgroundColor: AppColors.groupedBackground
                             .resolveFrom(context),
                         clipBehavior: Clip.antiAlias,
                         shape: const RoundedRectangleBorder(
@@ -561,7 +561,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -671,7 +671,7 @@ class _FiltersCard extends StatelessWidget {
     required Color color,
     required String label,
     required String value,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return BookingPickerRow(
       icon: icon,
@@ -697,57 +697,66 @@ class _FiltersCard extends StatelessWidget {
           children: [
             _pickerRow(
               icon: CupertinoIcons.building_2_fill,
-              color: CupertinoColors.systemBlue,
+              color: CupertinoColors.systemBlue.resolveFrom(context),
               label: 'Офис',
               value: selectedBuilding.name,
-              onTap: () async {
-                final picked = await showBookingOptionSheet<Building>(
-                  context: context,
-                  title: 'Офис',
-                  options: buildings,
-                  current: selectedBuilding,
-                  labelOf: (b) => b.name,
-                );
-                if (picked != null && picked.id != selectedBuilding.id) {
-                  onBuildingChanged(picked);
-                }
-              },
+              // Единственный вариант — выбирать нечего: строка остаётся
+              // справкой, без шеврона и шторки.
+              onTap: buildings.length < 2
+                  ? null
+                  : () async {
+                      final picked = await showBookingOptionSheet<Building>(
+                        context: context,
+                        title: 'Офис',
+                        options: buildings,
+                        current: selectedBuilding,
+                        labelOf: (b) => b.name,
+                      );
+                      if (picked != null && picked.id != selectedBuilding.id) {
+                        onBuildingChanged(picked);
+                      }
+                    },
             ),
             _pickerRow(
               icon: CupertinoIcons.square_stack_3d_up_fill,
-              color: CupertinoColors.systemIndigo,
+              color: CupertinoColors.systemIndigo.resolveFrom(context),
               label: 'Этаж',
               value: selectedSpace.name,
-              onTap: () async {
-                final picked = await showBookingOptionSheet<Space>(
-                  context: context,
-                  title: 'Этаж',
-                  options: spaces,
-                  current: selectedSpace,
-                  labelOf: (s) => s.name,
-                );
-                if (picked != null && picked.id != selectedSpace.id) {
-                  onSpaceChanged(picked);
-                }
-              },
+              onTap: spaces.length < 2
+                  ? null
+                  : () async {
+                      final picked = await showBookingOptionSheet<Space>(
+                        context: context,
+                        title: 'Этаж',
+                        options: spaces,
+                        current: selectedSpace,
+                        labelOf: (s) => s.name,
+                      );
+                      if (picked != null && picked.id != selectedSpace.id) {
+                        onSpaceChanged(picked);
+                      }
+                    },
             ),
             _pickerRow(
               icon: CupertinoIcons.cube_box_fill,
-              color: CupertinoColors.systemTeal,
+              color: CupertinoColors.systemTeal.resolveFrom(context),
               label: 'Объект бронирования',
               value: selectedType.name,
-              onTap: () async {
-                final picked = await showBookingOptionSheet<BookingObjectType>(
-                  context: context,
-                  title: 'Объект бронирования',
-                  options: types,
-                  current: selectedType,
-                  labelOf: (t) => t.name,
-                );
-                if (picked != null && picked.id != selectedType.id) {
-                  onTypeChanged(picked);
-                }
-              },
+              onTap: types.length < 2
+                  ? null
+                  : () async {
+                      final picked =
+                          await showBookingOptionSheet<BookingObjectType>(
+                            context: context,
+                            title: 'Объект бронирования',
+                            options: types,
+                            current: selectedType,
+                            labelOf: (t) => t.name,
+                          );
+                      if (picked != null && picked.id != selectedType.id) {
+                        onTypeChanged(picked);
+                      }
+                    },
             ),
           ],
         ),
@@ -756,7 +765,7 @@ class _FiltersCard extends StatelessWidget {
           children: [
             _pickerRow(
               icon: CupertinoIcons.calendar,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Дата',
               value: _formatDate(selectedDate),
               onTap: () async {
@@ -771,7 +780,7 @@ class _FiltersCard extends StatelessWidget {
             ),
             _pickerRow(
               icon: CupertinoIcons.clock_fill,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Начало',
               value: BookingTimeUtils.formatHm(
                 slots[startIndex.clamp(minStartIndex, slots.length - 1)],
@@ -789,7 +798,7 @@ class _FiltersCard extends StatelessWidget {
             ),
             _pickerRow(
               icon: CupertinoIcons.clock_fill,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Окончание',
               value: BookingTimeUtils.formatHm(
                 slots[endIndex.clamp(endMinIndex, slots.length - 1)],
@@ -811,9 +820,9 @@ class _FiltersCard extends StatelessWidget {
           margin: const EdgeInsets.only(top: 12),
           children: [
             CupertinoListTile(
-              leading: const AppIconBadge(
+              leading: AppIconBadge(
                 icon: CupertinoIcons.person_2_fill,
-                color: CupertinoColors.systemGreen,
+                color: CupertinoColors.systemGreen.resolveFrom(context),
               ),
               title: const Text('Вместимость', style: TextStyle(fontSize: 15)),
               additionalInfo: ClipRect(
@@ -837,9 +846,9 @@ class _FiltersCard extends StatelessWidget {
               ),
             ),
             CupertinoListTile(
-              leading: const AppIconBadge(
+              leading: AppIconBadge(
                 icon: CupertinoIcons.slider_horizontal_3,
-                color: CupertinoColors.systemPurple,
+                color: CupertinoColors.systemPurple.resolveFrom(context),
               ),
               title: const Text('Оборудование', style: TextStyle(fontSize: 15)),
               subtitle: selectedEquipmentIds.isEmpty
@@ -942,9 +951,9 @@ class _FiltersDisclosure extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const AppIconBadge(
+              AppIconBadge(
                 icon: CupertinoIcons.slider_horizontal_3,
-                color: CupertinoColors.systemBlue,
+                color: CupertinoColors.systemBlue.resolveFrom(context),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1033,14 +1042,11 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
     final imageUrl = object.previewImageUrl;
     final description = (object.description ?? '').trim();
 
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Container(
       foregroundDecoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         // Светлая кромка, как у стеклянных карточек.
-        border: Border.all(
-          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-        ),
+        border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
       ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
@@ -1058,10 +1064,12 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
             children: [
               if (imageUrl == null)
                 Container(
-                  color: CupertinoColors.systemBlue.withValues(alpha: 0.12),
-                  child: const Icon(
+                  color: CupertinoColors.systemBlue
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.12),
+                  child: Icon(
                     CupertinoIcons.location_solid,
-                    color: CupertinoColors.systemBlue,
+                    color: CupertinoColors.systemBlue.resolveFrom(context),
                     size: 40,
                   ),
                 )
@@ -1090,7 +1098,7 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
                           : CupertinoIcons.star,
                       size: 17,
                       color: _isFavorite
-                          ? CupertinoColors.systemYellow
+                          ? CupertinoColors.systemYellow.resolveFrom(context)
                           : CupertinoColors.white,
                     ),
                   ),

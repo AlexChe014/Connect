@@ -13,4 +13,3 @@ class UserRoutes {
   static String updateUrl(int userId) =>
       '${ApiConfig.baseUrl}/user/update/$userId';
 }
-

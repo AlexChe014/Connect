@@ -106,8 +106,8 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = action.onPressed != null;
     final color = action.isDestructive
-        ? CupertinoColors.systemRed
-        : CupertinoColors.activeBlue;
+        ? CupertinoColors.systemRed.resolveFrom(context)
+        : CupertinoColors.activeBlue.resolveFrom(context);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

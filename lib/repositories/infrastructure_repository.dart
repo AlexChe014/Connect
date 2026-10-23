@@ -9,9 +9,7 @@ import 'package:connect/services/paginated.dart';
 class SpacesAndTypes {
   final List<Space> spaces;
 
-  const SpacesAndTypes({
-    required this.spaces,
-  });
+  const SpacesAndTypes({required this.spaces});
 }
 
 class InfrastructureRepository {
@@ -19,7 +17,9 @@ class InfrastructureRepository {
   static final InfrastructureRepository instance = InfrastructureRepository._();
 
   Future<List<Building>> getActiveBuildings() async {
-    final decoded = await ApiClient.instance.get(InfrastructureRoutes.buildingsUrl);
+    final decoded = await ApiClient.instance.get(
+      InfrastructureRoutes.buildingsUrl,
+    );
 
     final list = ApiEnvelope.unwrapDataList(
       decoded,
@@ -33,8 +33,9 @@ class InfrastructureRepository {
   }
 
   Future<SpacesAndTypes> getActiveSpacesAndTypes(int buildingId) async {
-    final decoded =
-        await ApiClient.instance.get(InfrastructureRoutes.spacesByBuildingUrl(buildingId));
+    final decoded = await ApiClient.instance.get(
+      InfrastructureRoutes.spacesByBuildingUrl(buildingId),
+    );
 
     final data = ApiEnvelope.unwrapData(
       decoded,
@@ -78,4 +79,3 @@ class InfrastructureRepository {
     return all;
   }
 }
-

@@ -53,7 +53,9 @@ abstract final class NotificationTopics {
     type: 'news_created',
     title: 'Новая запись в ленте',
     description: 'Публикации и объявления компании',
-    dataFields: ['news_id (push, верхний уровень) / id (лента, во вложенном data)'],
+    dataFields: [
+      'news_id (push, верхний уровень) / id (лента, во вложенном data)',
+    ],
     icon: CupertinoIcons.square_grid_2x2_fill,
     color: CupertinoColors.systemBlue,
   );

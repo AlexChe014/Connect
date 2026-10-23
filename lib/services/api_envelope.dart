@@ -68,7 +68,10 @@ class ApiEnvelope {
       if (s == 'true' || s == '1') return true;
       if (s == 'false' || s == '0') return false;
     }
-    throw ApiException(200, 'Некорректный формат data (ожидалось логическое значение)');
+    throw ApiException(
+      200,
+      'Некорректный формат data (ожидалось логическое значение)',
+    );
   }
 
   static int unwrapDataInt(
@@ -95,4 +98,3 @@ class ApiEnvelope {
     return data.toString();
   }
 }
-

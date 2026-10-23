@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
@@ -347,14 +348,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (birthday != null)
         _contactTile(
           icon: CupertinoIcons.gift_fill,
-          color: CupertinoColors.systemPink,
+          color: CupertinoColors.systemPink.resolveFrom(context),
           title: 'Дата рождения',
           value: DateFormat('dd.MM.yyyy').format(birthday),
         ),
       if ((email ?? '').isNotEmpty)
         _contactTile(
           icon: CupertinoIcons.mail_solid,
-          color: CupertinoColors.systemBlue,
+          color: CupertinoColors.systemBlue.resolveFrom(context),
           title: 'Email',
           value: email!,
         ),
@@ -362,7 +363,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Номер с добавочным длинный — переносим его, а не обрезаем подпись.
         _contactTile(
           icon: CupertinoIcons.phone_fill,
-          color: CupertinoColors.systemGreen,
+          color: CupertinoColors.systemGreen.resolveFrom(context),
           title: 'Телефон',
           value: phone!,
           maxLines: 2,
@@ -370,7 +371,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if ((department ?? '').isNotEmpty)
         _contactTile(
           icon: CupertinoIcons.building_2_fill,
-          color: CupertinoColors.systemIndigo,
+          color: CupertinoColors.systemIndigo.resolveFrom(context),
           title: 'Отдел',
           value: department!,
         ),
@@ -463,7 +464,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     )
                                   : _iconBadge(
                                       CupertinoIcons.location_solid,
-                                      CupertinoColors.systemRed,
+                                      CupertinoColors.systemRed.resolveFrom(
+                                        context,
+                                      ),
                                     ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -513,11 +516,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           CupertinoListSection.insetGrouped(
             children: [
               CupertinoListTile(
-                title: const Center(
+                title: Center(
                   child: Text(
                     'Выйти из аккаунта',
                     style: TextStyle(
-                      color: CupertinoColors.systemRed,
+                      color: CupertinoColors.systemRed.resolveFrom(context),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -641,11 +644,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 5),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: CupertinoColors.systemRed,
+                    color: CupertinoColors.systemRed.resolveFrom(context),
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(
-                      color: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context),
+                      color: AppColors.groupedBackground.resolveFrom(context),
                       width: 1.5,
                     ),
                   ),
@@ -669,7 +671,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       child: SafeArea(
         top: false,
         bottom: false,
@@ -679,7 +681,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             slivers: [
               AppSliverTitleBar(
                 title: const Text('Профиль'),
-                backgroundColor: CupertinoColors.systemGroupedBackground,
+                backgroundColor: AppColors.groupedBackground.resolveFrom(
+                  context,
+                ),
                 trailing: ListenableBuilder(
                   listenable: NotificationUnreadService.instance,
                   builder: (context, _) => _buildNotificationsButton(context),
@@ -717,9 +721,7 @@ class _ProfileHeaderCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
+          color: AppColors.groupedSurface.resolveFrom(context),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -775,17 +777,19 @@ class _ProfileHeaderCard extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: CupertinoColors.activeBlue.withValues(
-                          alpha: 0.12,
-                        ),
+                        color: CupertinoColors.activeBlue
+                            .resolveFrom(context)
+                            .withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         status!,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: CupertinoColors.activeBlue,
+                          color: CupertinoColors.activeBlue.resolveFrom(
+                            context,
+                          ),
                         ),
                       ),
                     ),

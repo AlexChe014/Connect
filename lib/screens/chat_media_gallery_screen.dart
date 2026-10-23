@@ -30,8 +30,9 @@ class MediaViewer extends StatefulWidget {
 }
 
 class _MediaViewerState extends State<MediaViewer> {
-  late final PageController _controller =
-      PageController(initialPage: widget.initialIndex);
+  late final PageController _controller = PageController(
+    initialPage: widget.initialIndex,
+  );
   late int _index = widget.initialIndex;
   bool _sharing = false;
 
@@ -64,9 +65,9 @@ class _MediaViewerState extends State<MediaViewer> {
     } catch (e, st) {
       CrashReportingService.recordNonFatal(e, st, reason: 'chat_media_share');
       if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Не удалось скачать файл')),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(const SnackBar(content: Text('Не удалось скачать файл')));
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -79,7 +80,11 @@ class _MediaViewerState extends State<MediaViewer> {
     try {
       await ChatFileShare.share(file);
     } catch (e, st) {
-      CrashReportingService.recordNonFatal(e, st, reason: 'chat_video_download');
+      CrashReportingService.recordNonFatal(
+        e,
+        st,
+        reason: 'chat_video_download',
+      );
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось открыть видео')),

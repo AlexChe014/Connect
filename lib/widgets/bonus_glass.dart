@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show RefreshIndicator;
 import 'package:intl/intl.dart';
 
+import '../config/app_theme.dart';
 import 'app_glass.dart';
 import 'app_title_bar.dart';
 import 'confetti_overlay.dart';
@@ -61,9 +62,7 @@ class BonusGlassScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     final label = CupertinoColors.label.resolveFrom(context);
     // Прозрачная: заливка дала бы на цветном пятне видимую границу.
     final barBg = groupedBg.withValues(alpha: 0);
@@ -187,7 +186,7 @@ Future<void> showBonusCelebration(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'bonus-celebration',
-    barrierColor: const Color(0x66000000),
+    barrierColor: AppColors.scrim,
     transitionDuration: const Duration(milliseconds: 320),
     pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
     transitionBuilder: (context, anim, secondaryAnim, child) {
@@ -294,7 +293,10 @@ class _BonusCelebrationCard extends StatelessWidget {
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: CupertinoDynamicColor.resolve(
-                              statusColor ?? CupertinoColors.secondaryLabel,
+                              statusColor ??
+                                  CupertinoColors.secondaryLabel.resolveFrom(
+                                    context,
+                                  ),
                               context,
                             ),
                           ),
@@ -319,13 +321,16 @@ class _BonusCelebrationCard extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: celebrate
-                      ? const [Color(0xFFFFD966), Color(0xFFE0A200)]
+                      ? AppFestiveColors.medalGradient
                       : [
                           CupertinoColors.systemGrey3.resolveFrom(context),
                           CupertinoColors.systemGrey.resolveFrom(context),
                         ],
                 ),
-                border: Border.all(color: const Color(0xE6FFFFFF), width: 4),
+                border: Border.all(
+                  color: CupertinoColors.white.withValues(alpha: 0.9),
+                  width: 4,
+                ),
                 boxShadow: AppGlass.controlShadow,
               ),
               child: photoUrl != null

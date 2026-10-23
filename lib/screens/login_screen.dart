@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../config/app_theme.dart';
 import '../config/api_config.dart';
 import '../config/branding.dart';
 import '../config/home_tabs.dart';
@@ -133,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       child: DefaultTextStyle(
         style: TextStyle(
           fontFamily: '.SF Pro Text',
@@ -268,24 +269,27 @@ class _LoginScreenState extends State<LoginScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: CupertinoColors.systemRed.withValues(
-                                alpha: 0.12,
-                              ),
+                              color: CupertinoColors.systemRed
+                                  .resolveFrom(context)
+                                  .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   CupertinoIcons.exclamationmark_triangle,
-                                  color: CupertinoColors.systemRed,
+                                  color: CupertinoColors.systemRed.resolveFrom(
+                                    context,
+                                  ),
                                   size: 20,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _errorMessage!,
-                                    style: const TextStyle(
-                                      color: CupertinoColors.systemRed,
+                                    style: TextStyle(
+                                      color: CupertinoColors.systemRed
+                                          .resolveFrom(context),
                                       fontSize: 14,
                                     ),
                                   ),

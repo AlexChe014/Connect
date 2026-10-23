@@ -212,19 +212,13 @@ class ChatManagementRepository {
   }) async {
     try {
       final decoded = await ApiClient.instance.delete(deleteUrl);
-      ApiEnvelope.unwrapData(
-        decoded,
-        defaultErrorMessage: defaultErrorMessage,
-      );
+      ApiEnvelope.unwrapData(decoded, defaultErrorMessage: defaultErrorMessage);
       return;
     } on ApiException catch (e) {
       if (!_deleteFallbackStatuses.contains(e.statusCode)) rethrow;
     }
 
     final decoded = await ApiClient.instance.post(postDeleteUrl);
-    ApiEnvelope.unwrapData(
-      decoded,
-      defaultErrorMessage: defaultErrorMessage,
-    );
+    ApiEnvelope.unwrapData(decoded, defaultErrorMessage: defaultErrorMessage);
   }
 }

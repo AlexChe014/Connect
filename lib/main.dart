@@ -33,8 +33,10 @@ import 'services/notification_unread_service.dart';
 import 'services/push_notification_service.dart';
 import 'services/root_stack_observer.dart';
 import 'services/survey_pending_service.dart';
+import 'services/theme_mode_service.dart';
 import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
+import 'widgets/call_overlay.dart';
 import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
 
@@ -45,6 +47,7 @@ Future<void> main() async {
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemUiOverlay);
     await initializeDateFormatting('ru_RU', null);
     await ApiConfig.init();
+    await ThemeModeService.instance.init();
     await AuthService.instance.init();
     await BrandingService.instance.init();
     // Инициализирует Firebase (нужен для CrashReportingService ниже).
@@ -115,9 +118,9 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: AppTheme.systemUiOverlay,
-      child: MaterialApp(
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeModeService.instance.mode,
+      builder: (context, themeMode, _) => MaterialApp(
         navigatorKey: AppNavigationService.navigatorKey,
         navigatorObservers: [
           AppNavigationService.routeObserver,
@@ -126,6 +129,8 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
         title: 'Connect — Корпоративный сервис',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode,
         builder: (context, child) {
           // MaterialApp подставляет для текста без Material-предка красно-жёлтый
           // debug-стиль (см. flutter/material/app.dart, _errorTextStyle). Экраны
@@ -138,33 +143,40 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
             color: CupertinoColors.label.resolveFrom(context),
             fontSize: 16,
           );
-          return DefaultTextStyle(
-            style: textStyle,
-            // Тап в любом месте вне текстового поля (в т.ч. в открытых поверх
-            // экранов шторках вроде выбора сотрудника на «Диске») должен
-            // закрывать клавиатуру — иначе после ввода текста её нечем убрать.
-            // GestureDetector — обёртка над Navigator/Overlay, поэтому не
-            // мешает обычным тапам по кнопкам и не перехватывает скролл.
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: Stack(
-                children: [
-                  // Корневой Scaffold над Navigator: ScaffoldMessenger
-                  // показывает SnackBar только в самом верхнем Scaffold, и
-                  // без этой обёртки им был Scaffold главного экрана —
-                  // на экранах, открытых поверх него, SnackBar рисовался
-                  // под ними и был не виден.
-                  // Material внутри Scaffold сбрасывает DefaultTextStyle на
-                  // тему — возвращаем стиль приложения.
-                  Scaffold(
-                    backgroundColor: Colors.transparent,
-                    resizeToAvoidBottomInset: false,
-                    body: DefaultTextStyle(style: textStyle, child: child!),
-                  ),
-                  const HomeShortcutButton(),
-                  const VpnBanner(),
-                ],
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: AppTheme.systemUiOverlayFor(Theme.of(context).brightness),
+            child: DefaultTextStyle(
+              style: textStyle,
+              // Тап в любом месте вне текстового поля (в т.ч. в открытых поверх
+              // экранов шторках вроде выбора сотрудника на «Диске») должен
+              // закрывать клавиатуру — иначе после ввода текста её нечем убрать.
+              // GestureDetector — обёртка над Navigator/Overlay, поэтому не
+              // мешает обычным тапам по кнопкам и не перехватывает скролл.
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                child: Stack(
+                  children: [
+                    // Корневой Scaffold над Navigator: ScaffoldMessenger
+                    // показывает SnackBar только в самом верхнем Scaffold, и
+                    // без этой обёртки им был Scaffold главного экрана —
+                    // на экранах, открытых поверх него, SnackBar рисовался
+                    // под ними и был не виден.
+                    // Material внутри Scaffold сбрасывает DefaultTextStyle на
+                    // тему — возвращаем стиль приложения.
+                    Scaffold(
+                      backgroundColor: Colors.transparent,
+                      resizeToAvoidBottomInset: false,
+                      body: DefaultTextStyle(style: textStyle, child: child!),
+                    ),
+                    const HomeShortcutButton(),
+                    const VpnBanner(),
+                    // Экран звонка — над всем, в т.ч. над Navigator: при
+                    // сворачивании в окошко звонок продолжается, пока
+                    // пользователь ходит по приложению.
+                    const CallOverlayHost(),
+                  ],
+                ),
               ),
             ),
           );
@@ -366,9 +378,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     return Scaffold(
       // Тот же серый, что у вкладок: плавающее меню лежит на нём.
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       // Списки уходят под плавающую капсулу, а не обрываются над ней серой
       // полосой; высоту меню вкладки получают в MediaQuery.padding.bottom.
       extendBody: true,
@@ -473,18 +483,16 @@ class _FloatingTabBar extends StatelessWidget {
         height: 62,
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-            context,
-          ),
+          color: AppColors.groupedSurface.resolveFrom(context),
           borderRadius: BorderRadius.circular(31),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x14000000),
+              color: AppColors.shadowControl,
               blurRadius: 24,
               offset: Offset(0, 8),
             ),
             BoxShadow(
-              color: Color(0x0A000000),
+              color: AppColors.shadowHairline,
               blurRadius: 3,
               offset: Offset(0, 1),
             ),
@@ -539,7 +547,7 @@ class _TabButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected
                 ? AppColors.primary.withValues(alpha: 0.1)
-                : const Color(0x00000000),
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(27),
           ),
           child: Column(
@@ -564,7 +572,7 @@ class _TabButton extends StatelessWidget {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemRed,
+                          color: CupertinoColors.systemRed.resolveFrom(context),
                           borderRadius: BorderRadius.circular(9),
                           border: Border.all(
                             color: CupertinoColors

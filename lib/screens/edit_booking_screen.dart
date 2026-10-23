@@ -140,14 +140,14 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
             if (place.isNotEmpty)
               BookingPickerRow(
                 icon: CupertinoIcons.location_solid,
-                color: CupertinoColors.systemRed,
+                color: CupertinoColors.systemRed.resolveFrom(context),
                 label: 'Место',
                 value: place,
                 valueMaxWidth: 200,
               ),
             BookingFieldRow(
               icon: CupertinoIcons.link,
-              color: CupertinoColors.systemBlue,
+              color: CupertinoColors.systemBlue.resolveFrom(context),
               controller: _linkController,
               placeholder: 'Ссылка на встречу',
               keyboardType: TextInputType.url,
@@ -174,13 +174,13 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
           children: [
             BookingPickerRow(
               icon: CupertinoIcons.calendar,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Дата',
               value: BookingTimeUtils.formatDateShort(detail.datetimeStart),
             ),
             BookingPickerRow(
               icon: CupertinoIcons.clock_fill,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Время',
               value:
                   '${BookingTimeUtils.formatHm(detail.datetimeStart)}–'
@@ -189,7 +189,7 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
             if (days != null)
               BookingPickerRow(
                 icon: CupertinoIcons.repeat,
-                color: CupertinoColors.systemPurple,
+                color: CupertinoColors.systemPurple.resolveFrom(context),
                 label: 'Повтор',
                 value: days,
                 valueMaxWidth: 200,

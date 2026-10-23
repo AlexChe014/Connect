@@ -32,7 +32,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/material.dart'
-    show ScaffoldMessenger, SnackBar, showModalBottomSheet;
+    show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -450,52 +450,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final startingCall = _callService.isStartingCall;
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       navigationBar: CupertinoNavigationBar(
-        // Полупрозрачная — сообщения уходят под размытую шапку.
-        backgroundColor: CupertinoColors.systemGroupedBackground
+        // Прозрачная: сообщения растворяются под ней в [_EdgeFade],
+        // а не обрезаются кромкой размытой полосы.
+        backgroundColor: AppColors.groupedBackground
             .resolveFrom(context)
-            .withValues(alpha: 0.7),
+            .withValues(alpha: 0),
         automaticBackgroundVisibility: false,
+        enableBackgroundFilterBlur: false,
         border: null,
-        middle: GestureDetector(
-          onTap: _openSettings,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ChatAvatar(chat: c, radius: 16),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      c.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
-                    ),
-                    if (c.isGroup && c.memberNames.isNotEmpty)
-                      Text(
-                        '${c.memberNames.length} участников',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        middle: _ChatTitleCapsule(chat: c, onTap: _openSettings),
         trailing: startingCall
             ? const Padding(
                 padding: EdgeInsets.only(right: 8),
@@ -634,6 +599,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         ),
                 ),
               ),
+              _EdgeFade.top(
+                height:
+                    MediaQuery.paddingOf(context).top + _topOverlayHeight + 24,
+              ),
+              _EdgeFade.bottom(height: _bottomOverlayHeight + 24),
               Positioned(
                 top: MediaQuery.paddingOf(context).top,
                 left: 0,
@@ -758,9 +728,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             const SizedBox(width: 6),
             Text(
               '$pos/$total',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
             CupertinoButton(
@@ -816,9 +786,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) => SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.5,
         child: SafeArea(
@@ -862,9 +830,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
-        context,
-      ),
+      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       builder: (context) {
         return SizedBox(
           height: MediaQuery.sizeOf(context).height * 0.6,
@@ -872,14 +838,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Padding(
+                Padding(
                   padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
                   child: Text(
                     'Переслать в…',
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label,
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
                 ),
@@ -1274,9 +1240,7 @@ class _ForwardTargetTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-          context,
-        ),
+        color: AppColors.groupedSurface.resolveFrom(context),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1294,10 +1258,10 @@ class _ForwardTargetTile extends StatelessWidget {
                   chat.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
               ),
@@ -1416,9 +1380,9 @@ class _ReplyBanner extends StatelessWidget {
                   ref.textPreview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -1474,9 +1438,9 @@ class _EditBanner extends StatelessWidget {
                   text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -1491,6 +1455,107 @@ class _EditBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Имя собеседника в стеклянной капсуле: отделяет шапку от ленты
+/// сообщений и подсказывает, что по нажатию откроются настройки чата.
+class _ChatTitleCapsule extends StatelessWidget {
+  const _ChatTitleCapsule({required this.chat, required this.onTap});
+
+  final Chat chat;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final online = chat.peerIsOnline;
+    final (String? status, Color statusColor) = chat.isGroup
+        ? (
+            chat.members.isEmpty ? null : '${chat.members.length} участников',
+            secondary,
+          )
+        : switch (online) {
+            true => ('в сети', AppColors.primary),
+            false => ('не в сети', secondary),
+            null => (null, secondary),
+          };
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(22),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ChatAvatar(chat: chat, radius: 16),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      chat.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ),
+                    if (status != null)
+                      Text(
+                        status,
+                        maxLines: 1,
+                        style: TextStyle(fontSize: 12, color: statusColor),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Мягкое затухание ленты у края экрана — как scroll edge effect в iOS 26:
+/// под шапкой и полем ввода сообщения растворяются в фоне.
+class _EdgeFade extends StatelessWidget {
+  const _EdgeFade.top({required this.height}) : fromTop = true;
+  const _EdgeFade.bottom({required this.height}) : fromTop = false;
+
+  final double height;
+  final bool fromTop;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = AppColors.groupedBackground.resolveFrom(context);
+    return Positioned(
+      top: fromTop ? 0 : null,
+      bottom: fromTop ? null : 0,
+      left: 0,
+      right: 0,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+              end: fromTop ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: [bg, bg.withValues(alpha: 0.85), bg.withValues(alpha: 0)],
+              stops: const [0, 0.6, 1],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1724,8 +1789,10 @@ class _MessageTile extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       color: highlighted
-          ? CupertinoColors.systemYellow.withValues(alpha: 0.20)
-          : const Color(0x00000000),
+          ? CupertinoColors.systemYellow
+                .resolveFrom(context)
+                .withValues(alpha: 0.20)
+          : Colors.transparent,
       child: child,
     );
   }
@@ -1849,8 +1916,7 @@ class _MessageTile extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: CupertinoColors.secondarySystemGroupedBackground
-                  .resolveFrom(context),
+              color: AppColors.groupedSurface.resolveFrom(context),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
@@ -1882,7 +1948,7 @@ class _MessageTile extends StatelessWidget {
         : CrossAxisAlignment.start;
     final bubble = m.isOutgoing
         ? AppColors.outgoingBubble
-        : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(context);
+        : AppColors.groupedSurface.resolveFrom(context);
     // Стикер рисуется без пузыря — цитата и подписи над ним на фоне чата.
     final onBubble = m.isOutgoing && !m.isSticker
         ? CupertinoColors.white
@@ -2047,7 +2113,7 @@ class _MessageTile extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: CupertinoColors.systemBackground.resolveFrom(
+                            color: AppColors.groupedSurface.resolveFrom(
                               context,
                             ),
                             borderRadius: BorderRadius.circular(12),
@@ -2215,7 +2281,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
                   size: 18,
                   color: _armed
                       ? CupertinoColors.label.resolveFrom(context)
-                      : CupertinoColors.systemGrey,
+                      : CupertinoColors.systemGrey.resolveFrom(context),
                 ),
               ),
             ),

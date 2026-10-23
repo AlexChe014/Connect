@@ -27,10 +27,7 @@ class SettingsRepository {
         : SettingsRoutes.getUrlForHost(host);
     final decoded = await ApiClient.instance.get(
       url,
-      queryParameters: {
-        'module': module,
-        'key': ?key,
-      },
+      queryParameters: {'module': module, 'key': ?key},
     );
     final data = ApiEnvelope.unwrapData(
       decoded,

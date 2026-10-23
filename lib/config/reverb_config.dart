@@ -32,9 +32,7 @@ class ReverbConfig {
     final publicHost = backend.host.trim();
     if (publicHost.isEmpty) return this;
     final publicTls = backend.scheme != 'http';
-    final publicPort = backend.hasPort
-        ? backend.port
-        : (publicTls ? 443 : 80);
+    final publicPort = backend.hasPort ? backend.port : (publicTls ? 443 : 80);
     return ReverbConfig(
       appKey: appKey,
       host: publicHost,
@@ -71,7 +69,8 @@ class ReverbConfig {
         ? backend.scheme != 'http'
         : tlsDefine.toLowerCase() != 'http';
     final portRaw = const String.fromEnvironment('REVERB_PORT');
-    final port = int.tryParse(portRaw) ??
+    final port =
+        int.tryParse(portRaw) ??
         (backend.hasPort ? backend.port : (useTls ? 443 : 80));
     final hostDefine = const String.fromEnvironment('REVERB_HOST');
     return ReverbConfig(
@@ -97,7 +96,8 @@ class ReverbConfig {
       return null;
     }
 
-    final appKey = pick(const [
+    final appKey =
+        pick(const [
           'app_key',
           'reverb_app_key',
           'key',
@@ -106,7 +106,8 @@ class ReverbConfig {
         ]) ??
         fallback.appKey;
 
-    var host = pick(const [
+    var host =
+        pick(const [
           'public_host',
           'hostname',
           'host',
@@ -125,10 +126,16 @@ class ReverbConfig {
         ? fallback.useTls
         : scheme.toLowerCase() != 'http';
 
-    final portRaw = pick(const ['port', 'reverb_port', 'ws_port', 'REVERB_PORT']);
+    final portRaw = pick(const [
+      'port',
+      'reverb_port',
+      'ws_port',
+      'REVERB_PORT',
+    ]);
     final port = int.tryParse(portRaw ?? '') ?? fallback.port;
 
-    final path = pick(const ['path', 'reverb_path', 'server_path', 'REVERB_PATH']) ??
+    final path =
+        pick(const ['path', 'reverb_path', 'server_path', 'REVERB_PATH']) ??
         fallback.path;
 
     return ReverbConfig(

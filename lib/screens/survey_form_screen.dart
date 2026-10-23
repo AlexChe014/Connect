@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors;
 import 'package:intl/intl.dart';
 
 import '../config/app_theme.dart';
@@ -291,27 +292,27 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
       return [
         _SurveyResultView(
           icon: CupertinoIcons.checkmark_seal_fill,
-          color: CupertinoColors.systemGreen,
+          color: CupertinoColors.systemGreen.resolveFrom(context),
           title: 'Ответы отправлены',
           message: successMessage,
         ),
       ];
     }
     if (form.alreadyCompleted) {
-      return const [
+      return [
         _SurveyResultView(
           icon: CupertinoIcons.checkmark_seal_fill,
-          color: CupertinoColors.systemGreen,
+          color: CupertinoColors.systemGreen.resolveFrom(context),
           title: 'Опрос пройден',
           message: 'Вы уже ответили на этот опрос. Спасибо за участие!',
         ),
       ];
     }
     if (!form.isOpen) {
-      return const [
+      return [
         _SurveyResultView(
           icon: CupertinoIcons.lock_fill,
-          color: CupertinoColors.systemGrey,
+          color: CupertinoColors.systemGrey.resolveFrom(context),
           title: 'Опрос закрыт',
           message: 'Приём ответов по этому опросу завершён.',
         ),
@@ -714,7 +715,7 @@ class _OptionRow extends StatelessWidget {
               border: Border.all(
                 color: selected
                     ? AppColors.primary.withValues(alpha: 0.6)
-                    : const Color(0x00000000),
+                    : Colors.transparent,
               ),
             ),
             child: Row(
@@ -777,7 +778,7 @@ class _RatingInput extends StatelessWidget {
                   i <= current ? CupertinoIcons.star_fill : CupertinoIcons.star,
                   size: max > 5 ? 26 : 32,
                   color: i <= current
-                      ? CupertinoColors.systemYellow
+                      ? CupertinoColors.systemYellow.resolveFrom(context)
                       : CupertinoColors.systemGrey3.resolveFrom(context),
                 ),
               ),
@@ -794,7 +795,10 @@ class _NpsInput extends StatelessWidget {
   final int? value;
   final ValueChanged<int?> onChanged;
 
-  static Color _colorFor(int score) {
+  static Color _colorFor(BuildContext context, int score) =>
+      CupertinoDynamicColor.resolve(_baseColorFor(score), context);
+
+  static Color _baseColorFor(int score) {
     if (score <= 6) return CupertinoColors.systemRed;
     if (score <= 8) return CupertinoColors.systemOrange;
     return CupertinoColors.systemGreen;
@@ -824,7 +828,7 @@ class _NpsInput extends StatelessWidget {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: score == value
-                            ? _colorFor(score)
+                            ? _colorFor(context, score)
                             : CupertinoColors.tertiarySystemFill.resolveFrom(
                                 context,
                               ),

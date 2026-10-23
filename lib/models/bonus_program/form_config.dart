@@ -17,8 +17,11 @@ class FormConfig {
   factory FormConfig.fromJson(Map<String, dynamic> json) {
     return FormConfig(
       periodOpen: json['period_open'] == true,
-      title: (json['period_title'] ?? json['title'] ?? 'Заявка на начисление баллов')
-          .toString(),
+      title:
+          (json['period_title'] ??
+                  json['title'] ??
+                  'Заявка на начисление баллов')
+              .toString(),
       description: (json['period_description'] ?? json['description'] ?? '')
           .toString(),
       feedbackEnabled: json['feedback_enabled'] == true,

@@ -1,6 +1,8 @@
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Colors;
 
 import '../config/app_theme.dart';
 
@@ -13,26 +15,45 @@ class AppGlass extends StatelessWidget {
     required this.child,
     this.borderRadius = const BorderRadius.all(Radius.circular(28)),
     this.shadows = panelShadow,
+    this.blur = true,
   });
 
   final Widget child;
   final BorderRadius borderRadius;
   final List<BoxShadow>? shadows;
 
+  /// `false` — только заливка и кромка, без BackdropFilter: для карточек
+  /// на ровном фоне, где размывать нечего, а размытие стоит кадров.
+  final bool blur;
+
+  /// Размытие фона (BackdropFilter, ImageFiltered) — только не на Android.
+  /// Каждый кадр перехода между экранами оно пересчитывается заново, и
+  /// старые/средние Android-телефоны не успевают: анимации дёргаются.
+  /// Вместо него — плотная заливка ([AppColors.glassSolidFill]).
+  static final bool blurSupported =
+      defaultTargetPlatform != TargetPlatform.android;
+
   /// Тень крупной плавающей панели (боковое меню).
   static const panelShadow = [
-    BoxShadow(color: Color(0x1F000000), blurRadius: 32, offset: Offset(0, 12)),
+    BoxShadow(
+      color: AppColors.shadowPanel,
+      blurRadius: 32,
+      offset: Offset(0, 12),
+    ),
   ];
 
   /// Тень мелкого элемента (кнопка, поле ввода) — тише, чтобы соседние
   /// капсулы не сливались в одно пятно.
   static const controlShadow = [
-    BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 3)),
+    BoxShadow(
+      color: AppColors.shadowControl,
+      blurRadius: 12,
+      offset: Offset(0, 3),
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     // Тень рисуется поверх и только снаружи формы: под полупрозрачным
     // стеклом обычная тень просвечивает и размывается внутрь панели —
     // у нижнего края появляется вторая, «грязная» тень.
@@ -42,25 +63,27 @@ class AppGlass extends StatelessWidget {
           : _OuterShadowPainter(borderRadius: borderRadius, shadows: shadows!),
       child: ClipRRect(
         borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.compose(
-            outer: const ColorFilter.matrix(_saturate),
-            inner: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          ),
-          child: DecoratedBox(
+        child: _maybeBlur(
+          DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: borderRadius,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? const [Color(0x803A3A3C), Color(0x661C1C1E)]
-                    : const [Color(0xCCFFFFFF), Color(0x99FFFFFF)],
-              ),
+              // Плавающая панель без размытия: сквозь полупрозрачный
+              // градиент читался бы контент под ней.
+              color: blur && !blurSupported
+                  ? AppColors.glassSolidFill.resolveFrom(context)
+                  : null,
+              gradient: blur && !blurSupported
+                  ? null
+                  : LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.glassGradientTop.resolveFrom(context),
+                        AppColors.glassGradientBottom.resolveFrom(context),
+                      ],
+                    ),
               border: Border.all(
-                color: isDark
-                    ? const Color(0x26FFFFFF)
-                    : const Color(0xB3FFFFFF),
+                color: AppColors.glassBorder.resolveFrom(context),
                 width: 1,
               ),
             ),
@@ -68,6 +91,17 @@ class AppGlass extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _maybeBlur(Widget child) {
+    if (!blur || !blurSupported) return child;
+    return BackdropFilter(
+      filter: ImageFilter.compose(
+        outer: const ColorFilter.matrix(_saturate),
+        inner: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+      ),
+      child: child,
     );
   }
 
@@ -128,9 +162,7 @@ class AppGlassGlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
     return Positioned(
       top: 0,
       left: 0,
@@ -212,16 +244,13 @@ class AppGlassSliverList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverPadding(
       padding: padding,
       sliver: DecoratedSliver(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF),
+          color: AppColors.glassFill.resolveFrom(context),
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-          ),
+          border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
           boxShadow: AppGlass.controlShadow,
         ),
         sliver: SliverList.separated(
@@ -256,9 +285,12 @@ class AppGlassSection extends StatelessWidget {
       child: AppGlass(
         borderRadius: BorderRadius.circular(22),
         shadows: AppGlass.controlShadow,
+        // Под секцией только фон и плавное пятно AppGlassGlow — без
+        // размытия выглядит так же, плотная заливка не нужна.
+        blur: AppGlass.blurSupported,
         child: CupertinoListSection.insetGrouped(
           margin: EdgeInsets.zero,
-          backgroundColor: const Color(0x00000000),
+          backgroundColor: Colors.transparent,
           decoration: const BoxDecoration(),
           children: children,
         ),
@@ -361,15 +393,12 @@ class AppFlatGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final radius = BorderRadius.circular(22);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF),
+        color: AppColors.glassFill.resolveFrom(context),
         borderRadius: radius,
-        border: Border.all(
-          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-        ),
+        border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
         boxShadow: AppGlass.controlShadow,
       ),
       child: ClipRRect(

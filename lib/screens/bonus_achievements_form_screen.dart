@@ -265,7 +265,7 @@ class _BonusAchievementsFormScreenState
               CupertinoListTile(
                 leading: _iconBadge(
                   CupertinoIcons.add,
-                  CupertinoColors.systemBlue,
+                  CupertinoColors.systemBlue.resolveFrom(context),
                 ),
                 title: const Text(
                   'Добавить достижение',
@@ -346,9 +346,9 @@ class _AchievementCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 10),
             child: Row(
               children: [
-                const AppIconBadge(
+                AppIconBadge(
                   icon: CupertinoIcons.rosette,
-                  color: CupertinoColors.systemGreen,
+                  color: CupertinoColors.systemGreen.resolveFrom(context),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

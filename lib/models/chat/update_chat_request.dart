@@ -1,9 +1,6 @@
 /// Тело запроса `PATCH /api/chat/{chat}`.
 class UpdateChatRequest {
-  const UpdateChatRequest({
-    this.title,
-    this.description,
-  });
+  const UpdateChatRequest({this.title, this.description});
 
   final String? title;
   final String? description;

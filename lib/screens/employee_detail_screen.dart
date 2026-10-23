@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_theme.dart';
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
 import '../repositories/profile_repository.dart';
@@ -388,9 +389,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
     final showRoles = (_viewerIsAdmin || _isOwnProfile) && rolesText != null;
     final company = (user.company ?? '').trim();
-    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
-      context,
-    );
+    final groupedBg = AppColors.groupedBackground.resolveFrom(context);
 
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
@@ -438,7 +437,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.phone_fill,
-                              color: CupertinoColors.systemGreen,
+                              color: CupertinoColors.systemGreen.resolveFrom(
+                                context,
+                              ),
                               label: 'Телефон',
                               value: phone,
                               onTap: _dial,
@@ -448,7 +449,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.mail_solid,
-                              color: CupertinoColors.systemBlue,
+                              color: CupertinoColors.systemBlue.resolveFrom(
+                                context,
+                              ),
                               label: 'Email',
                               value: email,
                               onTap: _email,
@@ -468,7 +471,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.building_2_fill,
-                              color: CupertinoColors.systemIndigo,
+                              color: CupertinoColors.systemIndigo.resolveFrom(
+                                context,
+                              ),
                               label: 'Компания',
                               value: company,
                             ),
@@ -476,7 +481,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.gift_fill,
-                              color: CupertinoColors.systemPink,
+                              color: CupertinoColors.systemPink.resolveFrom(
+                                context,
+                              ),
                               label: 'День рождения',
                               value: DateFormat(
                                 'd MMMM',
@@ -490,7 +497,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                               context,
                               icon: CupertinoIcons
                                   .person_crop_circle_badge_checkmark,
-                              color: CupertinoColors.systemOrange,
+                              color: CupertinoColors.systemOrange.resolveFrom(
+                                context,
+                              ),
                               label: 'Роли',
                               value: rolesText,
                             ),
