@@ -671,7 +671,7 @@ class _FiltersCard extends StatelessWidget {
     required Color color,
     required String label,
     required String value,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return BookingPickerRow(
       icon: icon,
@@ -700,54 +700,63 @@ class _FiltersCard extends StatelessWidget {
               color: CupertinoColors.systemBlue.resolveFrom(context),
               label: 'Офис',
               value: selectedBuilding.name,
-              onTap: () async {
-                final picked = await showBookingOptionSheet<Building>(
-                  context: context,
-                  title: 'Офис',
-                  options: buildings,
-                  current: selectedBuilding,
-                  labelOf: (b) => b.name,
-                );
-                if (picked != null && picked.id != selectedBuilding.id) {
-                  onBuildingChanged(picked);
-                }
-              },
+              // Единственный вариант — выбирать нечего: строка остаётся
+              // справкой, без шеврона и шторки.
+              onTap: buildings.length < 2
+                  ? null
+                  : () async {
+                      final picked = await showBookingOptionSheet<Building>(
+                        context: context,
+                        title: 'Офис',
+                        options: buildings,
+                        current: selectedBuilding,
+                        labelOf: (b) => b.name,
+                      );
+                      if (picked != null && picked.id != selectedBuilding.id) {
+                        onBuildingChanged(picked);
+                      }
+                    },
             ),
             _pickerRow(
               icon: CupertinoIcons.square_stack_3d_up_fill,
               color: CupertinoColors.systemIndigo.resolveFrom(context),
               label: 'Этаж',
               value: selectedSpace.name,
-              onTap: () async {
-                final picked = await showBookingOptionSheet<Space>(
-                  context: context,
-                  title: 'Этаж',
-                  options: spaces,
-                  current: selectedSpace,
-                  labelOf: (s) => s.name,
-                );
-                if (picked != null && picked.id != selectedSpace.id) {
-                  onSpaceChanged(picked);
-                }
-              },
+              onTap: spaces.length < 2
+                  ? null
+                  : () async {
+                      final picked = await showBookingOptionSheet<Space>(
+                        context: context,
+                        title: 'Этаж',
+                        options: spaces,
+                        current: selectedSpace,
+                        labelOf: (s) => s.name,
+                      );
+                      if (picked != null && picked.id != selectedSpace.id) {
+                        onSpaceChanged(picked);
+                      }
+                    },
             ),
             _pickerRow(
               icon: CupertinoIcons.cube_box_fill,
               color: CupertinoColors.systemTeal.resolveFrom(context),
               label: 'Объект бронирования',
               value: selectedType.name,
-              onTap: () async {
-                final picked = await showBookingOptionSheet<BookingObjectType>(
-                  context: context,
-                  title: 'Объект бронирования',
-                  options: types,
-                  current: selectedType,
-                  labelOf: (t) => t.name,
-                );
-                if (picked != null && picked.id != selectedType.id) {
-                  onTypeChanged(picked);
-                }
-              },
+              onTap: types.length < 2
+                  ? null
+                  : () async {
+                      final picked =
+                          await showBookingOptionSheet<BookingObjectType>(
+                            context: context,
+                            title: 'Объект бронирования',
+                            options: types,
+                            current: selectedType,
+                            labelOf: (t) => t.name,
+                          );
+                      if (picked != null && picked.id != selectedType.id) {
+                        onTypeChanged(picked);
+                      }
+                    },
             ),
           ],
         ),
