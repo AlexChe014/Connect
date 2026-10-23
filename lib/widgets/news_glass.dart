@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -81,7 +82,7 @@ class NewsAuthorLine extends StatelessWidget {
   }
 }
 
-/// Фото поста 16:9: снимок целиком (contain) на размытой копии самого
+/// Фото поста (по умолчанию 16:9): снимок целиком (contain) на размытой копии самого
 /// себя — портретные фото не обрезаются, а карточка не прыгает по высоте.
 class NewsCoverImage extends StatelessWidget {
   const NewsCoverImage({
@@ -89,9 +90,11 @@ class NewsCoverImage extends StatelessWidget {
     required this.url,
     this.moreCount = 0,
     this.borderRadius = 16,
+    this.aspectRatio = 16 / 9,
   });
 
   final String url;
+  final double aspectRatio;
 
   /// Сколько ещё фото в посте — плашка «+N» в углу.
   final int moreCount;
@@ -102,7 +105,7 @@ class NewsCoverImage extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: AspectRatio(
-        aspectRatio: 16 / 9,
+        aspectRatio: aspectRatio,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -195,7 +198,7 @@ class _NewsPhotoGalleryState extends State<NewsPhotoGallery> {
     if (urls.length == 1) {
       return GestureDetector(
         onTap: () => widget.onOpen(0),
-        child: NewsCoverImage(url: urls.first),
+        child: _NaturalCoverImage(url: urls.first),
       );
     }
     return Column(
@@ -235,6 +238,71 @@ class _NewsPhotoGalleryState extends State<NewsPhotoGallery> {
         ),
       ],
     );
+  }
+}
+
+/// Одиночное фото в посте — в собственных пропорциях, без размытых полос.
+/// Совсем узкие и совсем широкие снимки ограничены, для них полосы остаются.
+class _NaturalCoverImage extends StatefulWidget {
+  const _NaturalCoverImage({required this.url});
+
+  final String url;
+
+  @override
+  State<_NaturalCoverImage> createState() => _NaturalCoverImageState();
+}
+
+class _NaturalCoverImageState extends State<_NaturalCoverImage> {
+  static const _minRatio = 4 / 5;
+  static const _maxRatio = 2.4;
+
+  ImageStream? _stream;
+  late final _listener = ImageStreamListener(_onImage, onError: (_, _) {});
+  double? _ratio;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_NaturalCoverImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _ratio = null;
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    final url = widget.url.trim();
+    if (url.isEmpty) return;
+    final stream = CachedNetworkImageProvider(
+      url,
+    ).resolve(createLocalImageConfiguration(context));
+    if (stream.key == _stream?.key) return;
+    _stream?.removeListener(_listener);
+    _stream = stream..addListener(_listener);
+  }
+
+  void _onImage(ImageInfo info, bool _) {
+    final image = info.image;
+    if (!mounted || image.height == 0) return;
+    setState(() {
+      _ratio = (image.width / image.height).clamp(_minRatio, _maxRatio);
+    });
+  }
+
+  @override
+  void dispose() {
+    _stream?.removeListener(_listener);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NewsCoverImage(url: widget.url, aspectRatio: _ratio ?? 16 / 9);
   }
 }
 
