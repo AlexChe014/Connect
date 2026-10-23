@@ -132,6 +132,67 @@ abstract final class AppSpacing {
   static const double xxl = 32;
 }
 
+/// Цвета, которые различаются в светлой и тёмной теме Material-части
+/// (диалоги, пикеры, поля ввода). Cupertino-экраны берут цвета из
+/// динамических `CupertinoColors` и [AppColors.glassFill] и т.п.
+class _Palette {
+  const _Palette({
+    required this.brightness,
+    required this.surface,
+    required this.background,
+    required this.onSurface,
+    required this.onSurfaceVariant,
+    required this.surfaceElevated,
+    required this.surfaceContainerHighest,
+    required this.secondaryContainer,
+    required this.outline,
+    required this.outlineStrong,
+    required this.error,
+  });
+
+  final Brightness brightness;
+  final Color surface;
+  final Color background;
+  final Color onSurface;
+  final Color onSurfaceVariant;
+  final Color surfaceElevated;
+  final Color surfaceContainerHighest;
+  final Color secondaryContainer;
+  final Color outline;
+  final Color outlineStrong;
+  final Color error;
+
+  static const light = _Palette(
+    brightness: Brightness.light,
+    surface: AppColors.surface,
+    background: AppColors.background,
+    onSurface: AppColors.onSurface,
+    onSurfaceVariant: AppColors.onSurfaceVariant,
+    surfaceElevated: AppColors.surfaceElevated,
+    surfaceContainerHighest: Color(0xFFF9FAFB),
+    secondaryContainer: Color(0xFFE8F1FF),
+    outline: AppColors.outline,
+    outlineStrong: AppColors.outlineStrong,
+    error: AppColors.error,
+  );
+
+  /// Системные тёмные цвета iOS: фон чёрный, карточки и шторки
+  /// secondarySystemGroupedBackground, разделители separator.
+  static const dark = _Palette(
+    brightness: Brightness.dark,
+    surface: Color(0xFF1C1C1E),
+    background: Color(0xFF000000),
+    onSurface: Color(0xFFF2F2F7),
+    onSurfaceVariant: Color(0xFFAEAEB2),
+    surfaceElevated: Color(0xFF2C2C2E),
+    surfaceContainerHighest: Color(0xFF2C2C2E),
+    secondaryContainer: Color(0xFF0E2A4D),
+    outline: Color(0xFF38383A),
+    outlineStrong: Color(0xFF48484A),
+    error: Color(0xFFFF453A),
+  );
+}
+
 abstract final class AppTheme {
   AppTheme._();
 
@@ -147,34 +208,54 @@ abstract final class AppTheme {
     systemNavigationBarContrastEnforced: true,
   );
 
-  static ThemeData get light {
+  /// Тёмный фон → светлые системные иконки.
+  static const SystemUiOverlayStyle systemUiOverlayDark = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: true,
+  );
+
+  static SystemUiOverlayStyle systemUiOverlayFor(Brightness brightness) =>
+      brightness == Brightness.dark ? systemUiOverlayDark : systemUiOverlay;
+
+  static ThemeData get light => _build(_Palette.light);
+
+  static ThemeData get dark => _build(_Palette.dark);
+
+  static ThemeData _build(_Palette p) {
     const radius = AppColors.radius;
     final borderRadius = BorderRadius.circular(radius);
 
     OutlineInputBorder inputBorder({Color? color, double width = 1}) {
       return OutlineInputBorder(
         borderRadius: borderRadius,
-        borderSide: BorderSide(
-          color: color ?? AppColors.outlineStrong,
-          width: width,
-        ),
+        borderSide: BorderSide(color: color ?? p.outlineStrong, width: width),
       );
     }
 
-    final colorScheme = const ColorScheme.light(
+    // Через copyWith от базовой схемы: незаданные surfaceContainer* и т.п.
+    // наследуют surface, как раньше у ColorScheme.light.
+    final base = p.brightness == Brightness.dark
+        ? const ColorScheme.dark()
+        : const ColorScheme.light();
+    final colorScheme = base.copyWith(
       primary: AppColors.primary,
       onPrimary: AppColors.onPrimary,
       secondary: AppColors.primary,
       onSecondary: AppColors.onPrimary,
-      secondaryContainer: Color(0xFFE8F1FF),
+      secondaryContainer: p.secondaryContainer,
       onSecondaryContainer: AppColors.primary,
-      surface: AppColors.surface,
-      onSurface: AppColors.onSurface,
-      onSurfaceVariant: AppColors.onSurfaceVariant,
-      surfaceContainerHighest: Color(0xFFF9FAFB),
-      outline: AppColors.outline,
-      outlineVariant: AppColors.outlineStrong,
-      error: AppColors.error,
+      surface: p.surface,
+      onSurface: p.onSurface,
+      onSurfaceVariant: p.onSurfaceVariant,
+      surfaceContainerHighest: p.surfaceContainerHighest,
+      outline: p.outline,
+      outlineVariant: p.outlineStrong,
+      error: p.error,
     );
 
     final buttonShape = RoundedRectangleBorder(
@@ -183,10 +264,10 @@ abstract final class AppTheme {
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
+      brightness: p.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: AppColors.background,
-      canvasColor: AppColors.background,
+      scaffoldBackgroundColor: p.background,
+      canvasColor: p.background,
       // Крупные заголовки экранов (CupertinoSliverNavigationBar): системные
       // 34 pt выглядели слишком громоздко рядом с карточками — чуть меньше.
       cupertinoOverrideTheme: const CupertinoThemeData(
@@ -202,40 +283,36 @@ abstract final class AppTheme {
           ),
         ),
       ),
-      textTheme: const TextTheme(
+      textTheme: TextTheme(
         headlineSmall: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 24,
           fontWeight: FontWeight.w700,
           height: 1.25,
         ),
         titleLarge: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 20,
           fontWeight: FontWeight.w700,
           height: 1.3,
         ),
         titleMedium: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 16,
           fontWeight: FontWeight.w600,
           height: 1.3,
         ),
         titleSmall: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 14,
           fontWeight: FontWeight.w600,
           height: 1.3,
         ),
-        bodyLarge: TextStyle(
-          color: AppColors.onSurface,
-          fontSize: 16,
-          height: 1.4,
-        ),
-        bodyMedium: TextStyle(color: AppColors.onSurface, height: 1.4),
-        bodySmall: TextStyle(color: AppColors.onSurfaceVariant, height: 1.4),
-        labelMedium: TextStyle(color: AppColors.onSurfaceVariant),
-        labelSmall: TextStyle(color: AppColors.onSurfaceVariant),
+        bodyLarge: TextStyle(color: p.onSurface, fontSize: 16, height: 1.4),
+        bodyMedium: TextStyle(color: p.onSurface, height: 1.4),
+        bodySmall: TextStyle(color: p.onSurfaceVariant, height: 1.4),
+        labelMedium: TextStyle(color: p.onSurfaceVariant),
+        labelSmall: TextStyle(color: p.onSurfaceVariant),
       ),
       splashColor: AppColors.primary.withValues(alpha: 0.08),
       highlightColor: AppColors.primary.withValues(alpha: 0.05),
@@ -247,83 +324,79 @@ abstract final class AppTheme {
           TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
         },
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: AppColors.surfaceElevated,
-        foregroundColor: AppColors.onSurface,
+        backgroundColor: p.surfaceElevated,
+        foregroundColor: p.onSurface,
         surfaceTintColor: Colors.transparent,
-        systemOverlayStyle: systemUiOverlay,
-        shape: Border(bottom: BorderSide(color: AppColors.outline, width: 1)),
+        systemOverlayStyle: systemUiOverlayFor(p.brightness),
+        shape: Border(bottom: BorderSide(color: p.outline, width: 1)),
         titleTextStyle: TextStyle(
-          color: AppColors.onSurface,
+          color: p.onSurface,
           fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
-      drawerTheme: const DrawerThemeData(
-        backgroundColor: AppColors.surface,
+      drawerTheme: DrawerThemeData(
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
       ),
-      dividerTheme: const DividerThemeData(
-        thickness: 1,
-        space: 1,
-        color: AppColors.outline,
-      ),
-      listTileTheme: const ListTileThemeData(
-        iconColor: AppColors.onSurface,
-        textColor: AppColors.onSurface,
+      dividerTheme: DividerThemeData(thickness: 1, space: 1, color: p.outline),
+      listTileTheme: ListTileThemeData(
+        iconColor: p.onSurface,
+        textColor: p.onSurface,
         selectedColor: AppColors.primary,
         horizontalTitleGap: 12,
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: AppColors.surface,
+        color: p.surface,
         margin: EdgeInsets.zero,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: borderRadius,
-          side: const BorderSide(color: AppColors.outline),
+          side: BorderSide(color: p.outline),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: p.surface,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,
         ),
-        labelStyle: const TextStyle(color: AppColors.onSurfaceVariant),
-        hintStyle: const TextStyle(color: AppColors.onSurfaceVariant),
+        labelStyle: TextStyle(color: p.onSurfaceVariant),
+        hintStyle: TextStyle(color: p.onSurfaceVariant),
         border: inputBorder(),
         enabledBorder: inputBorder(),
         focusedBorder: inputBorder(color: AppColors.primary, width: 1.5),
-        errorBorder: inputBorder(color: AppColors.error),
-        focusedErrorBorder: inputBorder(color: AppColors.error, width: 1.5),
+        errorBorder: inputBorder(color: p.error),
+        focusedErrorBorder: inputBorder(color: p.error, width: 1.5),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
-          disabledBackgroundColor: AppColors.outline,
-          disabledForegroundColor: AppColors.onSurfaceVariant,
+          disabledBackgroundColor: p.outline,
+          disabledForegroundColor: p.onSurfaceVariant,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           minimumSize: const Size(64, 48),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          disabledForegroundColor: AppColors.onSurfaceVariant,
+          disabledForegroundColor: p.onSurfaceVariant,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           minimumSize: const Size(64, 48),
-          side: const BorderSide(color: AppColors.outlineStrong),
+          side: BorderSide(color: p.outlineStrong),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -331,7 +404,7 @@ abstract final class AppTheme {
           foregroundColor: AppColors.primary,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -343,7 +416,7 @@ abstract final class AppTheme {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           minimumSize: const Size(64, 48),
           shape: buttonShape,
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
@@ -357,19 +430,19 @@ abstract final class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         selectedColor: AppColors.primary.withValues(alpha: 0.12),
-        disabledColor: AppColors.outline,
-        labelStyle: const TextStyle(color: AppColors.onSurface),
-        secondaryLabelStyle: const TextStyle(color: AppColors.onSurface),
+        disabledColor: p.outline,
+        labelStyle: TextStyle(color: p.onSurface),
+        secondaryLabelStyle: TextStyle(color: p.onSurface),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        side: const BorderSide(color: AppColors.outlineStrong),
+        side: BorderSide(color: p.outlineStrong),
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
       dropdownMenuTheme: DropdownMenuThemeData(
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: AppColors.surface,
+          fillColor: p.surface,
           border: inputBorder(),
           enabledBorder: inputBorder(),
           focusedBorder: inputBorder(color: AppColors.primary, width: 1.5),
@@ -381,40 +454,37 @@ abstract final class AppTheme {
           return Colors.transparent;
         }),
         checkColor: WidgetStateProperty.all(AppColors.onPrimary),
-        side: const BorderSide(color: AppColors.outlineStrong, width: 1.5),
+        side: BorderSide(color: p.outlineStrong, width: 1.5),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return AppColors.onPrimary;
-          return AppColors.outlineStrong;
+          return p.outlineStrong;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return AppColors.primary.withValues(alpha: 0.55);
           }
-          return AppColors.outline;
+          return p.outline;
         }),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.primary,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
-        titleTextStyle: const TextStyle(
-          color: AppColors.onSurface,
+        titleTextStyle: TextStyle(
+          color: p.onSurface,
           fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
-        contentTextStyle: const TextStyle(
-          color: AppColors.onSurface,
-          fontSize: 14,
-        ),
+        contentTextStyle: TextStyle(color: p.onSurface, fontSize: 14),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: AppColors.surface,
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         shape: RoundedRectangleBorder(
@@ -425,7 +495,7 @@ abstract final class AppTheme {
       // выше таб-бара, поля ввода чата и кнопок «домой»/«написать».
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xF2232326),
-        contentTextStyle: const TextStyle(
+        contentTextStyle: TextStyle(
           fontFamily: '.SF Pro Text',
           fontSize: 15,
           height: 1.3,
@@ -438,12 +508,12 @@ abstract final class AppTheme {
         insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 84),
       ),
       datePickerTheme: DatePickerThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
       timePickerTheme: TimePickerThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: p.surface,
         shape: RoundedRectangleBorder(borderRadius: borderRadius),
       ),
     );

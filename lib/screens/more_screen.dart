@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../repositories/profile_repository.dart';
@@ -8,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/document_pending_service.dart';
 import '../services/notification_unread_service.dart';
 import '../services/survey_pending_service.dart';
+import '../services/theme_mode_service.dart';
 import '../utils/media_url_utils.dart';
 import '../utils/user_display_name.dart';
 import '../widgets/app_glass.dart';
@@ -178,6 +180,51 @@ class _MoreScreenState extends State<MoreScreen> {
     );
   }
 
+  static const _themeModeLabels = {
+    ThemeMode.light: 'Светлое',
+    ThemeMode.dark: 'Тёмное',
+    ThemeMode.system: 'Как в системе',
+  };
+
+  Future<void> _pickThemeMode() async {
+    final current = ThemeModeService.instance.mode.value;
+    final choice = await showCupertinoModalPopup<ThemeMode>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Оформление'),
+        actions: [
+          for (final entry in _themeModeLabels.entries)
+            CupertinoActionSheetAction(
+              isDefaultAction: entry.key == current,
+              onPressed: () => Navigator.pop(context, entry.key),
+              child: Text(entry.value),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (choice != null) await ThemeModeService.instance.setMode(choice);
+  }
+
+  Widget _themeModeItem(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeModeService.instance.mode,
+      builder: (context, mode, _) => CupertinoListTile(
+        leading: const AppIconBadge(
+          icon: CupertinoIcons.circle_lefthalf_fill,
+          color: CupertinoColors.systemIndigo,
+        ),
+        title: const Text('Оформление'),
+        additionalInfo: Text(_themeModeLabels[mode]!),
+        trailing: const CupertinoListTileChevron(),
+        onTap: _pickThemeMode,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
@@ -291,6 +338,7 @@ class _MoreScreenState extends State<MoreScreen> {
                         MediaQuery.paddingOf(context).bottom + 32,
                       ),
                       children: [
+                        _themeModeItem(context),
                         _item(
                           icon: CupertinoIcons.book_fill,
                           color: CupertinoColors.systemGrey,
