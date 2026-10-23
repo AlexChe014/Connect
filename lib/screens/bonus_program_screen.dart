@@ -354,7 +354,7 @@ class _BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final number = NumberFormat.decimalPattern('ru_RU');
-    const soft = Color(0xD9FFFFFF);
+    const soft = AppColors.onPrimaryMuted;
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -362,7 +362,7 @@ class _BalanceCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.primary, Color(0xFF7B5CFF)],
+          colors: AppFestiveColors.balanceGradient,
         ),
         boxShadow: [
           BoxShadow(
@@ -515,11 +515,11 @@ class _RoulettePromoCardState extends State<_RoulettePromoCard>
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFFF9F43), Color(0xFFFF5E8A)],
+            colors: AppFestiveColors.buttonGradient,
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFF5E8A).withValues(alpha: 0.3),
+              color: AppFestiveColors.pink.withValues(alpha: 0.3),
               blurRadius: 16,
               offset: const Offset(0, 6),
             ),

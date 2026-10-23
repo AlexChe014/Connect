@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors;
 import 'package:intl/intl.dart';
 
 import '../config/app_theme.dart';
@@ -714,7 +715,7 @@ class _OptionRow extends StatelessWidget {
               border: Border.all(
                 color: selected
                     ? AppColors.primary.withValues(alpha: 0.6)
-                    : const Color(0x00000000),
+                    : Colors.transparent,
               ),
             ),
             child: Row(

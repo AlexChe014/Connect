@@ -148,7 +148,6 @@ class _PickerTypeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     // Заливка и кромка как у AppGlass, но без размытия: строк в списке
     // много, а BackdropFilter под каждой дорог.
     return Container(
@@ -156,11 +155,9 @@ class _PickerTypeTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isSelected
             ? CupertinoColors.tertiarySystemFill.resolveFrom(context)
-            : (isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF)),
+            : AppColors.glassFill.resolveFrom(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-        ),
+        border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
         boxShadow: isSelected ? null : AppGlass.controlShadow,
       ),
       clipBehavior: Clip.antiAlias,

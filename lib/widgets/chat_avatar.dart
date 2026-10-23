@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:connect/config/app_theme.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/services/birthday_directory.dart';
 import 'package:connect/utils/user_display_name.dart';
@@ -57,7 +58,7 @@ class _InitialsAvatar extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFA5ABB8), Color(0xFF858994)],
+          colors: AppColors.avatarPlaceholderGradient,
         ),
       ),
       child: Text(

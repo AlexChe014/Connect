@@ -213,7 +213,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
         shadows: AppGlass.controlShadow,
         child: CupertinoSlidingSegmentedControl<_FavoritesSegment>(
           groupValue: _segment,
-          backgroundColor: const Color(0x00000000),
+          backgroundColor: Colors.transparent,
           thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
           children: const {
             _FavoritesSegment.users: Padding(

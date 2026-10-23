@@ -7,6 +7,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show SelectableText;
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../config/app_theme.dart';
 import '../models/mail/mail_message.dart';
 import '../utils/open_link.dart';
 
@@ -128,7 +129,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
     final pageFinished = _pageFinished;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFFFFFFFF))
+      ..setBackgroundColor(AppColors.mailBodyBackground)
       ..addJavaScriptChannel(_heightChannel, onMessageReceived: _onHeight)
       ..addJavaScriptChannel(_selectionChannel, onMessageReceived: _onSelection)
       ..setNavigationDelegate(
@@ -396,7 +397,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
               if (!_isRendered)
                 const Positioned.fill(
                   child: ColoredBox(
-                    color: Color(0xFFFFFFFF),
+                    color: AppColors.mailBodyBackground,
                     child: Center(child: CupertinoActivityIndicator()),
                   ),
                 ),

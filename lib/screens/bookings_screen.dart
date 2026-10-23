@@ -1033,14 +1033,11 @@ class _BookableObjectTileState extends State<_BookableObjectTile> {
     final imageUrl = object.previewImageUrl;
     final description = (object.description ?? '').trim();
 
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Container(
       foregroundDecoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         // Светлая кромка, как у стеклянных карточек.
-        border: Border.all(
-          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-        ),
+        border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
       ),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:vsc_quill_delta_to_html/vsc_quill_delta_to_html.dart';
 
+import '../config/app_theme.dart';
 import '../repositories/news_repository.dart';
 import '../utils/file_size_format.dart';
 import '../widgets/app_glass.dart';
@@ -556,7 +557,7 @@ class _PictureThumb extends StatelessWidget {
                   ),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 3),
-                    color: const Color(0x8C000000),
+                    color: AppColors.scrimStrong,
                     child: const Text(
                       'Обложка',
                       textAlign: TextAlign.center,
@@ -578,7 +579,7 @@ class _PictureThumb extends StatelessWidget {
                   width: 22,
                   height: 22,
                   decoration: const BoxDecoration(
-                    color: Color(0x99000000),
+                    color: AppColors.scrimButton,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -728,7 +729,7 @@ class _FormatButton extends StatelessWidget {
               shape: BoxShape.circle,
               color: isActive
                   ? CupertinoColors.tertiarySystemFill.resolveFrom(context)
-                  : const Color(0x00000000),
+                  : Colors.transparent,
             ),
             child: Icon(icon, size: 20, color: color),
           ),

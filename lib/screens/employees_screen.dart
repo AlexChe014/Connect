@@ -301,7 +301,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                             shadows: AppGlass.controlShadow,
                             child: CupertinoSearchTextField(
                               controller: _qController,
-                              backgroundColor: const Color(0x00000000),
+                              backgroundColor: Colors.transparent,
                               placeholder: 'Фамилия, имя, отчество или почта',
                               onSubmitted: (_) {
                                 _debounce?.cancel();

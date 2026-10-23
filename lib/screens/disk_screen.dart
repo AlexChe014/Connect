@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show RefreshIndicator, ScaffoldMessenger, SnackBar;
+    show Colors, RefreshIndicator, ScaffoldMessenger, SnackBar;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
@@ -1168,7 +1168,7 @@ class _DiskBottomBar extends StatelessWidget {
                   child: CupertinoSearchTextField(
                     controller: controller,
                     placeholder: 'Поиск в папке',
-                    backgroundColor: const Color(0x00000000),
+                    backgroundColor: Colors.transparent,
                     onChanged: onChanged,
                   ),
                 ),

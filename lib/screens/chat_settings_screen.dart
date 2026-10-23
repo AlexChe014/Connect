@@ -16,7 +16,7 @@ import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/cupertino_empty_state.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show ScaffoldMessenger, SnackBar, showModalBottomSheet;
+    show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:connect/widgets/app_icon_badge.dart';
@@ -461,7 +461,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         shadows: AppGlass.controlShadow,
         child: CupertinoSlidingSegmentedControl<int>(
           groupValue: _galleryTab,
-          backgroundColor: const Color(0x00000000),
+          backgroundColor: Colors.transparent,
           thumbColor: CupertinoColors.systemBackground.resolveFrom(context),
           onValueChanged: (value) {
             if (value != null) setState(() => _galleryTab = value);

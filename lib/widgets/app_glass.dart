@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show Colors;
 
 import '../config/app_theme.dart';
 
@@ -21,18 +22,25 @@ class AppGlass extends StatelessWidget {
 
   /// Тень крупной плавающей панели (боковое меню).
   static const panelShadow = [
-    BoxShadow(color: Color(0x1F000000), blurRadius: 32, offset: Offset(0, 12)),
+    BoxShadow(
+      color: AppColors.shadowPanel,
+      blurRadius: 32,
+      offset: Offset(0, 12),
+    ),
   ];
 
   /// Тень мелкого элемента (кнопка, поле ввода) — тише, чтобы соседние
   /// капсулы не сливались в одно пятно.
   static const controlShadow = [
-    BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 3)),
+    BoxShadow(
+      color: AppColors.shadowControl,
+      blurRadius: 12,
+      offset: Offset(0, 3),
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     // Тень рисуется поверх и только снаружи формы: под полупрозрачным
     // стеклом обычная тень просвечивает и размывается внутрь панели —
     // у нижнего края появляется вторая, «грязная» тень.
@@ -53,14 +61,13 @@ class AppGlass extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: isDark
-                    ? const [Color(0x803A3A3C), Color(0x661C1C1E)]
-                    : const [Color(0xCCFFFFFF), Color(0x99FFFFFF)],
+                colors: [
+                  AppColors.glassGradientTop.resolveFrom(context),
+                  AppColors.glassGradientBottom.resolveFrom(context),
+                ],
               ),
               border: Border.all(
-                color: isDark
-                    ? const Color(0x26FFFFFF)
-                    : const Color(0xB3FFFFFF),
+                color: AppColors.glassBorder.resolveFrom(context),
                 width: 1,
               ),
             ),
@@ -212,16 +219,13 @@ class AppGlassSliverList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SliverPadding(
       padding: padding,
       sliver: DecoratedSliver(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF),
+          color: AppColors.glassFill.resolveFrom(context),
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-          ),
+          border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
           boxShadow: AppGlass.controlShadow,
         ),
         sliver: SliverList.separated(
@@ -258,7 +262,7 @@ class AppGlassSection extends StatelessWidget {
         shadows: AppGlass.controlShadow,
         child: CupertinoListSection.insetGrouped(
           margin: EdgeInsets.zero,
-          backgroundColor: const Color(0x00000000),
+          backgroundColor: Colors.transparent,
           decoration: const BoxDecoration(),
           children: children,
         ),
@@ -361,15 +365,12 @@ class AppFlatGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final radius = BorderRadius.circular(22);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF),
+        color: AppColors.glassFill.resolveFrom(context),
         borderRadius: radius,
-        border: Border.all(
-          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
-        ),
+        border: Border.all(color: AppColors.glassBorder.resolveFrom(context)),
         boxShadow: AppGlass.controlShadow,
       ),
       child: ClipRRect(

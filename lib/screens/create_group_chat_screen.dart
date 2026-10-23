@@ -301,7 +301,7 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xFFA5ABB8), Color(0xFF858994)],
+                  colors: AppColors.avatarPlaceholderGradient,
                 ),
               ),
               child: const Icon(
@@ -467,7 +467,6 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
         ),
       ];
     }
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     // Список строится лениво (контактов бывают сотни), поэтому вместо
     // AppGlass с размытием — та же заливка, кромка и тень без фильтра:
     // под этой частью экрана размывать всё равно нечего.
@@ -476,10 +475,10 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: DecoratedSliver(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF),
+            color: AppColors.glassFill.resolveFrom(context),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
+              color: AppColors.glassBorder.resolveFrom(context),
             ),
             boxShadow: AppGlass.controlShadow,
           ),

@@ -32,7 +32,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/material.dart'
-    show ScaffoldMessenger, SnackBar, showModalBottomSheet;
+    show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -1725,7 +1725,7 @@ class _MessageTile extends StatelessWidget {
       duration: const Duration(milliseconds: 350),
       color: highlighted
           ? CupertinoColors.systemYellow.withValues(alpha: 0.20)
-          : const Color(0x00000000),
+          : Colors.transparent,
       child: child,
     );
   }

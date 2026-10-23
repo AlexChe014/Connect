@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../config/app_theme.dart';
 import '../models/news_item.dart';
 import '../utils/file_size_format.dart';
 import 'app_icon_badge.dart';
@@ -114,7 +115,7 @@ class NewsCoverImage extends StatelessWidget {
                 fit: BoxFit.cover,
               ),
             ),
-            const ColoredBox(color: Color(0x2E000000)),
+            const ColoredBox(color: AppColors.scrimFaint),
             AppNetworkImage(
               url: url,
               width: double.infinity,
@@ -148,7 +149,7 @@ class _PhotoCountBadge extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          color: const Color(0x66000000),
+          color: AppColors.scrim,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

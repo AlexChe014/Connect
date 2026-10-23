@@ -208,9 +208,7 @@ class _ReactionChip extends StatelessWidget {
                 ? accent.withValues(alpha: 0.14)
                 : CupertinoColors.tertiarySystemFill.resolveFrom(context),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected ? accent : const Color(0x00000000),
-            ),
+            border: Border.all(color: selected ? accent : Colors.transparent),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

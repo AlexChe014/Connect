@@ -8,6 +8,9 @@ abstract final class AppColors {
 
   static const primary = Color(0xFF1677FF);
   static const onPrimary = Colors.white;
+
+  /// Второстепенный текст на фирменной заливке и градиентах.
+  static const onPrimaryMuted = Color(0xD9FFFFFF);
   static const surface = Colors.white;
   static const background = Colors.white;
   static const onSurface = Color(0xFF111827);
@@ -21,6 +24,52 @@ abstract final class AppColors {
   /// акцент в переписке: сразу видно, где ваши сообщения.
   static const outgoingBubble = primary;
 
+  // Liquid Glass: заливка и кромка плавающих панелей и карточек.
+  // Динамические — читать через `.resolveFrom(context)`.
+  static const glassFill = CupertinoDynamicColor.withBrightness(
+    color: Color(0xCCFFFFFF),
+    darkColor: Color(0x80303032),
+  );
+  static const glassGradientTop = CupertinoDynamicColor.withBrightness(
+    color: Color(0xCCFFFFFF),
+    darkColor: Color(0x803A3A3C),
+  );
+  static const glassGradientBottom = CupertinoDynamicColor.withBrightness(
+    color: Color(0x99FFFFFF),
+    darkColor: Color(0x661C1C1E),
+  );
+  static const glassBorder = CupertinoDynamicColor.withBrightness(
+    color: Color(0xB3FFFFFF),
+    darkColor: Color(0x26FFFFFF),
+  );
+
+  /// Поле ввода внутри стеклянной панели.
+  static const glassInputFill = CupertinoDynamicColor.withBrightness(
+    color: Color(0x0F000000),
+    darkColor: Color(0x1FFFFFFF),
+  );
+
+  // Тени: крупная плавающая панель, мелкий элемент, тонкий контур.
+  static const shadowPanel = Color(0x1F000000);
+  static const shadowControl = Color(0x14000000);
+  static const shadowHairline = Color(0x0A000000);
+
+  // Затемнение поверх фото и модальных подложек — от темы не зависит.
+  static const scrimFaint = Color(0x2E000000);
+  static const scrim = Color(0x66000000);
+  static const scrimStrong = Color(0x8C000000);
+  static const scrimButton = Color(0x99000000);
+
+  /// Аватар без фото — нейтральный серый градиент.
+  static const avatarPlaceholderGradient = [
+    Color(0xFFA5ABB8),
+    Color(0xFF858994),
+  ];
+
+  /// HTML-письма свёрстаны под белый фон — подложка WebView остаётся
+  /// белой и в тёмной теме, иначе чёрный текст письма не читается.
+  static const mailBodyBackground = Color(0xFFFFFFFF);
+
   static const double radius = 12;
   static const double buttonRadius = 12;
 
@@ -33,6 +82,42 @@ abstract final class AppColors {
       offset: const Offset(0, 6),
     ),
   ];
+}
+
+/// Праздничная палитра бонусной программы: колесо, карточки, медали,
+/// конфетти. Декоративная, одинаковая в светлой и тёмной теме.
+abstract final class AppFestiveColors {
+  AppFestiveColors._();
+
+  /// Рамка текущего приза и стрелка колеса.
+  static const warmAccent = Color(0xFFFF7A45);
+  static const orange = Color(0xFFFF9F43);
+  static const pink = Color(0xFFFF5E8A);
+  static const violet = Color(0xFF7B5CFF);
+
+  /// Кнопка «Крутить», карточка рулетки.
+  static const buttonGradient = [orange, pink];
+
+  /// Карточка баланса.
+  static const balanceGradient = [AppColors.primary, violet];
+
+  // Пятно за шапкой рулетки: оранжевый → розовый → сиреневый.
+  static const glowOrange = Color(0xFFFFB547);
+  static const glowPink = Color(0xFFFF6FA3);
+  static const glowViolet = Color(0xFFB57CFF);
+
+  // Лучи «солнышка» за колесом.
+  static const sunburstCore = Color(0xFFFFC94D);
+  static const sunburstEdge = Color(0xFFFF8A65);
+
+  /// Тень под колесом.
+  static const wheelShadow = Color(0xFF141C22);
+
+  /// Медаль полученного достижения.
+  static const medalGradient = [Color(0xFFFFD966), Color(0xFFE0A200)];
+
+  static const confettiGold = Color(0xFFFFC542);
+  static const confettiNavy = Color(0xFF0B2545);
 }
 
 /// Единая шкала отступов, чтобы padding/gap не подбирались на глаз по экрану.

@@ -361,7 +361,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
                       const SizedBox(height: 4),
                       const Icon(
                         CupertinoIcons.arrowtriangle_up_fill,
-                        color: _kWarmAccent,
+                        color: AppFestiveColors.warmAccent,
                         size: 14,
                       ),
                     ],
@@ -375,9 +375,6 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
     );
   }
 }
-
-/// Тёплый акцент колеса — рамка текущего приза и стрелка.
-const _kWarmAccent = Color(0xFFFF7A45);
 
 /// Тёплое праздничное пятно вместо синего [AppGlassGlow]: оранжевый
 /// сверху переходит в розовый и растворяется в фоне.
@@ -397,9 +394,9 @@ class _FestiveGlow extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                const Color(0xFFFFB547).withValues(alpha: 0.38),
-                const Color(0xFFFF6FA3).withValues(alpha: 0.22),
-                const Color(0xFFB57CFF).withValues(alpha: 0.12),
+                AppFestiveColors.glowOrange.withValues(alpha: 0.38),
+                AppFestiveColors.glowPink.withValues(alpha: 0.22),
+                AppFestiveColors.glowViolet.withValues(alpha: 0.12),
                 groupedBg.withValues(alpha: 0),
               ],
               stops: const [0, 0.35, 0.65, 1],
@@ -425,9 +422,9 @@ class _SunburstPainter extends CustomPainter {
     final paint = Paint()
       ..shader = RadialGradient(
         colors: [
-          const Color(0xFFFFC94D).withValues(alpha: 0.55),
-          const Color(0xFFFF8A65).withValues(alpha: 0.25),
-          const Color(0x00FF8A65),
+          AppFestiveColors.sunburstCore.withValues(alpha: 0.55),
+          AppFestiveColors.sunburstEdge.withValues(alpha: 0.25),
+          AppFestiveColors.sunburstEdge.withValues(alpha: 0),
         ],
         stops: const [0.15, 0.55, 1],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
@@ -481,9 +478,7 @@ class _SpinButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(27),
           gradient: onPressed == null
               ? null
-              : const LinearGradient(
-                  colors: [Color(0xFFFF9F43), Color(0xFFFF5E8A)],
-                ),
+              : const LinearGradient(colors: AppFestiveColors.buttonGradient),
           color: onPressed == null
               ? CupertinoColors.systemGrey4.resolveFrom(context)
               : null,
@@ -491,7 +486,7 @@ class _SpinButton extends StatelessWidget {
               ? null
               : [
                   BoxShadow(
-                    color: const Color(0xFFFF5E8A).withValues(alpha: 0.35),
+                    color: AppFestiveColors.pink.withValues(alpha: 0.35),
                     blurRadius: 16,
                     offset: const Offset(0, 6),
                   ),
@@ -608,10 +603,13 @@ class _HeroPrize extends StatelessWidget {
           child: Container(
             width: 150,
             height: 16,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(
-                colors: [Color(0x47141C22), Color(0x00141C22)],
+                colors: [
+                  AppFestiveColors.wheelShadow.withValues(alpha: 0.28),
+                  AppFestiveColors.wheelShadow.withValues(alpha: 0),
+                ],
               ),
             ),
           ),
@@ -672,7 +670,7 @@ class _ReelStrip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
             border: isCurrent
-                ? Border.all(color: _kWarmAccent, width: 2.5)
+                ? Border.all(color: AppFestiveColors.warmAccent, width: 2.5)
                 : null,
           ),
           child: Center(

@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
-    show RefreshIndicator, ScaffoldMessenger, SnackBar;
+    show Colors, RefreshIndicator, ScaffoldMessenger, SnackBar;
 
 import '../config/app_theme.dart';
 import '../models/documents/document_service.dart';
@@ -600,7 +600,7 @@ class _DocumentRow extends StatelessWidget {
       child: ColoredBox(
         color: selected
             ? AppColors.primary.withValues(alpha: 0.08)
-            : const Color(0x00000000),
+            : Colors.transparent,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
           child: Row(

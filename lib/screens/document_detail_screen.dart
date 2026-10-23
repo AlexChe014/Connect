@@ -342,7 +342,6 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     final actionLabel = widget.service.isSigningService
         ? 'Подписать'
         : 'Согласовать';
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: 12),
@@ -366,9 +365,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0x1FFFFFFF)
-                        : const Color(0x0F000000),
+                    color: AppColors.glassInputFill.resolveFrom(context),
                     borderRadius: BorderRadius.circular(18),
                   ),
                 ),

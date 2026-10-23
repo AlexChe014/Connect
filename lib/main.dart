@@ -479,12 +479,12 @@ class _FloatingTabBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(31),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x14000000),
+              color: AppColors.shadowControl,
               blurRadius: 24,
               offset: Offset(0, 8),
             ),
             BoxShadow(
-              color: Color(0x0A000000),
+              color: AppColors.shadowHairline,
               blurRadius: 3,
               offset: Offset(0, 1),
             ),
@@ -539,7 +539,7 @@ class _TabButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected
                 ? AppColors.primary.withValues(alpha: 0.1)
-                : const Color(0x00000000),
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(27),
           ),
           child: Column(

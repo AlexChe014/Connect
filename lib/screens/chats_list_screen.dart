@@ -931,7 +931,7 @@ class _ChatRow extends StatelessWidget {
     // Без заливки: кнопки свайпа рисуются только в открывшейся полосе
     // (см. SwipeActionsRow), а под строками просвечивает цветное пятно.
     return ColoredBox(
-      color: const Color(0x00000000),
+      color: Colors.transparent,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
