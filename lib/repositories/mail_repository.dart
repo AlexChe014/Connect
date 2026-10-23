@@ -569,7 +569,30 @@ class MailRepository {
     final switched = previousDefault != request.connectionId;
     if (switched) await setDefaultConnection(request.connectionId);
     try {
-      await _postSend(request);
+      // SendEmailRequest валидирует `to` как 'required|email' — один адрес,
+      // список через запятую сервер отклоняет с 422. Поэтому каждому
+      // получателю уходит своё письмо; копия и скрытая копия — только с
+      // первым, иначе каждый из них получил бы по экземпляру на каждого
+      // адресата. Убрать, когда сервер начнёт принимать список
+      // (docs/BACKEND_PROMPTS.md, задача 2).
+      final recipients = MailMessage.splitAddresses(
+        request.to,
+      ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
+      var first = true;
+      for (final to in recipients.isEmpty ? [request.to] : recipients) {
+        await _postSend(
+          SendMailRequest(
+            connectionId: request.connectionId,
+            to: to,
+            subject: request.subject,
+            body: request.body,
+            cc: first ? request.cc : const [],
+            bcc: first ? request.bcc : const [],
+            attachments: request.attachments,
+          ),
+        );
+        first = false;
+      }
     } finally {
       if (switched && previousDefault != null) {
         try {
@@ -583,6 +606,9 @@ class MailRepository {
     final fields = <String, String>{
       'to': request.to,
       'subject': request.subject,
+      // Сервер с этим полем шлёт именно с этого ящика; переключение ящика
+      // по умолчанию в sendMail остаётся для старых версий бэкенда.
+      'connection_id': '${request.connectionId}',
     };
     final body = request.body?.trim();
     if (body != null && body.isNotEmpty) {
@@ -635,30 +661,19 @@ class MailRepository {
   /// forward на бэкенде падает с 500 на каждом письме (вызывает `->format()`
   /// у даты-строки из ImapService::getMessage и `->getName()` у массива
   /// `from`) — см. docs/BACKEND_MAIL_FIXES.md, п. 15. Поэтому `body` — текст
-  /// пользователя вместе с цитатой исходного письма. Сервер принимает в `to`
-  /// ровно один адрес (`email`), нескольким получателям шлём по отдельности;
-  /// копия и скрытая копия уходят только с первым письмом — иначе каждый
-  /// из них получил бы по экземпляру на каждого адресата.
-  Future<void> forwardMail(ForwardMailRequest request) async {
-    final recipients = MailMessage.splitAddresses(
-      request.to,
-    ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
-    var first = true;
-    for (final to in recipients.isEmpty ? [request.to] : recipients) {
-      await sendMail(
-        SendMailRequest(
-          connectionId: request.connectionId,
-          to: to,
-          subject: request.subject,
-          body: request.body,
-          cc: first ? request.cc : const [],
-          bcc: first ? request.bcc : const [],
-          attachments: request.attachments,
-        ),
-      );
-      first = false;
-    }
-  }
+  /// пользователя вместе с цитатой исходного письма. Несколько адресатов
+  /// разбирает [sendMail].
+  Future<void> forwardMail(ForwardMailRequest request) => sendMail(
+    SendMailRequest(
+      connectionId: request.connectionId,
+      to: request.to,
+      subject: request.subject,
+      body: request.body,
+      cc: request.cc,
+      bcc: request.bcc,
+      attachments: request.attachments,
+    ),
+  );
 
   /// Массив для multipart: `cc[0]=a@x`, `cc[1]=b@y` — Laravel собирает
   /// из этого `cc` как массив.

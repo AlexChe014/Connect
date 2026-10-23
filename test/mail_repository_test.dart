@@ -188,5 +188,6 @@ void main() {
     expect(bodies.last, contains('c@d.ru'));
     expect(bodies.last, isNot(contains('e@f.ru')));
     expect(bodies, everyElement(contains('filename="a.pdf"')));
+    expect(bodies, everyElement(contains('name="connection_id"')));
   });
 }

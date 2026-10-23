@@ -7,77 +7,93 @@
 
 Порядок по важности: 1 → 2 → 3 → 4 → 5.
 
+Сверено с кодом `laravel-core-dev` от 2026-10-23 (архив `laravel-core-dev (4).zip`).
+
 ---
 
 ## 1. ВКС: «Конференция завершена» для встречи из календаря
 
 ```text
-Репозиторий laravel-core-dev, модуль Коннектора (ConnectorService, ChatCallService).
+Репозиторий laravel-core-dev: app/Services/ConnectorService.php,
+app/Modules/Chats/Services/ChatCallService.php.
 
-Проблема: мобильное приложение входит во встречу через GET /connector/join/{room}.
-ConnectorService::join() проверяет connector__calls.status и при 'ended' отвечает
-403 «Конференция завершена». Для запланированных встреч (есть бронь Booking)
-статус ставит в 'ended' вебхук Jitsi occupant-left через ChatCallService::endByRoom(),
-когда кто-то зашёл раньше и вышел. Встреча по календарю ещё впереди, комната в
-Jitsi живая, портал (Node, /api/backend/conversation/createJWT) пускает, а
-приложение — нет.
+Проблема: мобильное приложение входит во встречу из календаря через
+GET /api/connector/join/{room}. ConnectorService::join() сразу проверяет
+callIsOpen($call) (status === active && ended_at === null) и при закрытой комнате
+отвечает 403 «Конференция завершена». У пользователя встреча по календарю ещё
+впереди, комната в Jitsi живая, портал (Node, createJWT) пускает, приложение — нет.
+Значит, строка в connector__calls для этой брони стоит в ended/cancelled.
+
+Важно: в текущем коде Laravel комнаты броней сам не закрывает —
+ChatCallService::closeRoom() трогает только приватные звонки (isPrivateCall:
+chat_id или max_participants). Таблицу connector__calls по README ведёт ещё и
+Next.js. Значит, статус ставит либо Node, либо старая версия Laravel на проде.
 
 Сделай:
-1. ConnectorService::join(): если звонок закрыт, но к нему привязана бронь и
-   now() <= booking.datetime_end + 2 часа (вынеси запас в конфиг,
-   connector.booking_grace_minutes = 120), не отказывай, а переоткрой звонок:
+1. Диагностика (результат напиши в ответе): найди все места, которые пишут
+   status/ended_at в connector__calls — в этом репозитории и, если доступен,
+   в frontend-dev (Node). Сверь, совпадает ли код на проде с этим репозиторием
+   (closeRoom только для isPrivateCall).
+2. ConnectorService::join(): если звонок закрыт, но к нему привязана бронь и
+   now() <= booking.datetime_end + запас, не отказывай, а переоткрой звонок:
    status = ConnectorCall::STATUS_ACTIVE, ended_at = null, duration = null, save().
-   Если брони нет (звонок 1:1 из чата) или запас истёк — оставь 403 как сейчас.
+   Запас вынеси в конфиг: connector.booking_grace_minutes, по умолчанию 120.
+   Брони нет (звонок 1:1 из чата, мгновенная комната) или запас истёк — оставь 403.
    Ранний вход до начала брони не ограничивай.
-2. ConnectorService::show() (GET /connector/{room}): поле can_join считать по
-   тому же правилу, иначе метаданные отдают can_join: false.
-3. ChatCallService::endByRoom(): не закрывать вебхуком звонки, к которым
-   привязана бронь (сделай bookingFor() публичным или добавь hasBooking()).
-   Встреча с бронью завершается по времени, а не по выходу участника.
-4. Тесты (Feature): бронь в будущем + статус ended → join отдаёт JWT и статус
-   становится active; бронь закончилась > 2 ч назад → 403; звонок без брони и
-   ended → 403; occupant-left для комнаты с бронью не меняет статус.
+3. ConnectorService::show(): can_join считать по тому же правилу (общий метод,
+   например callIsJoinable($call)), иначе метаданные отдают can_join: false.
+4. bookingFor() ищет бронь по точному совпадению Booking.link с publicUrl(room).
+   Если ссылка в брони отличается (http/https, слэш в конце, регистр UUID,
+   другой домен) — бронь не находится, и правка 2 не сработает. Сравнивай по
+   room: extractRoomFromLink(Booking.link) === room_id (например, where link
+   like '%/connector/{room}%' + проверка extractRoomFromLink).
+5. Feature-тесты: бронь в будущем + статус ended → join отдаёт JWT, статус
+   становится active; бронь закончилась больше запаса назад → 403; звонок с
+   chat_id и ended → 403; ссылка в брони с другим регистром/слэшем → бронь
+   находится.
 
-Контракт ответа join/show не меняй — приложение уже его разбирает. Приложение с
-версии после 1.0.9 при 403 предлагает открыть встречу через портал, но это обход:
-войти в Jitsi внутри приложения можно только после этой правки.
+Контракт ответов join/show не меняй — приложение их уже разбирает. Приложение
+при 403 сейчас предлагает открыть встречу через портал в браузере — это обход,
+войти внутри приложения можно только после этой правки.
 ```
 
 ---
 
-## 2. Почта: несколько получателей в `to` и копия
+## 2. Почта: несколько получателей в `to`
 
 ```text
-Репозиторий laravel-core-dev, модуль MailServices (SmtpController, SmtpService,
-SendEmailRequest, ReplyEmailRequest, ForwardEmailRequest).
+Репозиторий laravel-core-dev, app/Modules/MailServices:
+Http/Requests/EmailConnection/{SendEmailRequest,ReplyEmailRequest,ForwardEmailRequest}.php,
+Services/SmtpService.php.
 
-Мобильное приложение шлёт в POST /mail/smtp/send (multipart/form-data):
-  to          — строка, список адресов RFC 5322 через запятую:
-                "a@x.ru, Иван Иванов <b@y.ru>"
-  subject, body_text
-  cc[0], cc[1]…, bcc[0]…  — массивы голых адресов
-  attachments[]           — файлы
+Сейчас SendEmailRequest и ForwardEmailRequest валидируют 'to' => 'required|email|max:255',
+то есть ровно один адрес. Мобильное приложение собирает в «Кому» несколько
+человек и до этой правки шлёт каждому отдельное письмо (получатели не видят друг
+друга, в «Отправленных» N копий). SmtpService::normalizeAddresses() массив уже
+понимает — мешает только валидация.
 
-Сначала проверь и напиши в ответе, какое сейчас правило валидации у `to` в
-SendEmailRequest. У ForwardEmailRequest это 'required|email' — то есть один
-адрес; если у send так же, письмо нескольким людям сейчас отклоняется с 422.
+Сделай во всех трёх запросах:
+1. 'to' принимает строку со списком адресов RFC 5322 ("a@x.ru, Иван <b@y.ru>")
+   ИЛИ массив. В prepareForValidation (там уже есть merge attachments_files —
+   не сломай его) разбери строку в массив голых адресов, учитывая формат
+   «Имя <email>» и запятые внутри кавычек. Правила: 'to' => 'required|array|min:1',
+   'to.*' => 'email|max:255'. Одиночная строка "a@x.ru" должна работать как раньше.
+2. В SmtpService всех адресатов передавать в один Mail::to() — одно письмо.
+3. Feature-тесты на POST /api/mail/smtp/send (по образцу SmtpSendConnectionTest):
+   строка с двумя адресами, «Имя <a@x>», массив, один адрес; невалидный адрес
+   в списке → 422 с понятным сообщением.
+4. SmtpService::sendEmail() объявлен ': bool', но в catch ничего не возвращает —
+   при ошибке SMTP это TypeError (не Exception), контроллер его не ловит и
+   отдаёт голый 500. Верни false в catch, а в контроллере при false отдавай
+   sendError с getLastError()['message'] (сейчас sendResponse(false) = success:true).
+   В контроллерах SMTP ловить \Throwable.
+5. Проверь тестом multipart: файлы приходят под ключом attachments[], а правила
+   'attachments.*.filename|mime|content' рассчитаны на base64-массивы. Убедись,
+   что POST smtp/send с UploadedFile::fake() в attachments[] проходит валидацию
+   и файл прикладывается; если нет — разведи ключи (base64 → attachments_base64).
 
-Сделай во всех трёх запросах (send, reply, forward):
-1. `to` принимает строку со списком адресов ИЛИ массив строк. В prepareForValidation
-   разбери строку на адреса (учти формат «Имя <email>» и запятые внутри кавычек),
-   нормализуй в массив и валидируй каждый: 'to' => 'required|array|min:1',
-   'to.*' => 'email'.
-2. `cc` и `bcc` — 'nullable|array', 'cc.*'/'bcc.*' => 'email'.
-3. В SmtpService передавай всех адресатов в Mail::to(), cc в ->cc(), bcc в ->bcc()
-   одним письмом (не N отдельных).
-4. POST /mail/smtp/send принимает необязательный connection_id и шлёт именно с
-   этого ящика (проверка, что ящик принадлежит пользователю и can_send).
-   Сейчас приложение перед отправкой переключает ящик по умолчанию через
-   /mail/smtp/set и потом возвращает обратно — это гонка между устройствами.
-5. Feature-тесты: два адресата в строке, массив адресатов, «Имя <a@x>», cc/bcc,
-   невалидный адрес в списке → 422 с понятным сообщением.
-
-Ответ при успехе оставь как сейчас: {success: true, data: true}.
+Ответ при успехе не меняй: {success: true, data: true}. После выкладки скажи —
+уберём в приложении рассылку по одному.
 ```
 
 ---
@@ -93,20 +109,21 @@ SendEmailRequest. У ForwardEmailRequest это 'required|email' — то ест
   - ответ на своё письмо из «Отправленных» уходит самому себе;
   - правка получателей и темы в приложении ни на что не влияет.
 
+В ReplyEmailRequest вообще нет правил для to/subject — validated() их выкидывает,
+а replyToEmail() жёстко ставит 'to' => $email->from['email'].
+Уже работает и трогать не надо: ящик исходного письма, cc/bcc, In-Reply-To/References,
+приём attachments[] (attachments_files), sendError при неудаче.
+
 Сделай:
-1. Брать to/subject из запроса (to — список, см. задачу про получателей), с
-   фолбэком на from/'Re: subject' исходного письма, если поле пустое.
-2. Принимать cc/bcc массивами.
-3. Отправлять с ящика исходного письма ($email->connection), а не с ящика по
-   умолчанию. Ставить In-Reply-To и References из message_id исходного.
-4. Принимать multipart/form-data с файлами attachments[] (как smtp/send), JSON
-   без файлов тоже должен работать. Сейчас правило 'attachments.*.filename'
-   (для base64-вложений) ломает multipart-файлы под тем же ключом — разведи
-   ключи (например, base64 → 'inline_attachments') или проверяй тип элемента.
-5. Текст ответа — поле body_text; цитату исходного письма клиент кладёт в текст
-   сам, сервер её не добавляет.
-6. При ошибке отправки отдавать sendError (success: false) с текстом, а не
-   sendResponse(false). В контроллерах SMTP ловить \Throwable, а не \Exception.
+1. В ReplyEmailRequest добавить 'to' (список, как в задаче про получателей) и
+   'subject' => 'sometimes|string|max:255'. В replyToEmail брать их из запроса
+   с фолбэком на $email->from['email'] и 'Re: ' . $email->subject.
+2. Ответ на своё письмо: если фолбэк-адрес совпадает с ящиком
+   ($email->connection->email), брать получателей из $email->to.
+3. Проверить тестом, что multipart attachments[] проходит валидацию (см. задачу 2,
+   п. 5) и файлы прикладываются к ответу.
+4. Текст ответа — поле body_text; цитату исходного письма клиент кладёт сам.
+5. Ловить \Throwable вместо \Exception.
 
 После выкладки скажи — в приложении включим вложения в ответе
 (MailRepository.replyAttachmentsSupported = true).
