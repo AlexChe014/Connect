@@ -17,6 +17,7 @@ class AppNetworkImage extends StatelessWidget {
     this.borderRadius = 0,
     this.errorIcon = CupertinoIcons.photo,
     this.httpHeaders,
+    this.memCacheWidth,
   });
 
   final String? url;
@@ -26,6 +27,10 @@ class AppNetworkImage extends StatelessWidget {
   final double borderRadius;
   final IconData errorIcon;
   final Map<String, String>? httpHeaders;
+
+  /// Ширина раскодирования в пикселях. Без неё снимок с камеры лежит в
+  /// памяти целиком (десятки МБ) и быстро вытесняет остальные из кэша.
+  final int? memCacheWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +42,7 @@ class AppNetworkImage extends StatelessWidget {
           : CachedNetworkImage(
               imageUrl: trimmed,
               httpHeaders: httpHeaders,
+              memCacheWidth: memCacheWidth,
               width: width,
               height: height,
               fit: fit,

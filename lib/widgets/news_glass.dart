@@ -101,8 +101,17 @@ class NewsCoverImage extends StatelessWidget {
   final int moreCount;
   final double borderRadius;
 
+  /// Ширина, до которой раскодируются фото ленты: карточка не шире экрана.
+  /// Одна и та же для всех слоёв и для [_NaturalCoverImage], чтобы снимок
+  /// декодировался один раз и делил одну запись кэша.
+  static int cacheWidth(BuildContext context) =>
+      (MediaQuery.sizeOf(context).width *
+              MediaQuery.devicePixelRatioOf(context))
+          .round();
+
   @override
   Widget build(BuildContext context) {
+    final cacheWidth = NewsCoverImage.cacheWidth(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: AspectRatio(
@@ -118,6 +127,7 @@ class NewsCoverImage extends StatelessWidget {
                   width: double.infinity,
                   height: double.infinity,
                   fit: BoxFit.cover,
+                  memCacheWidth: cacheWidth,
                 ),
               )
             else
@@ -136,6 +146,7 @@ class NewsCoverImage extends StatelessWidget {
               width: double.infinity,
               height: double.infinity,
               fit: BoxFit.contain,
+              memCacheWidth: cacheWidth,
             ),
             if (moreCount > 0)
               Positioned(
@@ -293,8 +304,12 @@ class _NaturalCoverImageState extends State<_NaturalCoverImage> {
   void _resolve() {
     final url = widget.url.trim();
     if (url.isEmpty) return;
-    final stream = CachedNetworkImageProvider(
-      url,
+    // Тот же ключ, что у [NewsCoverImage]: иначе ради пропорций в памяти
+    // висел бы ещё и полноразмерный снимок.
+    final stream = ResizeImage.resizeIfNeeded(
+      NewsCoverImage.cacheWidth(context),
+      null,
+      CachedNetworkImageProvider(url),
     ).resolve(createLocalImageConfiguration(context));
     if (stream.key == _stream?.key) return;
     _stream?.removeListener(_listener);
