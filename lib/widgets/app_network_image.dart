@@ -33,7 +33,7 @@ class AppNetworkImage extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: (trimmed == null || trimmed.isEmpty)
-          ? _errorPlaceholder()
+          ? _errorPlaceholder(context)
           : CachedNetworkImage(
               imageUrl: trimmed,
               httpHeaders: httpHeaders,
@@ -45,20 +45,20 @@ class AppNetworkImage extends StatelessWidget {
                 height: height ?? 16,
                 borderRadius: 0,
               ),
-              errorWidget: (context, url, error) => _errorPlaceholder(),
+              errorWidget: (context, url, error) => _errorPlaceholder(context),
             ),
     );
   }
 
-  Widget _errorPlaceholder() {
+  Widget _errorPlaceholder(BuildContext context) {
     return SizedBox(
       width: width,
       height: height,
       child: ColoredBox(
-        color: AppColors.surfaceElevated,
+        color: AppColors.placeholderFill.resolveFrom(context),
         child: Icon(
           errorIcon,
-          color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
+          color: AppColors.placeholderIcon.resolveFrom(context),
         ),
       ),
     );

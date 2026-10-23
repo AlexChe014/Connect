@@ -1,10 +1,6 @@
 /// Ответ `POST /videoconference/create` и `GET /videoconference/get`.
 class Videoconference {
-  const Videoconference({
-    required this.id,
-    required this.url,
-    this.topic,
-  });
+  const Videoconference({required this.id, required this.url, this.topic});
 
   final int id;
   final String url;
@@ -15,8 +11,8 @@ class Videoconference {
     final id = idRaw is int
         ? idRaw
         : idRaw is num
-            ? idRaw.toInt()
-            : int.tryParse('$idRaw') ?? 0;
+        ? idRaw.toInt()
+        : int.tryParse('$idRaw') ?? 0;
     return Videoconference(
       id: id,
       url: (json['url'] as String?)?.trim() ?? '',

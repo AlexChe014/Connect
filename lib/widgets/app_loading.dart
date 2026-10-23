@@ -55,8 +55,8 @@ class _AppSkeletonBoxState extends State<AppSkeletonBox>
 
   @override
   Widget build(BuildContext context) {
-    final base = AppColors.outline;
-    final highlight = AppColors.surfaceElevated;
+    final base = AppColors.skeletonBase.resolveFrom(context);
+    final highlight = AppColors.skeletonHighlight.resolveFrom(context);
 
     return AnimatedBuilder(
       animation: _controller,

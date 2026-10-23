@@ -17,7 +17,9 @@ Future<void> openConnectorSession(
     onLeave: endWhenLeave
         ? (id, {failed = false}) => ChatCallService.instance.onLocalCallLeft(
             id,
-            reason: failed ? ChatCallEndReason.failed : ChatCallEndReason.hangup,
+            reason: failed
+                ? ChatCallEndReason.failed
+                : ChatCallEndReason.hangup,
           )
         : null,
   );

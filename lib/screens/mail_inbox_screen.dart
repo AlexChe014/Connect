@@ -1121,7 +1121,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground,
+        backgroundColor: CupertinoColors.systemBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -1412,7 +1412,7 @@ class _MessageTile extends StatelessWidget {
         children: [
           SlidableAction(
             onPressed: (_) => onDelete(),
-            backgroundColor: CupertinoColors.systemRed,
+            backgroundColor: CupertinoColors.systemRed.resolveFrom(context),
             foregroundColor: CupertinoColors.white,
             icon: CupertinoIcons.trash,
             label: 'Удалить',

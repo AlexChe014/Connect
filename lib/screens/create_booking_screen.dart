@@ -390,21 +390,21 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
           children: [
             BookingPickerRow(
               icon: CupertinoIcons.calendar,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'День',
               value: BookingTimeUtils.formatDateShort(_bookingDate),
               onTap: _pickDate,
             ),
             BookingPickerRow(
               icon: CupertinoIcons.clock_fill,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Начало',
               value: BookingTimeUtils.formatHm(slots[startIndex]),
               onTap: () => _pickStart(slots, startIndex),
             ),
             BookingPickerRow(
               icon: CupertinoIcons.clock,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Окончание',
               value: BookingTimeUtils.formatHm(slots[endIndex]),
               onTap: () => _pickEnd(slots, endIndex),
@@ -430,7 +430,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
           children: [
             BookingSwitchRow(
               icon: CupertinoIcons.video_camera_solid,
-              color: CupertinoColors.systemBlue,
+              color: CupertinoColors.systemBlue.resolveFrom(context),
               label: 'Онлайн-конференция',
               value: _isOnlineConference,
               onChanged: (v) => setState(() => _isOnlineConference = v),
@@ -438,14 +438,14 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
             if (_isOnlineConference)
               BookingFieldRow(
                 icon: CupertinoIcons.link,
-                color: CupertinoColors.systemGrey,
+                color: CupertinoColors.systemGrey.resolveFrom(context),
                 controller: _linkController,
                 placeholder: 'Ссылка (необязательно)',
                 keyboardType: TextInputType.url,
               ),
             BookingSwitchRow(
               icon: CupertinoIcons.lock_fill,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
               label: 'Приватная встреча',
               value: _isPrivate,
               onChanged: (v) => setState(() => _isPrivate = v),

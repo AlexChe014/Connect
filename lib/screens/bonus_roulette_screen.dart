@@ -193,7 +193,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
       status: prize != null && pending
           ? 'Заявка на выдачу отправлена на согласование'
           : null,
-      statusColor: CupertinoColors.systemOrange,
+      statusColor: CupertinoColors.systemOrange.resolveFrom(context),
       photoUrl: prize?.photoUrl,
       icon: prize != null ? CupertinoIcons.gift_fill : CupertinoIcons.sparkles,
       celebrate: prize != null,

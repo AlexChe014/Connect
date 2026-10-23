@@ -53,6 +53,7 @@ class ChatMessage {
 
   /// Сообщение можно редактировать в течение 15 минут после отправки.
   static const Duration editWindow = Duration(seconds: 900);
+
   /// Сообщение можно удалить в течение часа после отправки.
   static const Duration deleteWindow = Duration(seconds: 3600);
 
@@ -72,18 +73,25 @@ class ChatMessage {
   final String? repliedMessageId;
   final bool isRead;
   final String? authorAvatarUrl;
+
   /// Для исходящих сообщений: прочитано ли всеми получателями (двойная галочка).
   final bool readByRecipients;
+
   /// Эмодзи-реакции текущего пользователя на сообщение (локальные, без синхронизации с сервером).
   final List<String> reactions;
+
   /// Сообщение было отредактировано после отправки.
   final bool isEdited;
+
   /// Сообщение удалено — вместо содержимого показывается плашка "Сообщение удалено".
   final bool isDeleted;
+
   /// Закреплено в чате (`is_pinned`).
   final bool isPinned;
+
   /// Файлы из `chat__files`, прикреплённые к сообщению.
   final List<ChatFile> files;
+
   /// Оптимистично добавлено локально и ещё ожидает подтверждения от сервера.
   final bool isSending;
 

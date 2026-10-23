@@ -241,10 +241,7 @@ class JitsiMeetingService {
             _peerRejoinTimer?.cancel();
           },
           conferenceTerminated: (url, error) {
-            AppLogger.d(
-              'Jitsi terminated: $url error=$error',
-              name: 'meeting',
-            );
+            AppLogger.d('Jitsi terminated: $url error=$error', name: 'meeting');
             _notifyLeft();
           },
           readyToClose: () {
@@ -347,9 +344,9 @@ class JitsiMeetingService {
 
     Uri? uri;
     if (jwt != null && jwt.isNotEmpty && room.isNotEmpty && server.isNotEmpty) {
-      uri = Uri.parse('$server/$room').replace(
-        queryParameters: {'jwt': jwt, 'lang': 'ru'},
-      );
+      uri = Uri.parse(
+        '$server/$room',
+      ).replace(queryParameters: {'jwt': jwt, 'lang': 'ru'});
     } else {
       final public = session.publicUrl.trim();
       if (public.isNotEmpty) uri = Uri.tryParse(public);

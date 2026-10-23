@@ -382,43 +382,43 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   _FileAccent _fileAccentFor(String? fileName) {
     final ext = (fileName ?? '').split('.').last.toLowerCase();
     if (ext == 'pdf') {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.doc_richtext,
-        CupertinoColors.systemRed,
+        CupertinoColors.systemRed.resolveFrom(context),
         'PDF',
       );
     }
     if (['zip', 'rar', '7z'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.archivebox,
-        CupertinoColors.systemOrange,
+        CupertinoColors.systemOrange.resolveFrom(context),
         'Архив',
       );
     }
     if (['mp3', 'wav', 'm4a', 'aac'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.music_note,
-        CupertinoColors.systemPink,
+        CupertinoColors.systemPink.resolveFrom(context),
         'Аудио',
       );
     }
     if (['mp4', 'mov', 'avi', 'mkv'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.videocam_fill,
-        CupertinoColors.systemPurple,
+        CupertinoColors.systemPurple.resolveFrom(context),
         'Видео',
       );
     }
     if (['doc', 'docx', 'txt', 'rtf'].contains(ext)) {
-      return const _FileAccent(
+      return _FileAccent(
         CupertinoIcons.doc_text_fill,
-        CupertinoColors.systemBlue,
+        CupertinoColors.systemBlue.resolveFrom(context),
         'Документ',
       );
     }
-    return const _FileAccent(
+    return _FileAccent(
       CupertinoIcons.doc_fill,
-      CupertinoColors.systemGrey,
+      CupertinoColors.systemGrey.resolveFrom(context),
       'Файл',
     );
   }
@@ -718,7 +718,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: _listSubtitleStyle.copyWith(
-                  color: CupertinoColors.activeBlue,
+                  color: CupertinoColors.activeBlue.resolveFrom(context),
                 ),
               ),
               additionalInfo: Text(
@@ -918,7 +918,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
               _chat.isPinned
                   ? CupertinoIcons.pin_slash
                   : CupertinoIcons.pin_fill,
-              CupertinoColors.systemOrange,
+              CupertinoColors.systemOrange.resolveFrom(context),
             ),
             title: Text(_chat.isPinned ? 'Открепить чат' : 'Закрепить чат'),
             onTap: _togglePin,
@@ -933,7 +933,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             CupertinoListTile(
               leading: _iconBadge(
                 CupertinoIcons.person_add_solid,
-                CupertinoColors.systemGreen,
+                CupertinoColors.systemGreen.resolveFrom(context),
               ),
               title: const Text('Добавить участников'),
               trailing: const CupertinoListTileChevron(),
@@ -977,7 +977,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                         m.userId == selfId
                             ? CupertinoIcons.square_arrow_right
                             : CupertinoIcons.minus_circle,
-                        color: CupertinoColors.systemRed,
+                        color: CupertinoColors.systemRed.resolveFrom(context),
                       ),
                     )
                   : null,
@@ -992,11 +992,13 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             CupertinoListTile(
               leading: _iconBadge(
                 CupertinoIcons.delete_solid,
-                CupertinoColors.systemRed,
+                CupertinoColors.systemRed.resolveFrom(context),
               ),
-              title: const Text(
+              title: Text(
                 'Удалить чат',
-                style: TextStyle(color: CupertinoColors.systemRed),
+                style: TextStyle(
+                  color: CupertinoColors.systemRed.resolveFrom(context),
+                ),
               ),
               onTap: _deleteChat,
             ),
@@ -1024,14 +1026,14 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
             child: Text(
               'Добавить участников',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.label,
+                color: CupertinoColors.label.resolveFrom(context),
               ),
             ),
           ),
@@ -1055,9 +1057,11 @@ class _AddMembersSheetState extends State<_AddMembersSheet> {
                               CupertinoIcons.checkmark_circle_fill,
                               color: AppColors.primary,
                             )
-                          : const Icon(
+                          : Icon(
                               CupertinoIcons.circle,
-                              color: CupertinoColors.systemGrey3,
+                              color: CupertinoColors.systemGrey3.resolveFrom(
+                                context,
+                              ),
                             ),
                       onTap: () {
                         setState(() {

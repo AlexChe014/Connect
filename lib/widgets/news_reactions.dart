@@ -140,7 +140,9 @@ Future<String?> showNewsReactionPicker(BuildContext context, {String? active}) {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: emoji == active
-                        ? CupertinoColors.activeBlue.withValues(alpha: 0.18)
+                        ? CupertinoColors.activeBlue
+                              .resolveFrom(context)
+                              .withValues(alpha: 0.18)
                         : null,
                     shape: BoxShape.circle,
                   ),

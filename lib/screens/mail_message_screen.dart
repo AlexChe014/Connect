@@ -508,9 +508,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
           children: [
             for (final attachment in _listedAttachments(message))
               CupertinoListTile(
-                leading: const AppIconBadge(
+                leading: AppIconBadge(
                   icon: CupertinoIcons.doc_fill,
-                  color: CupertinoColors.systemGrey,
+                  color: CupertinoColors.systemGrey.resolveFrom(context),
                 ),
                 title: Text(
                   attachment.filename,
@@ -544,6 +544,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
         // просвечивал сквозь подписи кнопок.
         child: ColoredBox(
           color: CupertinoColors.systemBackground
+              .resolveFrom(context)
               .resolveFrom(context)
               .withValues(alpha: 0.75),
           child: Row(

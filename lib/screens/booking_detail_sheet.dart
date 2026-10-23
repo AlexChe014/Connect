@@ -270,7 +270,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     final host = Uri.tryParse(url)?.host ?? '';
     return _detailTile(
       icon: CupertinoIcons.link,
-      color: CupertinoColors.systemBlue,
+      color: CupertinoColors.systemBlue.resolveFrom(context),
       label: 'Ссылка',
       value: host.isEmpty ? 'Открыть' : host,
       onTap: () => _openLink(url),
@@ -429,21 +429,21 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
       if (detail.displayObjectName.trim().isNotEmpty)
         _valueRow(
           icon: CupertinoIcons.location_solid,
-          color: CupertinoColors.systemRed,
+          color: CupertinoColors.systemRed.resolveFrom(context),
           label: 'Место',
           value: detail.displayObjectName,
         ),
       if (detail.isRecurring) ...[
         _valueRow(
           icon: CupertinoIcons.repeat,
-          color: CupertinoColors.systemPurple,
+          color: CupertinoColors.systemPurple.resolveFrom(context),
           label: 'Повтор',
           value: detail.recurring?.label(detail.datetimeStart) ?? 'Да',
         ),
         if (detail.recurring?.endDateLabel case final endDate?)
           _valueRow(
             icon: CupertinoIcons.calendar,
-            color: CupertinoColors.systemPurple,
+            color: CupertinoColors.systemPurple.resolveFrom(context),
             label: 'До',
             value: endDate,
           ),
@@ -547,6 +547,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                                         style: TextStyle(
                                           fontWeight: FontWeight.w500,
                                           color: CupertinoColors.systemRed
+                                              .resolveFrom(context)
                                               .resolveFrom(context),
                                         ),
                                       ),

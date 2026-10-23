@@ -297,7 +297,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -378,8 +380,8 @@ class _ServiceRow extends StatelessWidget {
                   ? CupertinoIcons.pencil
                   : CupertinoIcons.checkmark_seal_fill,
               color: service.isSigningService
-                  ? CupertinoColors.systemBlue
-                  : CupertinoColors.systemGreen,
+                  ? CupertinoColors.systemBlue.resolveFrom(context)
+                  : CupertinoColors.systemGreen.resolveFrom(context),
             ),
             const SizedBox(width: 12),
             Expanded(

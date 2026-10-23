@@ -75,7 +75,10 @@ class ConnectorRepository {
     Map<String, dynamic> decoded, {
     required String defaultErrorMessage,
   }) {
-    final data = ApiEnvelope.unwrapDataMap(decoded, defaultErrorMessage: defaultErrorMessage);
+    final data = ApiEnvelope.unwrapDataMap(
+      decoded,
+      defaultErrorMessage: defaultErrorMessage,
+    );
     final session = ConnectorSession.fromJson(data);
     if (session.room.isEmpty) {
       throw ApiException(500, 'Сервер не вернул идентификатор комнаты');

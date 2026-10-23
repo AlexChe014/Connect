@@ -273,9 +273,9 @@ class PushNotificationService {
   Future<void> unregisterOnBackend() async {
     // Иначе собеседник останется в комнате с «зависшим» звонком.
     try {
-      await ChatCallService.instance
-          .endLiveCallForLogout()
-          .timeout(const Duration(seconds: 5));
+      await ChatCallService.instance.endLiveCallForLogout().timeout(
+        const Duration(seconds: 5),
+      );
     } catch (_) {}
     await IncomingCallService.instance.unregisterVoipOnBackend();
     if (!_initialized) return;

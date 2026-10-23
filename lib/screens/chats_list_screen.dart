@@ -199,7 +199,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
               ? CupertinoIcons.pin_slash
               : CupertinoIcons.pin_fill,
           label: _approvalsPinned ? 'Открепить' : 'Закрепить',
-          color: CupertinoColors.systemOrange,
+          color: CupertinoColors.systemOrange.resolveFrom(context),
           onTap: _toggleApprovalsPin,
         ),
       ],
@@ -339,7 +339,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     ? CupertinoIcons.pin_slash
                     : CupertinoIcons.pin_fill,
                 label: c.isPinned ? 'Открепить' : 'Закрепить',
-                color: CupertinoColors.systemOrange,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
                 onTap: () => _togglePin(c),
               ),
               SwipeAction(
@@ -347,7 +347,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     ? CupertinoIcons.bell
                     : CupertinoIcons.bell_slash_fill,
                 label: c.isMuted ? 'Со звуком' : 'Без звука',
-                color: CupertinoColors.systemGrey,
+                color: CupertinoColors.systemGrey.resolveFrom(context),
                 onTap: () => _chat.toggleMute(c.id),
               ),
               SwipeAction(
@@ -355,7 +355,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                     ? CupertinoIcons.star_slash
                     : CupertinoIcons.star_fill,
                 label: c.isFavorite ? 'Убрать' : 'Избранное',
-                color: CupertinoColors.systemYellow,
+                color: CupertinoColors.systemYellow.resolveFrom(context),
                 onTap: () => _chat.toggleFavorite(c.id),
               ),
             ],
@@ -427,7 +427,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemBackground,
+        backgroundColor: CupertinoColors.systemBackground.resolveFrom(context),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -690,14 +690,14 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
             child: Text(
               'Начать диалог',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
-                color: CupertinoColors.label,
+                color: CupertinoColors.label.resolveFrom(context),
               ),
             ),
           ),
@@ -729,8 +729,10 @@ class _NewDirectChatSheetState extends State<_NewDirectChatSheet> {
                       allContacts.isEmpty && _search.isEmpty
                           ? 'Нет доступных контактов'
                           : 'Ничего не найдено',
-                      style: const TextStyle(
-                        color: CupertinoColors.secondaryLabel,
+                      style: TextStyle(
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   )
@@ -798,10 +800,10 @@ class _ContactTile extends StatelessWidget {
                   chat.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
               ),
@@ -977,10 +979,10 @@ class _ChatRow extends StatelessWidget {
                       chat.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     if (subtitle.isNotEmpty) ...[
@@ -993,6 +995,7 @@ class _ChatRow extends StatelessWidget {
                                     text: 'Черновик: ',
                                     style: TextStyle(
                                       color: CupertinoColors.destructiveRed
+                                          .resolveFrom(context)
                                           .resolveFrom(context),
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -1005,6 +1008,7 @@ class _ChatRow extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context)
                                     .resolveFrom(context),
                                 height: 1.25,
                               ),
@@ -1016,6 +1020,7 @@ class _ChatRow extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context)
                                     .resolveFrom(context),
                                 height: 1.25,
                               ),
@@ -1068,6 +1073,7 @@ class _ChatRow extends StatelessWidget {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color: CupertinoColors.tertiaryLabel
+                                    .resolveFrom(context)
                                     .resolveFrom(context),
                               ),
                             ),
@@ -1167,14 +1173,14 @@ class _ApprovalsRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Согласование',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     const SizedBox(height: 3),

@@ -49,6 +49,24 @@ abstract final class AppColors {
     darkColor: Color(0x1FFFFFFF),
   );
 
+  // Скелетон загрузки и заглушка картинки, которая не загрузилась.
+  static const skeletonBase = CupertinoDynamicColor.withBrightness(
+    color: outline,
+    darkColor: Color(0xFF2C2C2E),
+  );
+  static const skeletonHighlight = CupertinoDynamicColor.withBrightness(
+    color: surfaceElevated,
+    darkColor: Color(0xFF3A3A3C),
+  );
+  static const placeholderFill = CupertinoDynamicColor.withBrightness(
+    color: surfaceElevated,
+    darkColor: Color(0xFF1C1C1E),
+  );
+  static const placeholderIcon = CupertinoDynamicColor.withBrightness(
+    color: Color(0x8052525B),
+    darkColor: Color(0x80AEAEB2),
+  );
+
   // Тени: крупная плавающая панель, мелкий элемент, тонкий контур.
   static const shadowPanel = Color(0x1F000000);
   static const shadowControl = Color(0x14000000);

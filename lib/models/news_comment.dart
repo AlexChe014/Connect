@@ -24,7 +24,8 @@ class NewsComment {
     final rawNews = json['news'] ?? json['news_id'];
     final newsId = rawNews == null ? '' : rawNews.toString();
 
-    final rawDate = (json['created_at'] as String?) ?? (json['date'] as String?) ?? '';
+    final rawDate =
+        (json['created_at'] as String?) ?? (json['date'] as String?) ?? '';
     final date = _parseBackendDate(rawDate) ?? DateTime.now();
 
     NewsAuthor? author;

@@ -188,9 +188,7 @@ class ApiConfig {
     if (match == null) return null;
 
     final rest = url.substring(match.end);
-    final path = rest.isEmpty
-        ? '/'
-        : (rest.startsWith('/') ? rest : '/$rest');
+    final path = rest.isEmpty ? '/' : (rest.startsWith('/') ? rest : '/$rest');
     if (_pathStartsWithMobiApi(path.split('?').first.split('#').first)) {
       return '${_normalizeHost(backendHost)}$path';
     }

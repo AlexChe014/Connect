@@ -160,7 +160,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -282,6 +284,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
               color: CupertinoColors.secondarySystemGroupedBackground
+                  .resolveFrom(context)
                   .resolveFrom(context),
               borderRadius: BorderRadius.circular(12),
             ),
@@ -321,10 +324,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-      trailing: const Icon(
+      trailing: Icon(
         CupertinoIcons.chevron_forward,
         size: 16,
-        color: CupertinoColors.tertiaryLabel,
+        color: CupertinoColors.tertiaryLabel.resolveFrom(context),
       ),
       onTap: () => Navigator.of(context).push(
         CupertinoPageRoute(builder: (_) => ChatConversationScreen(chat: chat)),
@@ -352,10 +355,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-      trailing: const Icon(
+      trailing: Icon(
         CupertinoIcons.chevron_forward,
         size: 16,
-        color: CupertinoColors.tertiaryLabel,
+        color: CupertinoColors.tertiaryLabel.resolveFrom(context),
       ),
       onTap: () => Navigator.of(context).push(
         CupertinoPageRoute(builder: (_) => EmployeeDetailScreen(user: user)),
@@ -373,7 +376,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     return CupertinoListTile(
       leading: Icon(
         message.hasAttachments ? CupertinoIcons.paperclip : CupertinoIcons.mail,
-        color: CupertinoColors.systemBlue,
+        color: CupertinoColors.systemBlue.resolveFrom(context),
       ),
       title: Text(
         message.subject,
@@ -394,9 +397,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           ? null
           : Text(
               DateFormat('d MMM', 'ru_RU').format(message.date!.toLocal()),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: CupertinoColors.tertiaryLabel,
+                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
               ),
             ),
       onTap: () => _openMailMessage(result),
@@ -438,17 +441,17 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       leading: Icon(
         hit.isFolder ? CupertinoIcons.folder_fill : CupertinoIcons.doc_fill,
         color: hit.isFolder
-            ? CupertinoColors.systemBlue
-            : CupertinoColors.systemGrey,
+            ? CupertinoColors.systemBlue.resolveFrom(context)
+            : CupertinoColors.systemGrey.resolveFrom(context),
       ),
       title: Text(hit.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: !hit.isFolder && hit.size != null
           ? Text(formatFileSize(hit.size!))
           : null,
-      trailing: const Icon(
+      trailing: Icon(
         CupertinoIcons.chevron_forward,
         size: 16,
-        color: CupertinoColors.tertiaryLabel,
+        color: CupertinoColors.tertiaryLabel.resolveFrom(context),
       ),
       onTap: () => Navigator.of(context).push(
         CupertinoPageRoute(

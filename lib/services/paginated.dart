@@ -84,8 +84,11 @@ class ApiPaginatedEnvelope {
         .toList(growable: false);
 
     final currentPage =
-        parseInt(meta['current_page']) ?? parseInt(dataMap['current_page']) ?? 1;
-    final lastPage = parseInt(meta['last_page']) ?? parseInt(dataMap['last_page']);
+        parseInt(meta['current_page']) ??
+        parseInt(dataMap['current_page']) ??
+        1;
+    final lastPage =
+        parseInt(meta['last_page']) ?? parseInt(dataMap['last_page']);
 
     var nextPageUrl =
         _asString(dataMap['next_page_url']) ?? _asString(meta['next_page_url']);
@@ -95,12 +98,14 @@ class ApiPaginatedEnvelope {
       final path = _asString(meta['path']) ?? _asString(dataMap['path']);
       if (path != null) {
         final pathUri = Uri.parse(path);
-        nextPageUrl = pathUri.replace(
-          queryParameters: {
-            ...pathUri.queryParameters,
-            'page': '${currentPage + 1}',
-          },
-        ).toString();
+        nextPageUrl = pathUri
+            .replace(
+              queryParameters: {
+                ...pathUri.queryParameters,
+                'page': '${currentPage + 1}',
+              },
+            )
+            .toString();
       }
     }
 
@@ -109,7 +114,8 @@ class ApiPaginatedEnvelope {
       currentPage: currentPage,
       lastPage: lastPage,
       nextPageUrl: ApiConfig.normalizeNextPageUrl(nextPageUrl),
-      prevPageUrl: _asString(dataMap['prev_page_url']) ??
+      prevPageUrl:
+          _asString(dataMap['prev_page_url']) ??
           _asString(meta['prev_page_url']) ??
           _asString(links?['prev']),
       path: _asString(meta['path']) ?? _asString(dataMap['path']),

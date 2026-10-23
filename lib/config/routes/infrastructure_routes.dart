@@ -15,4 +15,3 @@ class InfrastructureRoutes {
   static String equipmentByBuildingUrl(int buildingId) =>
       '${ApiConfig.baseUrl}$getEquipmentByBuilding/$buildingId/building';
 }
-

@@ -450,10 +450,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final startingCall = _callService.isStartingCall;
 
     return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
+      backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+        context,
+      ),
       navigationBar: CupertinoNavigationBar(
         // Полупрозрачная — сообщения уходят под размытую шапку.
         backgroundColor: CupertinoColors.systemGroupedBackground
+            .resolveFrom(context)
             .resolveFrom(context)
             .withValues(alpha: 0.7),
         automaticBackgroundVisibility: false,
@@ -758,9 +761,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             const SizedBox(width: 6),
             Text(
               '$pos/$total',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: CupertinoColors.secondaryLabel,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
             CupertinoButton(
@@ -872,14 +875,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Padding(
+                Padding(
                   padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
                   child: Text(
                     'Переслать в…',
                     style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label,
+                      color: CupertinoColors.label.resolveFrom(context),
                     ),
                   ),
                 ),
@@ -1294,10 +1297,10 @@ class _ForwardTargetTile extends StatelessWidget {
                   chat.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: CupertinoColors.label,
+                    color: CupertinoColors.label.resolveFrom(context),
                   ),
                 ),
               ),
@@ -1416,9 +1419,9 @@ class _ReplyBanner extends StatelessWidget {
                   ref.textPreview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -1474,9 +1477,9 @@ class _EditBanner extends StatelessWidget {
                   text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: CupertinoColors.secondaryLabel,
+                    color: CupertinoColors.secondaryLabel.resolveFrom(context),
                   ),
                 ),
               ],
@@ -1724,7 +1727,9 @@ class _MessageTile extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       color: highlighted
-          ? CupertinoColors.systemYellow.withValues(alpha: 0.20)
+          ? CupertinoColors.systemYellow
+                .resolveFrom(context)
+                .withValues(alpha: 0.20)
           : Colors.transparent,
       child: child,
     );
@@ -1850,6 +1855,7 @@ class _MessageTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: CupertinoColors.secondarySystemGroupedBackground
+                  .resolveFrom(context)
                   .resolveFrom(context),
               borderRadius: BorderRadius.circular(18),
             ),
@@ -2215,7 +2221,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
                   size: 18,
                   color: _armed
                       ? CupertinoColors.label.resolveFrom(context)
-                      : CupertinoColors.systemGrey,
+                      : CupertinoColors.systemGrey.resolveFrom(context),
                 ),
               ),
             ),

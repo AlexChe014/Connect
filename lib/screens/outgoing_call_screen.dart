@@ -98,7 +98,9 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
     unawaited(_playRingback());
     ChatCallService.instance.addListener(_onCallServiceChanged);
     // Статус мог смениться, пока экран открывался.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _onCallServiceChanged());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _onCallServiceChanged(),
+    );
 
     _pollTimer = Timer.periodic(CallConfig.outgoingStatusPollInterval, (_) {
       if (_resolved || _closing) return;
@@ -245,8 +247,10 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                   child: Container(
                     width: 72,
                     height: 72,
-                    decoration: const BoxDecoration(
-                      color: CupertinoColors.destructiveRed,
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.destructiveRed.resolveFrom(
+                        context,
+                      ),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(

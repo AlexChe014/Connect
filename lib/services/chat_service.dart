@@ -464,8 +464,8 @@ class ChatService extends ChangeNotifier {
     final newName = (s != null && s.isNotEmpty && n != null && n.isNotEmpty)
         ? '$s $n'
         : (u['name'] as String?)?.trim() ??
-            (u['email'] as String?)?.split('@').first ??
-            'Я';
+              (u['email'] as String?)?.split('@').first ??
+              'Я';
 
     if (newUserId == _selfUserId && newName == _selfName) return;
 
@@ -541,9 +541,10 @@ class ChatService extends ChangeNotifier {
         CreateChatRequest(isGroup: false, userIds: [peerUserId]),
         currentUserId: userId,
       );
-      final chat = ChatMapper.fromRecord(record, currentUserId: userId).copyWithDetails(
-        title: fullName,
-      );
+      final chat = ChatMapper.fromRecord(
+        record,
+        currentUserId: userId,
+      ).copyWithDetails(title: fullName);
       if (peerAvatarPath != null || peerAvatarUrl != null) {
         final withAvatar = Chat(
           id: chat.id,
@@ -1016,11 +1017,7 @@ class ChatService extends ChangeNotifier {
       _removeLocalMessage(chatId, tempId);
       _appendMessage(
         chatId,
-        sent.copyWith(
-          text: sent.text ?? t,
-          replyTo: replyTo,
-          isRead: true,
-        ),
+        sent.copyWith(text: sent.text ?? t, replyTo: replyTo, isRead: true),
       );
     } catch (e) {
       _removeLocalMessage(chatId, tempId);
@@ -1161,7 +1158,8 @@ class ChatService extends ChangeNotifier {
         targetChatId,
         sent.copyWith(
           text: sent.text ?? (stickerId != null ? null : text),
-          forwardOf: sent.forwardOf ??
+          forwardOf:
+              sent.forwardOf ??
               MessageReference(
                 messageId: source.id,
                 authorName: source.authorName,
@@ -1212,7 +1210,11 @@ class ChatService extends ChangeNotifier {
   /// (например, привязан к callId), чтобы не задублировать сообщение.
   /// Локальные `call_start_<callId>` / `call_end_<callId>` убираются, как
   /// только приходит серверное сообщение `CALL` этого звонка.
-  void appendLocalSystemMessage(String chatId, String text, {required String id}) {
+  void appendLocalSystemMessage(
+    String chatId,
+    String text, {
+    required String id,
+  }) {
     _appendMessage(
       chatId,
       ChatMessage(
@@ -1248,7 +1250,8 @@ class ChatService extends ChangeNotifier {
       channelName: channelName,
     );
     if (chatId == null) {
-      if (kind == ChatRealtimeKind.members || kind == ChatRealtimeKind.unknown) {
+      if (kind == ChatRealtimeKind.members ||
+          kind == ChatRealtimeKind.unknown) {
         unawaited(refreshChats(showLoading: false));
       }
       return;
@@ -1486,7 +1489,8 @@ class ChatService extends ChangeNotifier {
       if (m.id.isEmpty || !ids.add(m.id)) continue;
       if (_isLocalCallMessageFor(m, serverCallIds)) continue;
       final serverId = int.tryParse(m.id);
-      final vanishedOnServer = serverId != null &&
+      final vanishedOnServer =
+          serverId != null &&
           !m.isDeleted &&
           !m.isSending &&
           knownBeforeFetch.contains(m.id) &&

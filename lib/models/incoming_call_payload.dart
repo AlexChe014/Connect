@@ -41,7 +41,8 @@ class IncomingCallPayload {
     }
 
     final isVideoRaw = data['is_video'] ?? data['isVideo'] ?? '1';
-    final isVideo = isVideoRaw == true ||
+    final isVideo =
+        isVideoRaw == true ||
         isVideoRaw == 1 ||
         isVideoRaw == '1' ||
         isVideoRaw == 'true';

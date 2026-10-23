@@ -95,10 +95,7 @@ class CallPermissions {
   /// Перед входом в Jitsi после Accept (камера + микрофон).
   static Future<bool> ensureMediaOnly() async {
     if (kIsWeb) return true;
-    final statuses = await [
-      Permission.camera,
-      Permission.microphone,
-    ].request();
+    final statuses = await [Permission.camera, Permission.microphone].request();
     return (statuses[Permission.camera]?.isGranted ?? false) &&
         (statuses[Permission.microphone]?.isGranted ?? false);
   }

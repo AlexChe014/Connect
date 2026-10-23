@@ -6,9 +6,11 @@ class DocumentsRoutes {
   static const String _prefix = '/documents';
   static const String _servicePrefix = '$_prefix/service';
 
-  static String get notificationsUrl => '${ApiConfig.baseUrl}$_prefix/notifications';
+  static String get notificationsUrl =>
+      '${ApiConfig.baseUrl}$_prefix/notifications';
 
-  static String get activeServicesUrl => '${ApiConfig.baseUrl}$_servicePrefix/get';
+  static String get activeServicesUrl =>
+      '${ApiConfig.baseUrl}$_servicePrefix/get';
 
   static String get allServicesUrl => '${ApiConfig.baseUrl}$_servicePrefix/all';
 

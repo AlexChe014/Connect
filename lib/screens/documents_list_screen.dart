@@ -180,10 +180,10 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 textAlign: TextAlign.center,
                 textInputAction: TextInputAction.done,
                 style: const TextStyle(fontSize: 20, letterSpacing: 8),
-                placeholderStyle: const TextStyle(
+                placeholderStyle: TextStyle(
                   fontSize: 15,
                   letterSpacing: 0,
-                  color: CupertinoColors.placeholderText,
+                  color: CupertinoColors.placeholderText.resolveFrom(context),
                 ),
                 onSubmitted: (_) =>
                     Navigator.pop(context, controller.text.trim()),
@@ -621,8 +621,8 @@ class _DocumentRow extends StatelessWidget {
                     : AppIconBadge(
                         icon: CupertinoIcons.doc_text_fill,
                         color: isSigning
-                            ? CupertinoColors.systemBlue
-                            : CupertinoColors.systemGreen,
+                            ? CupertinoColors.systemBlue.resolveFrom(context)
+                            : CupertinoColors.systemGreen.resolveFrom(context),
                       ),
               ),
               const SizedBox(width: 12),

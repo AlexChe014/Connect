@@ -438,7 +438,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.phone_fill,
-                              color: CupertinoColors.systemGreen,
+                              color: CupertinoColors.systemGreen.resolveFrom(
+                                context,
+                              ),
                               label: 'Телефон',
                               value: phone,
                               onTap: _dial,
@@ -448,7 +450,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.mail_solid,
-                              color: CupertinoColors.systemBlue,
+                              color: CupertinoColors.systemBlue.resolveFrom(
+                                context,
+                              ),
                               label: 'Email',
                               value: email,
                               onTap: _email,
@@ -468,7 +472,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.building_2_fill,
-                              color: CupertinoColors.systemIndigo,
+                              color: CupertinoColors.systemIndigo.resolveFrom(
+                                context,
+                              ),
                               label: 'Компания',
                               value: company,
                             ),
@@ -476,7 +482,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                             _infoRow(
                               context,
                               icon: CupertinoIcons.gift_fill,
-                              color: CupertinoColors.systemPink,
+                              color: CupertinoColors.systemPink.resolveFrom(
+                                context,
+                              ),
                               label: 'День рождения',
                               value: DateFormat(
                                 'd MMMM',
@@ -490,7 +498,9 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                               context,
                               icon: CupertinoIcons
                                   .person_crop_circle_badge_checkmark,
-                              color: CupertinoColors.systemOrange,
+                              color: CupertinoColors.systemOrange.resolveFrom(
+                                context,
+                              ),
                               label: 'Роли',
                               value: rolesText,
                             ),

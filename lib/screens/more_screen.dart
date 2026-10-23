@@ -213,9 +213,9 @@ class _MoreScreenState extends State<MoreScreen> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: ThemeModeService.instance.mode,
       builder: (context, mode, _) => CupertinoListTile(
-        leading: const AppIconBadge(
+        leading: AppIconBadge(
           icon: CupertinoIcons.circle_lefthalf_fill,
-          color: CupertinoColors.systemIndigo,
+          color: CupertinoColors.systemIndigo.resolveFrom(context),
         ),
         title: const Text('Оформление'),
         additionalInfo: Text(_themeModeLabels[mode]!),
@@ -229,7 +229,9 @@ class _MoreScreenState extends State<MoreScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -259,7 +261,7 @@ class _MoreScreenState extends State<MoreScreen> {
                       children: [
                         _item(
                           icon: CupertinoIcons.bell_fill,
-                          color: CupertinoColors.systemRed,
+                          color: CupertinoColors.systemRed.resolveFrom(context),
                           title: 'Уведомления',
                           badgeCount: _notifications.unreadCount,
                           onTap: () => _open(const NotificationsScreen()),
@@ -272,39 +274,49 @@ class _MoreScreenState extends State<MoreScreen> {
                       children: [
                         _item(
                           icon: CupertinoIcons.calendar,
-                          color: CupertinoColors.systemRed,
+                          color: CupertinoColors.systemRed.resolveFrom(context),
                           title: 'Календарь',
                           onTap: () => _open(const CalendarScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.doc_text_fill,
-                          color: CupertinoColors.systemOrange,
+                          color: CupertinoColors.systemOrange.resolveFrom(
+                            context,
+                          ),
                           title: 'Согласование',
                           badgeCount: _pending.totalCount,
                           onTap: () => _open(const DocumentsSigningScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.chart_bar_square_fill,
-                          color: CupertinoColors.systemPurple,
+                          color: CupertinoColors.systemPurple.resolveFrom(
+                            context,
+                          ),
                           title: 'Опросы',
                           badgeCount: _surveys.pendingCount,
                           onTap: () => _open(const SurveysScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.person_2_fill,
-                          color: CupertinoColors.systemBlue,
+                          color: CupertinoColors.systemBlue.resolveFrom(
+                            context,
+                          ),
                           title: 'Сотрудники',
                           onTap: () => _open(const EmployeesScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.bookmark_fill,
-                          color: CupertinoColors.systemIndigo,
+                          color: CupertinoColors.systemIndigo.resolveFrom(
+                            context,
+                          ),
                           title: 'Бронирования',
                           onTap: () => _open(const BookingsScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.folder_fill,
-                          color: CupertinoColors.systemTeal,
+                          color: CupertinoColors.systemTeal.resolveFrom(
+                            context,
+                          ),
                           title: 'Диск',
                           onTap: () => _open(const DiskScreen()),
                         ),
@@ -316,13 +328,17 @@ class _MoreScreenState extends State<MoreScreen> {
                       children: [
                         _item(
                           icon: CupertinoIcons.star_fill,
-                          color: CupertinoColors.systemYellow,
+                          color: CupertinoColors.systemYellow.resolveFrom(
+                            context,
+                          ),
                           title: 'Избранное',
                           onTap: () => _open(const FavoritesScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.gift_fill,
-                          color: CupertinoColors.systemPink,
+                          color: CupertinoColors.systemPink.resolveFrom(
+                            context,
+                          ),
                           title: 'Бонусная программа',
                           onTap: () => _open(const BonusProgramScreen()),
                         ),
@@ -341,7 +357,9 @@ class _MoreScreenState extends State<MoreScreen> {
                         _themeModeItem(context),
                         _item(
                           icon: CupertinoIcons.book_fill,
-                          color: CupertinoColors.systemGrey,
+                          color: CupertinoColors.systemGrey.resolveFrom(
+                            context,
+                          ),
                           title: 'База знаний',
                           isExternal: true,
                           onTap: () => launchUrl(
@@ -368,6 +386,7 @@ class _MoreScreenState extends State<MoreScreen> {
                       child: ColoredBox(
                         color: CupertinoColors.systemGroupedBackground
                             .resolveFrom(context)
+                            .resolveFrom(context)
                             .withValues(alpha: 0.7),
                       ),
                     ),
@@ -393,7 +412,7 @@ class _Badge extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 22),
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemRed,
+        color: CupertinoColors.systemRed.resolveFrom(context),
         borderRadius: BorderRadius.circular(11),
       ),
       child: Text(

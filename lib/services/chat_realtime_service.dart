@@ -189,7 +189,8 @@ class ChatRealtimeService {
             'Authorization': 'Bearer $token',
             'X-Requested-With': 'XMLHttpRequest',
           },
-          body: 'socket_id=${Uri.encodeQueryComponent(socketId)}'
+          body:
+              'socket_id=${Uri.encodeQueryComponent(socketId)}'
               '&channel_name=${Uri.encodeQueryComponent(channelName)}',
         )
         .timeout(Duration(seconds: ApiConfig.timeoutSeconds));

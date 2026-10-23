@@ -57,7 +57,9 @@ class ChatRepository {
         rawChats
             .map(_asJsonMap)
             .whereType<Map<String, dynamic>>()
-            .map((json) => ChatMapper.mapChat(json, currentUserId: currentUserId))
+            .map(
+              (json) => ChatMapper.mapChat(json, currentUserId: currentUserId),
+            )
             .where((c) => c.id.isNotEmpty),
       );
 
@@ -195,10 +197,7 @@ class ChatRepository {
       throw ApiException(400, 'Текст сообщения пустой');
     }
 
-    final body = <String, dynamic>{
-      'message': trimmed,
-      'text': trimmed,
-    };
+    final body = <String, dynamic>{'message': trimmed, 'text': trimmed};
     if (repliedMessageId != null) {
       body['replied_message_id'] = repliedMessageId;
     }
@@ -239,9 +238,7 @@ class ChatRepository {
 
     final decoded = await ApiClient.instance.postMultipart(
       ChatRoutes.filesUrl(chatId),
-      files: [
-        http.MultipartFile.fromBytes('file', bytes, filename: filename),
-      ],
+      files: [http.MultipartFile.fromBytes('file', bytes, filename: filename)],
     );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,

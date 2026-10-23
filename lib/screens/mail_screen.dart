@@ -210,7 +210,9 @@ class _MailScreenState extends State<MailScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -288,7 +290,11 @@ class _ConnectionTile extends StatelessWidget {
   final VoidCallback onEditPassword;
 
   /// Цвет провайдера — по нему ящики различают с первого взгляда.
-  static Color _colorFor(MailConnection connection) {
+  static Color _colorFor(BuildContext context, MailConnection connection) {
+    return CupertinoDynamicColor.resolve(_baseColorFor(connection), context);
+  }
+
+  static Color _baseColorFor(MailConnection connection) {
     switch (mailProviderKindFromService(connection.service)) {
       case MailProviderKind.yandex:
         return CupertinoColors.systemRed;
@@ -319,7 +325,7 @@ class _ConnectionTile extends StatelessWidget {
               height: 44,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: _colorFor(connection),
+                color: _colorFor(context, connection),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(

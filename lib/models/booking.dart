@@ -23,8 +23,11 @@ class Booking {
       roomId: json['roomId'] as String,
       roomName: json['roomName'] as String,
       title: json['title'] as String,
-      startTime: DateTime.tryParse(json['startTime'] as String? ?? '') ?? DateTime.now(),
-      endTime: DateTime.tryParse(json['endTime'] as String? ?? '') ?? DateTime.now(),
+      startTime:
+          DateTime.tryParse(json['startTime'] as String? ?? '') ??
+          DateTime.now(),
+      endTime:
+          DateTime.tryParse(json['endTime'] as String? ?? '') ?? DateTime.now(),
       organizer: json['organizer'] as String?,
     );
   }

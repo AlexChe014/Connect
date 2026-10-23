@@ -8,7 +8,9 @@ class DocumentsRepository {
   static final DocumentsRepository instance = DocumentsRepository._();
 
   Future<List<DocumentService>> getActiveServices() async {
-    final decoded = await ApiClient.instance.get(DocumentsRoutes.activeServicesUrl);
+    final decoded = await ApiClient.instance.get(
+      DocumentsRoutes.activeServicesUrl,
+    );
     return _parseServiceList(
       decoded,
       defaultErrorMessage: 'Не удалось получить список сервисов 1С',
@@ -16,7 +18,9 @@ class DocumentsRepository {
   }
 
   Future<List<DocumentService>> getAllServices() async {
-    final decoded = await ApiClient.instance.get(DocumentsRoutes.allServicesUrl);
+    final decoded = await ApiClient.instance.get(
+      DocumentsRoutes.allServicesUrl,
+    );
     return _parseServiceList(
       decoded,
       defaultErrorMessage: 'Не удалось получить полный список сервисов 1С',
@@ -113,7 +117,9 @@ class DocumentsRepository {
       final data = decoded['data'];
       final error = data is Map
           ? (data['error']?.toString() ?? data['message']?.toString() ?? '')
-          : (decoded['error']?.toString() ?? decoded['message']?.toString() ?? '');
+          : (decoded['error']?.toString() ??
+                decoded['message']?.toString() ??
+                '');
       final normalized = error.trim().toLowerCase();
       if (normalized.contains('нет информации') ||
           normalized.contains('нет документов') ||
@@ -122,7 +128,9 @@ class DocumentsRepository {
       }
       throw ApiException(
         200,
-        error.trim().isEmpty ? 'Не удалось получить список документов' : error.trim(),
+        error.trim().isEmpty
+            ? 'Не удалось получить список документов'
+            : error.trim(),
       );
     }
 
@@ -325,7 +333,10 @@ class DocumentsRepository {
     if (data is Map) {
       return [Map<String, dynamic>.from(data)];
     }
-    throw ApiException(200, 'Некорректный формат data (ожидался объект или список)');
+    throw ApiException(
+      200,
+      'Некорректный формат data (ожидался объект или список)',
+    );
   }
 
   Map<String, dynamic> _parseJsonObject(Object? data) {

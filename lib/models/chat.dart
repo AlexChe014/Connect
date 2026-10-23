@@ -44,14 +44,19 @@ class Chat {
 
   final String id;
   final String title;
+
   /// Локальный путь к аватару чата (в т.ч. группы).
   final String? avatarPath;
+
   /// URL аватара чата с сервера.
   final String? avatarUrl;
+
   /// Для личных диалогов: локальный путь к аватару пользователя (собеседника).
   final String? peerAvatarPath;
+
   /// Для личных диалогов: URL аватара собеседника с сервера.
   final String? peerAvatarUrl;
+
   /// Id собеседника в личном чате.
   final int? peerUserId;
   final bool isGroup;
@@ -60,23 +65,31 @@ class Chat {
   final List<ChatMemberSummary> members;
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
+
   /// Последнее сообщение отправлено текущим пользователем (а не собеседником).
   /// Индикатор доставки/прочтения в списке чатов имеет смысл только для него.
   final bool lastMessageIsOutgoing;
+
   /// Для исходящего последнего сообщения: прочитано ли всеми получателями
   /// (двойная галочка), иначе — доставлено (одна галочка).
   final bool lastMessageReadByRecipients;
+
   /// Количество непрочитанных входящих сообщений в чате.
   final int unreadCount;
+
   /// Порог, после которого бейдж показывает `10+`, как в Telegram.
   static const int unreadBadgeCap = 10;
+
   /// Отключены push-уведомления по чату — хранится только локально на
   /// устройстве, сервер о статусе не знает.
   final bool isMuted;
+
   /// Чат отмечен как избранный — тоже только локальное состояние.
   final bool isFavorite;
+
   /// Закреплён для текущего пользователя на сервере (`is_pinned`).
   final bool isPinned;
+
   /// Недописанный текст в поле ввода этого чата — только локально
   /// (см. [ChatDraftService]).
   final String? draftText;

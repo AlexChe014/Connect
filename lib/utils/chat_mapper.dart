@@ -134,8 +134,9 @@ class ChatMapper {
     final id = _parseInt(json['id'])?.toString() ?? '';
     final senderId = _parseInt(json['sender_id']);
     final sender = _asJsonMap(json['sender']);
-    final authorName =
-        sender != null ? userDisplayNameFromJson(sender) : 'Пользователь';
+    final authorName = sender != null
+        ? userDisplayNameFromJson(sender)
+        : 'Пользователь';
     final authorAvatarUrl = sender != null
         ? MediaUrlUtils.normalizeFirstUrl(sender['media'])
         : null;
@@ -157,7 +158,8 @@ class ChatMapper {
     // Чат-бэкенд на Node (им пользуется портал) удаляет сообщение, заменяя
     // текст на "Сообщение удалено" — портал распознаёт удалённые именно так.
     // `is_deleted` / `deleted_at` — на случай явного флага мягкого удаления.
-    final isDeleted = json['is_deleted'] == true ||
+    final isDeleted =
+        json['is_deleted'] == true ||
         json['is_deleted'] == 1 ||
         json['deleted_at'] != null ||
         (type != 'SYSTEM' &&
@@ -235,11 +237,8 @@ class ChatMapper {
         .map(_asJsonMap)
         .whereType<Map<String, dynamic>>()
         .map(
-          (json) => mapMessage(
-            json,
-            chatId: chatIdStr,
-            currentUserId: currentUserId,
-          ),
+          (json) =>
+              mapMessage(json, chatId: chatIdStr, currentUserId: currentUserId),
         )
         .toList(growable: false);
 
@@ -257,8 +256,7 @@ class ChatMapper {
       total = _parseInt(pagination['total']);
       if (lastPage != null && currentPage < lastPage) {
         final pp = perPage ?? 50;
-        nextPageUrl =
-            '$messagesBaseUrl?page=${currentPage + 1}&per_page=$pp';
+        nextPageUrl = '$messagesBaseUrl?page=${currentPage + 1}&per_page=$pp';
       }
     } else {
       currentPage = _parseInt(data?['current_page']) ?? 1;
@@ -472,8 +470,8 @@ class ChatMapper {
       return _ResolvedMessageContent(
         text: rawMessage,
         attachmentKind: kind,
-        remoteMediaUrl: kind == ChatAttachmentKind.image ||
-                kind == ChatAttachmentKind.video
+        remoteMediaUrl:
+            kind == ChatAttachmentKind.image || kind == ChatAttachmentKind.video
             ? ChatRoutes.fileUrl(primary.id)
             : null,
         fileName: primary.originalName,
@@ -481,7 +479,8 @@ class ChatMapper {
     }
 
     if (type == 'MEDIA') {
-      final remoteUrl = _remoteMediaUrl(json) ??
+      final remoteUrl =
+          _remoteMediaUrl(json) ??
           (rawMessage != null && rawMessage.startsWith('http')
               ? rawMessage
               : null);

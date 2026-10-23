@@ -53,7 +53,10 @@ class BonusProgramRepository {
     return PointBalance.fromJson(data);
   }
 
-  Future<Paginated<PointOperation>> getHistory({String? url, int page = 1}) async {
+  Future<Paginated<PointOperation>> getHistory({
+    String? url,
+    int page = 1,
+  }) async {
     final decoded = url != null
         ? await ApiClient.instance.get(url)
         : await ApiClient.instance.get(
@@ -84,7 +87,8 @@ class BonusProgramRepository {
       body: {
         'recipient_user_id': recipientUserId,
         'points': points,
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       },
     );
     final data = ApiEnvelope.unwrapDataMap(
@@ -119,7 +123,9 @@ class BonusProgramRepository {
   }
 
   Future<RouletteConfig> getRouletteConfig() async {
-    final decoded = await ApiClient.instance.get(BonusProgramRoutes.rouletteConfigUrl);
+    final decoded = await ApiClient.instance.get(
+      BonusProgramRoutes.rouletteConfigUrl,
+    );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
       defaultErrorMessage: 'Не удалось получить настройки рулетки',
@@ -140,7 +146,9 @@ class BonusProgramRepository {
   }
 
   Future<List<RoulettePrize>> getRoulettePrizes() async {
-    final decoded = await ApiClient.instance.get(BonusProgramRoutes.roulettePrizesUrl);
+    final decoded = await ApiClient.instance.get(
+      BonusProgramRoutes.roulettePrizesUrl,
+    );
     final list = ApiEnvelope.unwrapDataList(
       decoded,
       defaultErrorMessage: 'Не удалось получить список призов',
@@ -152,7 +160,9 @@ class BonusProgramRepository {
   }
 
   Future<RouletteSpin> spinRoulette() async {
-    final decoded = await ApiClient.instance.post(BonusProgramRoutes.rouletteSpinUrl);
+    final decoded = await ApiClient.instance.post(
+      BonusProgramRoutes.rouletteSpinUrl,
+    );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
       defaultErrorMessage: 'Не удалось крутить рулетку',
@@ -161,7 +171,9 @@ class BonusProgramRepository {
   }
 
   Future<List<AchievementType>> getAchievementTypes() async {
-    final decoded = await ApiClient.instance.get(BonusProgramRoutes.achievementTypesUrl);
+    final decoded = await ApiClient.instance.get(
+      BonusProgramRoutes.achievementTypesUrl,
+    );
     final list = ApiEnvelope.unwrapDataList(
       decoded,
       defaultErrorMessage: 'Не удалось получить типы достижений',
@@ -173,7 +185,9 @@ class BonusProgramRepository {
   }
 
   Future<FormConfig> getFormConfig() async {
-    final decoded = await ApiClient.instance.get(BonusProgramRoutes.formConfigUrl);
+    final decoded = await ApiClient.instance.get(
+      BonusProgramRoutes.formConfigUrl,
+    );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
       defaultErrorMessage: 'Не удалось получить конфигурацию формы',
@@ -192,8 +206,9 @@ class BonusProgramRepository {
 
     for (var i = 0; i < achievements.length; i++) {
       final achievement = achievements[i];
-      fields['achievements[$i][achievement_type_id]'] =
-          achievement.achievementTypeId.toString();
+      fields['achievements[$i][achievement_type_id]'] = achievement
+          .achievementTypeId
+          .toString();
       final description = achievement.description?.trim();
       if (description != null && description.isNotEmpty) {
         fields['achievements[$i][description]'] = description;

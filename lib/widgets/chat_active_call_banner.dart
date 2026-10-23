@@ -45,19 +45,23 @@ class ChatActiveCallBanner extends StatelessWidget {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          color: CupertinoColors.systemGreen.withValues(alpha: 0.12),
+          color: CupertinoColors.systemGreen
+              .resolveFrom(context)
+              .withValues(alpha: 0.12),
           child: Row(
             children: [
               Container(
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: CupertinoColors.systemGreen.withValues(alpha: 0.2),
+                  color: CupertinoColors.systemGreen
+                      .resolveFrom(context)
+                      .withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.video_camera_solid,
-                  color: CupertinoColors.systemGreen,
+                  color: CupertinoColors.systemGreen.resolveFrom(context),
                   size: 22,
                 ),
               ),
@@ -70,10 +74,10 @@ class ChatActiveCallBanner extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -81,9 +85,11 @@ class ChatActiveCallBanner extends StatelessWidget {
                       subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: CupertinoColors.secondaryLabel,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   ],
@@ -96,7 +102,7 @@ class ChatActiveCallBanner extends StatelessWidget {
                   vertical: 8,
                 ),
                 minimumSize: Size.zero,
-                color: CupertinoColors.systemGreen,
+                color: CupertinoColors.systemGreen.resolveFrom(context),
                 borderRadius: BorderRadius.circular(20),
                 onPressed: joining ? null : onJoin,
                 child: joining

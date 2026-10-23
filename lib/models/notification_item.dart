@@ -46,11 +46,11 @@ class NotificationItem {
 
   /// `type`/`module` уведомления важнее одноимённых полей в `data`.
   Map<String, dynamic> toNavigationData() => {
-        ...data,
-        'type': type,
-        if (module != null && module!.isNotEmpty) 'module': module,
-        'data': data,
-      };
+    ...data,
+    'type': type,
+    if (module != null && module!.isNotEmpty) 'module': module,
+    'data': data,
+  };
 
   NotificationItem copyWith({bool? isRead}) {
     return NotificationItem(
@@ -73,9 +73,7 @@ class NotificationItem {
       try {
         final decoded = jsonDecode(rawData);
         if (decoded is Map) {
-          return decoded.map(
-            (key, value) => MapEntry(key.toString(), value),
-          );
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
         }
       } catch (_) {}
     }

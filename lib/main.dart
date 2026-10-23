@@ -571,7 +571,7 @@ class _TabButton extends StatelessWidget {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: CupertinoColors.systemRed,
+                          color: CupertinoColors.systemRed.resolveFrom(context),
                           borderRadius: BorderRadius.circular(9),
                           border: Border.all(
                             color: CupertinoColors

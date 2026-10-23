@@ -441,9 +441,9 @@ class _NewsCreateScreenState extends State<NewsCreateScreen> {
       children: [
         for (final file in _documents)
           CupertinoListTile(
-            leading: const AppIconBadge(
+            leading: AppIconBadge(
               icon: CupertinoIcons.doc_fill,
-              color: CupertinoColors.systemGrey,
+              color: CupertinoColors.systemGrey.resolveFrom(context),
             ),
             title: Text(
               file.filename,

@@ -21,10 +21,7 @@ class CommentsRepository {
     );
   }
 
-  Future<void> create({
-    required String newsId,
-    required String text,
-  }) async {
+  Future<void> create({required String newsId, required String text}) async {
     await ApiClient.instance.postMultipart(
       CommentsRoutes.createUrl(newsId),
       fields: {'text': text.trim()},

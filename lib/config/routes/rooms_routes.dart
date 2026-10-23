@@ -7,4 +7,3 @@ class RoomsRoutes {
 
   static String get allUrl => '${ApiConfig.baseUrl}$all';
 }
-

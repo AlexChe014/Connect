@@ -868,7 +868,9 @@ class _DiskScreenState extends State<DiskScreen> {
     final task = _task;
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -1070,7 +1072,7 @@ class _DiskScreenState extends State<DiskScreen> {
               SwipeAction(
                 icon: CupertinoIcons.delete,
                 label: 'Удалить',
-                color: CupertinoColors.destructiveRed,
+                color: CupertinoColors.destructiveRed.resolveFrom(context),
                 onTap: () => _deleteFolder(folder),
               ),
             ],
@@ -1092,7 +1094,7 @@ class _DiskScreenState extends State<DiskScreen> {
             SwipeAction(
               icon: CupertinoIcons.delete,
               label: 'Удалить',
-              color: CupertinoColors.destructiveRed,
+              color: CupertinoColors.destructiveRed.resolveFrom(context),
               onTap: () => _deleteFile(file),
             ),
           ],
@@ -1464,7 +1466,11 @@ class _DiskFormatBadge extends StatelessWidget {
     return ext.length > 4 ? ext.substring(0, 4) : ext;
   }
 
-  Color get _color {
+  Color _colorOf(BuildContext context) {
+    return CupertinoDynamicColor.resolve(_baseColor, context);
+  }
+
+  Color get _baseColor {
     final mime = file.mime ?? '';
     final ext = _extension.toLowerCase();
     if (file.isImage) return CupertinoColors.systemOrange;
@@ -1506,7 +1512,7 @@ class _DiskFormatBadge extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 decoration: BoxDecoration(
-                  color: _color,
+                  color: _colorOf(context),
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Text(
@@ -1737,9 +1743,11 @@ class _DiskImagePreviewScreenState extends State<_DiskImagePreviewScreen> {
                       const SizedBox(height: 10),
                       Text(
                         '${(progress * 100).round()}%',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: CupertinoColors.systemGrey,
+                          color: CupertinoColors.systemGrey.resolveFrom(
+                            context,
+                          ),
                         ),
                       ),
                     ],

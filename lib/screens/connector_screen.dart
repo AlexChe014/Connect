@@ -61,7 +61,9 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.systemGroupedBackground,
+        backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(
+          context,
+        ),
         child: DefaultTextStyle(
           style: TextStyle(
             fontFamily: '.SF Pro Text',
@@ -74,10 +76,7 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
               const AppGlassGlow(),
               CustomScrollView(
                 slivers: [
-                  AppSliverTitleBar(
-                    title: const Text('Звонки'),
-                    blur: blur,
-                  ),
+                  AppSliverTitleBar(title: const Text('Звонки'), blur: blur),
                   const SliverToBoxAdapter(
                     child: AppGlassSectionLabel(
                       'Видеоконференции',
@@ -90,14 +89,18 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
                       children: [
                         _actionTile(
                           icon: CupertinoIcons.video_camera_solid,
-                          color: CupertinoColors.systemBlue,
+                          color: CupertinoColors.systemBlue.resolveFrom(
+                            context,
+                          ),
                           title: 'Создать видеовстречу',
                           subtitle: 'Пригласить участников и сразу начать',
                           onTap: _openCreateInstant,
                         ),
                         _actionTile(
                           icon: CupertinoIcons.calendar_badge_plus,
-                          color: CupertinoColors.systemOrange,
+                          color: CupertinoColors.systemOrange.resolveFrom(
+                            context,
+                          ),
                           title: 'Запланировать видеовстречу',
                           subtitle: 'Создать запись в календаре с участниками',
                           onTap: _openSchedule,

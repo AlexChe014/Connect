@@ -85,23 +85,27 @@ class _AchievementTypePickerSheetState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
               child: Text(
                 'Выберите достижение',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
-                  color: CupertinoColors.label,
+                  color: CupertinoColors.label.resolveFrom(context),
                 ),
               ),
             ),
             Expanded(
               child: widget.types.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'Нет доступных достижений',
-                        style: TextStyle(color: CupertinoColors.secondaryLabel),
+                        style: TextStyle(
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -168,9 +172,9 @@ class _PickerTypeTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              const AppIconBadge(
+              AppIconBadge(
                 icon: CupertinoIcons.rosette,
-                color: CupertinoColors.systemGreen,
+                color: CupertinoColors.systemGreen.resolveFrom(context),
               ),
               const SizedBox(width: 12),
               Expanded(

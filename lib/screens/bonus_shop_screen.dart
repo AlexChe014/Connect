@@ -86,8 +86,8 @@ class _BonusShopScreenState extends State<BonusShopScreen> {
             ? 'Товар уже выдан'
             : 'Заявка на выдачу отправлена на согласование',
         statusColor: request.isApproved
-            ? CupertinoColors.systemGreen
-            : CupertinoColors.systemOrange,
+            ? CupertinoColors.systemGreen.resolveFrom(context)
+            : CupertinoColors.systemOrange.resolveFrom(context),
         photoUrl: item.photoUrl,
       );
     } catch (e) {

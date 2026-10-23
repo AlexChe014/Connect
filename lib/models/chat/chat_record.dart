@@ -32,9 +32,9 @@ class ChatRecord {
     final rawMembers = json['members'];
     final members = rawMembers is List
         ? rawMembers
-            .whereType<Map>()
-            .map((e) => ChatMemberInfo.fromJson(e.cast<String, dynamic>()))
-            .toList(growable: false)
+              .whereType<Map>()
+              .map((e) => ChatMemberInfo.fromJson(e.cast<String, dynamic>()))
+              .toList(growable: false)
         : const <ChatMemberInfo>[];
 
     return ChatRecord(

@@ -60,22 +60,30 @@ class MailConnection {
   }
 
   bool get isCustom =>
-      service?.toLowerCase() == 'other' ||
-      service?.toLowerCase() == 'custom';
+      service?.toLowerCase() == 'other' || service?.toLowerCase() == 'custom';
 
   factory MailConnection.fromJson(Map<String, dynamic> json) {
     return MailConnection(
       id: _parseInt(json['id']) ?? 0,
       email: _optionalString(json, ['email', 'mail']) ?? '',
       host: _optionalString(json, ['host', 'imap_host', 'custom_imap_host']),
-      port: _parseInt(json['port'] ?? json['imap_port'] ?? json['custom_imap_port']),
+      port: _parseInt(
+        json['port'] ?? json['imap_port'] ?? json['custom_imap_port'],
+      ),
       service: _optionalString(json, ['service', 'provider', 'type']),
       username: _optionalString(json, ['username', 'login']),
-      name: _optionalString(json, ['from_name', 'name', 'title', 'display_name']),
+      name: _optionalString(json, [
+        'from_name',
+        'name',
+        'title',
+        'display_name',
+      ]),
       customImapHost: _optionalString(json, ['imap_host', 'custom_imap_host']),
       customImapPort: _parseInt(json['imap_port'] ?? json['custom_imap_port']),
-      customImapEncryption:
-          _optionalString(json, ['imap_encryption', 'custom_imap_encryption']),
+      customImapEncryption: _optionalString(json, [
+        'imap_encryption',
+        'custom_imap_encryption',
+      ]),
       smtpHost: _optionalString(json, ['smtp_host']),
       smtpPort: _parseInt(json['smtp_port']),
       smtpEncryption: _optionalString(json, ['smtp_encryption']),

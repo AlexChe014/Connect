@@ -182,7 +182,9 @@ class BonusOperationRow extends StatelessWidget {
     final isCredit = operation.isCredit;
     final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     final tint =
-        (isCredit ? CupertinoColors.systemGreen : CupertinoColors.systemRed)
+        (isCredit
+                ? CupertinoColors.systemGreen.resolveFrom(context)
+                : CupertinoColors.systemRed.resolveFrom(context))
             .resolveFrom(context);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     final date = operation.createdAt;

@@ -20,7 +20,8 @@ class RouletteConfig {
   });
 
   bool get canSpin =>
-      enabled && (spinsRemainingThisMonth == null || spinsRemainingThisMonth! > 0);
+      enabled &&
+      (spinsRemainingThisMonth == null || spinsRemainingThisMonth! > 0);
 
   RouletteConfig copyWith({int? monthlySpinLimit}) {
     return RouletteConfig(
@@ -38,11 +39,14 @@ class RouletteConfig {
       enabled: json['enabled'] == true,
       name: (json['name'] ?? 'Розыгрыш').toString(),
       spinCost: ApiPaginatedEnvelope.parseInt(json['spin_cost']) ?? 0,
-      monthlySpinLimit: ApiPaginatedEnvelope.parseInt(json['monthly_spin_limit']),
+      monthlySpinLimit: ApiPaginatedEnvelope.parseInt(
+        json['monthly_spin_limit'],
+      ),
       spinsUsedThisMonth:
           ApiPaginatedEnvelope.parseInt(json['spins_used_this_month']) ?? 0,
-      spinsRemainingThisMonth:
-          ApiPaginatedEnvelope.parseInt(json['spins_remaining_this_month']),
+      spinsRemainingThisMonth: ApiPaginatedEnvelope.parseInt(
+        json['spins_remaining_this_month'],
+      ),
     );
   }
 }

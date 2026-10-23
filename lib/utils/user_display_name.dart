@@ -7,11 +7,7 @@ String userDisplayNameFromJson(Map<String, dynamic> user) {
   );
 }
 
-String userDisplayName({
-  String? surname,
-  String? name,
-  String? email,
-}) {
+String userDisplayName({String? surname, String? name, String? email}) {
   final parts = <String>[
     (surname ?? '').trim(),
     (name ?? '').trim(),
@@ -25,7 +21,11 @@ String userDisplayName({
 }
 
 String userInitials(String displayName) {
-  final parts = displayName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  final parts = displayName
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
   if (parts.isEmpty) return '?';
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();

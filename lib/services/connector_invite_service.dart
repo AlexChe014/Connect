@@ -17,9 +17,7 @@ class ConnectorInviteService {
         ? session.publicUrl.trim()
         : 'https://connect.xondev.ru/connector/${session.room}';
     final title = (topic ?? session.topic)?.trim();
-    final themePart = (title != null && title.isNotEmpty)
-        ? ' «$title»'
-        : '';
+    final themePart = (title != null && title.isNotEmpty) ? ' «$title»' : '';
     return 'Вас пригласили на видеовстречу$themePart.\n\n'
         'Подключиться:\n$link';
   }

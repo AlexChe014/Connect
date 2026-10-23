@@ -298,7 +298,9 @@ class _NewsDocumentRowState extends State<NewsDocumentRow> {
       padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 14, 10),
       leading: AppIconBadge(
         icon: CupertinoIcons.doc_text_fill,
-        color: isPdf ? CupertinoColors.systemRed : CupertinoColors.systemGrey,
+        color: isPdf
+            ? CupertinoColors.systemRed.resolveFrom(context)
+            : CupertinoColors.systemGrey.resolveFrom(context),
       ),
       title: Text(
         document.name,

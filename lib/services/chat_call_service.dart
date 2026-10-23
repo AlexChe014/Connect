@@ -273,11 +273,7 @@ class ChatCallService extends ChangeNotifier {
         _liveDirectCallId = callId;
         _appendCallStartedMessage(chat.id, callId);
         _startHeartbeat(callId);
-        await openConnectorSession(
-          session,
-          callId: callId,
-          endWhenLeave: true,
-        );
+        await openConnectorSession(session, callId: callId, endWhenLeave: true);
         return;
       }
 
@@ -480,10 +476,7 @@ class ChatCallService extends ChangeNotifier {
     }
   }
 
-  ChatActiveCall? _callFromMessages(
-    String chatId,
-    List<ChatMessage> messages,
-  ) {
+  ChatActiveCall? _callFromMessages(String chatId, List<ChatMessage> messages) {
     ChatActiveCall? latest;
     for (final m in messages) {
       if (m.isDeleted || m.isSystem) continue;

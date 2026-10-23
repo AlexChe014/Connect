@@ -295,7 +295,10 @@ class _BonusCelebrationCard extends StatelessWidget {
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: CupertinoDynamicColor.resolve(
-                              statusColor ?? CupertinoColors.secondaryLabel,
+                              statusColor ??
+                                  CupertinoColors.secondaryLabel.resolveFrom(
+                                    context,
+                                  ),
                               context,
                             ),
                           ),

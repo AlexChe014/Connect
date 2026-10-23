@@ -233,21 +233,21 @@ class _ScheduleVideoMeetingScreenState
           children: [
             BookingPickerRow(
               icon: CupertinoIcons.calendar,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'День',
               value: BookingTimeUtils.formatDateShort(_bookingDate),
               onTap: _pickDate,
             ),
             BookingPickerRow(
               icon: CupertinoIcons.clock_fill,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Начало',
               value: BookingTimeUtils.formatHm(slots[startIndex]),
               onTap: () => _pickStart(slots, startIndex),
             ),
             BookingPickerRow(
               icon: CupertinoIcons.clock,
-              color: CupertinoColors.systemOrange,
+              color: CupertinoColors.systemOrange.resolveFrom(context),
               label: 'Окончание',
               value: BookingTimeUtils.formatHm(slots[endIndex]),
               onTap: () => _pickEnd(slots, endIndex),

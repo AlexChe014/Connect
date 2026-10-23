@@ -366,8 +366,8 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
             child: Text(
               _nameError!,
-              style: const TextStyle(
-                color: CupertinoColors.systemRed,
+              style: TextStyle(
+                color: CupertinoColors.systemRed.resolveFrom(context),
                 fontSize: 13,
               ),
             ),
