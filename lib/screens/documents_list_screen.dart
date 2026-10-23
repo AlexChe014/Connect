@@ -12,6 +12,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/booking_glass_form.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import 'document_detail_screen.dart';
@@ -426,18 +427,13 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: groupedBg,
-        navigationBar: CupertinoNavigationBar(
-          middle: Text(
+        navigationBar: AppTitleBar(
+          title: Text(
             _selectionMode
                 ? 'Выбрано: ${_selectedGuids.length}'
                 : widget.service.displayName,
           ),
-          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-          // Размытие — только при прокрутке (AppGlassBarBlur).
-          backgroundColor: groupedBg.withValues(alpha: 0),
-          automaticBackgroundVisibility: false,
-          enableBackgroundFilterBlur: blur,
-          border: null,
+          blur: blur,
           leading: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
@@ -446,7 +442,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 : () => Navigator.pop(context),
             child: Icon(
               _selectionMode ? CupertinoIcons.xmark : CupertinoIcons.back,
-              size: _selectionMode ? 22 : 26,
+              size: AppTitleBar.iconSize,
               color: label,
             ),
           ),

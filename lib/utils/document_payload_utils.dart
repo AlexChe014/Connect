@@ -9,6 +9,21 @@ class DocumentPayloadUtils {
     return null;
   }
 
+  /// Дата документа из подписи списка 1С («Заявка … от 01.10.2026») —
+  /// так же её разбирает виджет согласований на портале.
+  static DateTime? listDate(Map<String, dynamic> json) {
+    final source = datalist(json);
+    if (source == null) return null;
+    final match = RegExp(r'(\d{2})\.(\d{2})\.(\d{4})').firstMatch(source);
+    if (match == null) return null;
+    final day = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final year = int.parse(match.group(3)!);
+    final date = DateTime(year, month, day);
+    if (date.day != day || date.month != month) return null;
+    return date;
+  }
+
   static String? guid(Map<String, dynamic> json) {
     for (final key in const [
       'guidlist',
@@ -72,13 +87,7 @@ class DocumentPayloadUtils {
       }
     }
 
-    for (final key in const [
-      'author',
-      'Author',
-      'sum',
-      'status',
-      'Status',
-    ]) {
+    for (final key in const ['author', 'Author', 'sum', 'status', 'Status']) {
       final value = _stringValue(json[key]);
       if (value != null) {
         parts.add(value);

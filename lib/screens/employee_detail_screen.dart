@@ -6,11 +6,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/staff_user.dart';
 import '../repositories/favorites_repository.dart';
+import '../repositories/profile_repository.dart';
 import '../screens/chat_conversation_screen.dart';
+import '../screens/compose_mail_screen.dart';
 import '../services/api_client.dart';
+import '../services/auth_service.dart';
 import '../services/chat_call_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/app_glass.dart';
+import '../widgets/app_title_bar.dart';
+import '../widgets/mail_recipient_field.dart';
 import '../widgets/employee_row.dart';
 import '../widgets/app_icon_badge.dart';
 
@@ -31,10 +36,16 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
   bool _isFavorite = false;
   bool _isTogglingFavorite = false;
 
+  /// Роли того, кто смотрит профиль (не того, чей профиль открыт).
+  /// Пока не загружены — роли сотрудника скрыты.
+  List<String> _viewerRoles = const [];
+  String? _viewerId;
+
   @override
   void initState() {
     super.initState();
     _loadFavoriteState();
+    _loadViewer();
     _callService.addListener(_onCallState);
   }
 
@@ -47,6 +58,24 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
   void _onCallState() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _loadViewer() async {
+    void apply(Map<String, dynamic>? json) {
+      if (json == null || json.isEmpty || !mounted) return;
+      final viewer = StaffUser.fromJson(json);
+      setState(() {
+        _viewerRoles = viewer.roles;
+        if (viewer.id.isNotEmpty) _viewerId = viewer.id;
+      });
+    }
+
+    apply(await AuthService.instance.getStoredUser());
+    try {
+      apply(await ProfileRepository.instance.getProfile());
+    } catch (_) {
+      // Остаёмся с сохранённым при входе пользователем.
+    }
   }
 
   Future<void> _loadFavoriteState() async {
@@ -146,10 +175,21 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     }
   }
 
+  bool _isOpeningMail = false;
+
+  /// Письмо пишем в почте приложения — сразу с этим сотрудником в «Кому».
   Future<void> _email() async {
     final email = user.email?.trim();
-    if (email == null || email.isEmpty) return;
-    await launchUrl(Uri(scheme: 'mailto', path: email));
+    if (email == null || email.isEmpty || _isOpeningMail) return;
+    _isOpeningMail = true;
+    try {
+      await ComposeMailScreen.openNew(
+        context,
+        to: MailRecipient.fromStaff(user),
+      );
+    } finally {
+      _isOpeningMail = false;
+    }
   }
 
   Future<void> _dial() async {
@@ -211,10 +251,12 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     );
   }
 
-  bool get _isAdmin => user.roles.any((r) {
+  bool get _viewerIsAdmin => _viewerRoles.any((r) {
     final t = r.toLowerCase();
     return t.contains('админ') || t.contains('admin');
   });
+
+  bool get _isOwnProfile => _viewerId != null && _viewerId == user.id;
 
   /// Шапка-карточка: аватар слева, текст справа. Раньше аватар стоял
   /// по центру во всю ширину и съедал треть экрана, а контакты
@@ -344,7 +386,8 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     final email = (user.email ?? '').trim();
     final phone = (user.phone ?? '').trim();
     final rolesText = user.roles.isEmpty ? null : user.roles.join(', ');
-    final showRoles = _isAdmin && rolesText != null;
+    final showRoles = (_viewerIsAdmin || _isOwnProfile) && rolesText != null;
+    final company = (user.company ?? '').trim();
     final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
       context,
     );
@@ -352,20 +395,15 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: groupedBg,
-        navigationBar: CupertinoNavigationBar(
-          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-          // Размытие — только при прокрутке (AppGlassBarBlur).
-          backgroundColor: groupedBg.withValues(alpha: 0),
-          automaticBackgroundVisibility: false,
-          enableBackgroundFilterBlur: blur,
-          border: null,
+        navigationBar: AppTitleBar(
+          blur: blur,
           leading: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
             onPressed: () => Navigator.pop(context),
             child: Icon(
               CupertinoIcons.back,
-              size: 26,
+              size: AppTitleBar.iconSize,
               color: CupertinoColors.label.resolveFrom(context),
             ),
           ),
@@ -419,11 +457,21 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                         ],
                       ),
                     ],
-                    if (user.birthday != null || showRoles) ...[
+                    if (company.isNotEmpty ||
+                        user.birthday != null ||
+                        showRoles) ...[
                       const AppGlassSectionLabel('О сотруднике'),
                       AppGlassSection(
                         margin: const EdgeInsets.symmetric(horizontal: 16),
                         children: [
+                          if (company.isNotEmpty)
+                            _infoRow(
+                              context,
+                              icon: CupertinoIcons.building_2_fill,
+                              color: CupertinoColors.systemIndigo,
+                              label: 'Компания',
+                              value: company,
+                            ),
                           if (user.birthday != null)
                             _infoRow(
                               context,
@@ -435,9 +483,8 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen> {
                                 'ru_RU',
                               ).format(user.birthday!),
                             ),
-                          // Роли — служебная информация, полезна только
-                          // администраторам; обычным пользователям всегда
-                          // покажет одно и то же ("Пользователь") и шумит.
+                          // Роли — служебная информация: видны только
+                          // администраторам и самому сотруднику.
                           if (showRoles)
                             _infoRow(
                               context,

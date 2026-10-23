@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
+import '../utils/document_payload_utils.dart';
 
 /// The 1C list is the user's work queue; older responses omit status.
 bool documentNeedsAction(Map<String, dynamic> document) {
@@ -59,12 +60,29 @@ class DocumentPendingService extends ChangeNotifier {
 
   final Map<int, int> counts = {};
 
-  /// Сколько документов ждут действия во всех сервисах — бейдж вкладки «Ещё».
+  /// Сколько документов ждут действия во всех сервисах — бейдж вкладки «Чаты».
   int get totalCount => counts.values.fold(0, (sum, c) => sum + c);
+
+  final Map<int, DateTime> _latest = {};
+
+  /// Дата самого свежего документа, ждущего решения, — по ней откреплённая
+  /// строка «Согласование» встаёт среди чатов. В 1С есть только день.
+  DateTime? get latestDocumentAt {
+    DateTime? latest;
+    for (final d in _latest.values) {
+      if (latest == null || d.isAfter(latest)) latest = d;
+    }
+    return latest;
+  }
+
   final Set<int> errors = {};
   final Set<int> loading = {};
   int _generation = 0;
   List<DocumentService> _services = [];
+
+  /// Пользователь вводил личный код и у него есть сервисы 1С — только им
+  /// показываем строку «Согласование» в чатах.
+  bool get hasServices => _services.isNotEmpty;
 
   Future<void> refreshKnownServices() => refresh(_services);
 
@@ -73,6 +91,7 @@ class DocumentPendingService extends ChangeNotifier {
     final generation = ++_generation;
     final ids = services.where(_canLoad).map((s) => s.id).toSet();
     counts.removeWhere((id, _) => !ids.contains(id));
+    _latest.removeWhere((id, _) => !ids.contains(id));
     errors.removeWhere((id) => !ids.contains(id));
     loading
       ..clear()
@@ -83,7 +102,20 @@ class DocumentPendingService extends ChangeNotifier {
       try {
         final documents = await _load(id);
         if (generation != _generation) return;
-        counts[id] = documents.where(documentNeedsAction).length;
+        final pending = documents.where(documentNeedsAction).toList();
+        counts[id] = pending.length;
+        DateTime? latest;
+        for (final d in pending) {
+          final date = DocumentPayloadUtils.listDate(d);
+          if (date != null && (latest == null || date.isAfter(latest))) {
+            latest = date;
+          }
+        }
+        if (latest != null) {
+          _latest[id] = latest;
+        } else {
+          _latest.remove(id);
+        }
         errors.remove(id);
       } catch (_) {
         if (generation != _generation) return;
@@ -99,6 +131,7 @@ class DocumentPendingService extends ChangeNotifier {
     _signingAccessUntil = null;
     _generation++;
     counts.clear();
+    _latest.clear();
     errors.clear();
     loading.clear();
     notifyListeners();

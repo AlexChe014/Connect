@@ -8,6 +8,7 @@ import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:flutter/cupertino.dart';
+import '../widgets/app_title_bar.dart';
 
 class CreateGroupChatScreen extends StatefulWidget {
   const CreateGroupChatScreen({super.key});
@@ -172,17 +173,16 @@ class _CreateGroupChatScreenState extends State<CreateGroupChatScreen> {
 
     return CupertinoPageScaffold(
       backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Новая группа'),
+      navigationBar: AppTitleBar(
+        title: const Text('Новая группа'),
         // Полупрозрачная — содержимое уходит под размытую шапку.
         backgroundColor: groupedBg.withValues(alpha: 0.7),
-        automaticBackgroundVisibility: false,
-        border: null,
+        blur: true,
         leading: CupertinoButton(
           padding: EdgeInsets.zero,
           minimumSize: Size.zero,
           onPressed: _creating ? null : () => Navigator.pop(context),
-          child: const Icon(CupertinoIcons.back, size: 26),
+          child: const Icon(CupertinoIcons.back, size: AppTitleBar.iconSize),
         ),
         trailing: CupertinoButton(
           padding: EdgeInsets.zero,

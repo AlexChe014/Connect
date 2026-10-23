@@ -17,6 +17,7 @@ import '../services/crash_reporting_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
@@ -592,18 +593,17 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: groupedBg,
-        navigationBar: CupertinoNavigationBar(
-          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-          // Размытие — только при прокрутке (AppGlassBarBlur).
-          backgroundColor: groupedBg.withValues(alpha: 0),
-          automaticBackgroundVisibility: false,
-          enableBackgroundFilterBlur: blur,
-          border: null,
+        navigationBar: AppTitleBar(
+          blur: blur,
           leading: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
             onPressed: () => Navigator.maybePop(context),
-            child: Icon(CupertinoIcons.back, size: 26, color: label),
+            child: Icon(
+              CupertinoIcons.back,
+              size: AppTitleBar.iconSize,
+              color: label,
+            ),
           ),
           trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
         ),

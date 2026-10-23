@@ -5,10 +5,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show SelectableText;
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/mail/mail_message.dart';
+import '../utils/open_link.dart';
 
 class MailBodyContent extends StatefulWidget {
   const MailBodyContent({
@@ -228,7 +228,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
     setState(() => _hasSelection = hasSelection);
   }
 
-  /// Ссылки из письма открываем во внешнем браузере / почтовом клиенте,
+  /// Ссылки из письма открываем во встроенном браузере / почтовом клиенте,
   /// а не внутри WebView: иначе сайт открылся бы в блоке тела письма.
   Future<NavigationDecision> _onNavigationRequest(
     NavigationRequest request,
@@ -239,7 +239,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
     }
     if (!request.isMainFrame) return NavigationDecision.navigate;
     try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      await openLink(uri);
     } catch (_) {}
     return NavigationDecision.prevent;
   }

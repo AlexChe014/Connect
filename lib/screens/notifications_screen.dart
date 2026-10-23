@@ -15,6 +15,7 @@ import '../services/notification_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/news_glass.dart' show formatNewsDate;
 import 'notification_settings_screen.dart';
 
@@ -174,7 +175,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
     if (opened || !mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('Этот раздел пока доступен только на портале')),
+      const SnackBar(
+        content: Text('Этот раздел пока доступен только на портале'),
+      ),
     );
   }
 
@@ -225,8 +228,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final timeFormat = DateFormat('HH:mm', 'ru_RU');
 
     return [
-      for (final (label, items) in groups) ...[
-        SliverToBoxAdapter(child: AppGlassSectionLabel(label)),
+      for (final (index, (label, items)) in groups.indexed) ...[
+        SliverToBoxAdapter(
+          child: index == 0
+              ? _buildFirstGroupHeader(label)
+              : AppGlassSectionLabel(label),
+        ),
         AppGlassSliverList(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           separatorIndent: _NotificationTile.separatorIndent,
@@ -259,29 +266,64 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     ];
   }
 
+  /// Заголовок первой группы и справа «Прочитать все» — как «Очистить»
+  /// в Центре уведомлений. Видна, пока на сервере есть непрочитанные,
+  /// в том числе на ещё не загруженных страницах.
+  Widget _buildFirstGroupHeader(String label) {
+    return ListenableBuilder(
+      listenable: NotificationUnreadService.instance,
+      builder: (context, _) {
+        final hasUnread =
+            NotificationUnreadService.instance.unreadCount > 0 ||
+            _pendingReadIds.isNotEmpty ||
+            _items.any((i) => !i.isRead);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(child: AppGlassSectionLabel(label)),
+            if (hasUnread || _isMarkingAll)
+              Padding(
+                padding: const EdgeInsets.only(right: 20, bottom: 2),
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  minimumSize: Size.zero,
+                  onPressed: _isMarkingAll ? null : _markAllRead,
+                  child: _isMarkingAll
+                      ? const CupertinoActivityIndicator(radius: 8)
+                      : const Text(
+                          'Прочитать все',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _navButton({
     required IconData icon,
     required VoidCallback? onPressed,
-    bool isLoading = false,
   }) {
     return CupertinoButton(
       padding: const EdgeInsets.only(left: 14),
       minimumSize: Size.zero,
       onPressed: onPressed,
-      child: isLoading
-          ? const CupertinoActivityIndicator()
-          : Icon(
-              icon,
-              size: 24,
-              color: CupertinoColors.label.resolveFrom(context),
-            ),
+      child: Icon(
+        icon,
+        size: AppSliverTitleBar.iconSize,
+        color: CupertinoColors.label.resolveFrom(context),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -303,37 +345,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
-                      CupertinoSliverNavigationBar(
-                        largeTitle: const Text('Уведомления'),
+                      AppSliverTitleBar(
+                        title: const Text('Уведомления'),
                         leading: CupertinoButton(
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
                           onPressed: () => Navigator.maybePop(context),
                           child: Icon(
                             CupertinoIcons.back,
-                            size: 26,
+                            size: AppSliverTitleBar.iconSize,
                             color: CupertinoColors.label.resolveFrom(context),
                           ),
                         ),
-                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                        // Размытие — только при прокрутке (AppGlassBarBlur).
-                        backgroundColor: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0),
-                        automaticBackgroundVisibility: false,
-                        enableBackgroundFilterBlur: blur,
-                        border: null,
+                        blur: blur,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _navButton(
                               icon: CupertinoIcons.slider_horizontal_3,
                               onPressed: _openSettings,
-                            ),
-                            _navButton(
-                              icon: CupertinoIcons.checkmark_circle,
-                              onPressed: _isMarkingAll ? null : _markAllRead,
-                              isLoading: _isMarkingAll,
                             ),
                           ],
                         ),

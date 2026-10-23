@@ -17,6 +17,7 @@ import '../utils/media_url_utils.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/chat_avatar.dart';
 import 'booking_detail_sheet.dart';
 import 'notifications_screen.dart';
@@ -627,7 +628,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(
               CupertinoIcons.bell,
-              size: 26,
+              size: AppSliverTitleBar.iconSize,
               color: CupertinoColors.label.resolveFrom(context),
             ),
             if (count > 0)
@@ -676,10 +677,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           onRefresh: _loadProfile,
           child: CustomScrollView(
             slivers: [
-              CupertinoSliverNavigationBar(
-                largeTitle: const Text('Профиль'),
+              AppSliverTitleBar(
+                title: const Text('Профиль'),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
-                border: null,
                 trailing: ListenableBuilder(
                   listenable: NotificationUnreadService.instance,
                   builder: (context, _) => _buildNotificationsButton(context),

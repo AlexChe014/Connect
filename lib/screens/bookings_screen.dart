@@ -20,6 +20,7 @@ import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/booking_glass_form.dart';
 import 'package:connect/widgets/booking_pickers.dart';
+import '../widgets/app_title_bar.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key, this.showAppBar = true, this.initialDate});
@@ -559,7 +560,6 @@ class _BookingsScreenState extends State<BookingsScreen> {
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -579,8 +579,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
                   onRefresh: _isBootLoading ? _bootstrap : _loadResults,
                   child: CustomScrollView(
                     slivers: [
-                      CupertinoSliverNavigationBar(
-                        largeTitle: const Text('Бронирование'),
+                      AppSliverTitleBar(
+                        title: const Text('Бронирование'),
                         leading: Navigator.canPop(context)
                             ? CupertinoButton(
                                 padding: EdgeInsets.zero,
@@ -588,19 +588,12 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                 onPressed: () => Navigator.pop(context),
                                 child: Icon(
                                   CupertinoIcons.back,
-                                  size: 26,
+                                  size: AppSliverTitleBar.iconSize,
                                   color: label,
                                 ),
                               )
                             : null,
-                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                        // Размытие — только при прокрутке (AppGlassBarBlur).
-                        backgroundColor: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0),
-                        automaticBackgroundVisibility: false,
-                        enableBackgroundFilterBlur: blur,
-                        border: null,
+                        blur: blur,
                       ),
                       ..._buildContentSlivers(context),
                     ],

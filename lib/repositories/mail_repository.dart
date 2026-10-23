@@ -145,6 +145,11 @@ class SendMailRequest {
   final String to;
   final String subject;
   final String? body;
+
+  /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
+  /// `cc.*`/`bcc.*` как email.
+  final List<String> cc;
+  final List<String> bcc;
   final List<http.MultipartFile> attachments;
 
   const SendMailRequest({
@@ -152,6 +157,8 @@ class SendMailRequest {
     required this.to,
     required this.subject,
     this.body,
+    this.cc = const [],
+    this.bcc = const [],
     this.attachments = const [],
   });
 }
@@ -161,6 +168,11 @@ class ReplyMailRequest {
   final String to;
   final String subject;
   final String? body;
+
+  /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
+  /// `cc.*`/`bcc.*` как email.
+  final List<String> cc;
+  final List<String> bcc;
   final List<http.MultipartFile> attachments;
 
   const ReplyMailRequest({
@@ -168,6 +180,8 @@ class ReplyMailRequest {
     required this.to,
     required this.subject,
     this.body,
+    this.cc = const [],
+    this.bcc = const [],
     this.attachments = const [],
   });
 }
@@ -178,6 +192,11 @@ class ForwardMailRequest {
   final String to;
   final String subject;
   final String? body;
+
+  /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
+  /// `cc.*`/`bcc.*` как email.
+  final List<String> cc;
+  final List<String> bcc;
   final List<http.MultipartFile> attachments;
 
   const ForwardMailRequest({
@@ -186,6 +205,8 @@ class ForwardMailRequest {
     required this.to,
     required this.subject,
     this.body,
+    this.cc = const [],
+    this.bcc = const [],
     this.attachments = const [],
   });
 }
@@ -554,6 +575,8 @@ class MailRepository {
     if (body != null && body.isNotEmpty) {
       fields['body_text'] = body;
     }
+    fields.addAll(_multipartList('cc', request.cc));
+    fields.addAll(_multipartList('bcc', request.bcc));
     final decoded = await ApiClient.instance.postMultipart(
       MailRoutes.smtpSendUrl,
       fields: fields,
@@ -577,12 +600,20 @@ class MailRepository {
     final decoded = request.attachments.isNotEmpty
         ? await ApiClient.instance.postMultipart(
             MailRoutes.smtpReplyUrl(request.messageId),
-            fields: fields,
+            fields: {
+              ...fields,
+              ..._multipartList('cc', request.cc),
+              ..._multipartList('bcc', request.bcc),
+            },
             files: request.attachments,
           )
         : await ApiClient.instance.post(
             MailRoutes.smtpReplyUrl(request.messageId),
-            body: fields,
+            body: {
+              ...fields,
+              if (request.cc.isNotEmpty) 'cc': request.cc,
+              if (request.bcc.isNotEmpty) 'bcc': request.bcc,
+            },
           );
     _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
@@ -592,12 +623,14 @@ class MailRepository {
   /// у даты-строки из ImapService::getMessage и `->getName()` у массива
   /// `from`) — см. docs/BACKEND_MAIL_FIXES.md, п. 15. Поэтому `body` — текст
   /// пользователя вместе с цитатой исходного письма. Сервер принимает в `to`
-  /// ровно один адрес (`email`), нескольким получателям шлём по отдельности.
+  /// ровно один адрес (`email`), нескольким получателям шлём по отдельности;
+  /// копия и скрытая копия уходят только с первым письмом — иначе каждый
+  /// из них получил бы по экземпляру на каждого адресата.
   Future<void> forwardMail(ForwardMailRequest request) async {
-    final recipients = MailMessage.splitAddresses(request.to)
-        .map(_bareAddress)
-        .where((a) => a.isNotEmpty)
-        .toList();
+    final recipients = MailMessage.splitAddresses(
+      request.to,
+    ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
+    var first = true;
     for (final to in recipients.isEmpty ? [request.to] : recipients) {
       await sendMail(
         SendMailRequest(
@@ -605,11 +638,19 @@ class MailRepository {
           to: to,
           subject: request.subject,
           body: request.body,
+          cc: first ? request.cc : const [],
+          bcc: first ? request.bcc : const [],
           attachments: request.attachments,
         ),
       );
+      first = false;
     }
   }
+
+  /// Массив для multipart: `cc[0]=a@x`, `cc[1]=b@y` — Laravel собирает
+  /// из этого `cc` как массив.
+  static Map<String, String> _multipartList(String key, List<String> values) =>
+      {for (var i = 0; i < values.length; i++) '$key[$i]': values[i]};
 
   /// `Имя <a@x>` → `a@x`.
   static String _bareAddress(String address) {

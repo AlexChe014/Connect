@@ -139,6 +139,7 @@ class _BonusTransferScreenState extends State<BonusTransferScreen> {
         setState(() => _recipient = user);
         Navigator.of(context).pop();
       },
+      onUserDeselected: (_) => setState(() => _recipient = null),
     );
   }
 

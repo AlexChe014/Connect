@@ -18,6 +18,7 @@ import '../utils/connector_url_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/app_title_bar.dart';
 import 'booking_detail_sheet.dart';
 import 'bookings_screen.dart';
 import 'create_booking_screen.dart';
@@ -505,7 +506,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -523,16 +523,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 bottom: false,
                 child: CustomScrollView(
                   slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Календарь'),
-                      // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                      // Размытие — только при прокрутке (AppGlassBarBlur).
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      enableBackgroundFilterBlur: blur,
-                      border: null,
+                    AppSliverTitleBar(
+                      title: const Text('Календарь'),
+                      blur: blur,
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -547,7 +540,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             onPressed: _quickBook,
                             child: Icon(
                               CupertinoIcons.add_circled,
-                              size: 26,
+                              size: AppSliverTitleBar.iconSize,
                               color: label,
                             ),
                           ),

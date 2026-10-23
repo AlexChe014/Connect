@@ -20,6 +20,7 @@ import 'package:flutter/material.dart'
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:connect/widgets/app_icon_badge.dart';
+import '../widgets/app_title_bar.dart';
 
 final _urlRegExp = RegExp(r'(https?:\/\/[^\s<>"\)]+)', caseSensitive: false);
 
@@ -778,11 +779,11 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
 
     return CupertinoPageScaffold(
       backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Настройки чата'),
+      navigationBar: AppTitleBar(
+        title: const Text('Настройки чата'),
         // Полупрозрачная — содержимое уходит под размытую шапку.
         backgroundColor: groupedBg.withValues(alpha: 0.7),
-        border: null,
+        blur: true,
       ),
       child: DefaultTextStyle(
         style: TextStyle(

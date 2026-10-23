@@ -15,6 +15,7 @@ import 'package:connect/screens/bonus_program_screen.dart';
 import 'package:connect/screens/bonus_roulette_screen.dart';
 import 'package:connect/screens/bonus_shop_screen.dart';
 import 'package:connect/screens/booking_detail_sheet.dart';
+import 'package:connect/screens/calendar_screen.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/documents_list_screen.dart';
 import 'package:connect/screens/documents_signing_screen.dart';
@@ -350,7 +351,13 @@ class AppNavigationService {
       navigator.pushNamedAndRemoveUntil(
         '/home',
         (route) => false,
-        arguments: {'initialIndex': HomeTabs.calendar},
+        arguments: {'initialIndex': HomeTabs.more},
+      ),
+    );
+    // Календаря больше нет в нижнем меню — открываем его поверх «Ещё».
+    unawaited(
+      navigator.push<void>(
+        CupertinoPageRoute<void>(builder: (_) => const CalendarScreen()),
       ),
     );
 

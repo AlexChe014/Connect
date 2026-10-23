@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../config/app_theme.dart';
 import 'app_glass.dart';
 import 'app_icon_badge.dart';
+import 'app_title_bar.dart';
 
 /// Общие детали форм раздела «Календарь» (бронь, встреча, видеовстреча)
 /// в стиле Liquid Glass: прозрачная шапка над цветным пятном, поля на
@@ -47,21 +48,20 @@ class BookingGlassScaffold extends StatelessWidget {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: groupedBg,
-        navigationBar: CupertinoNavigationBar(
-          middle: Text(title),
-          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-          // Размытие — только при прокрутке (AppGlassBarBlur).
-          backgroundColor: groupedBg.withValues(alpha: 0),
-          automaticBackgroundVisibility: false,
-          enableBackgroundFilterBlur: blur,
-          border: null,
+        navigationBar: AppTitleBar(
+          title: Text(title),
+          blur: blur,
           leading: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
             // maybePop, а не pop: экран может перехватить выход через PopScope
             // (письмо с несохранённым текстом спрашивает подтверждение).
             onPressed: canPop ? () => Navigator.maybePop(context) : null,
-            child: Icon(CupertinoIcons.back, size: 26, color: label),
+            child: Icon(
+              CupertinoIcons.back,
+              size: AppTitleBar.iconSize,
+              color: label,
+            ),
           ),
           trailing: trailing,
         ),

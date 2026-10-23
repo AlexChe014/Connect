@@ -8,8 +8,8 @@ import 'package:flutter_quill/flutter_quill.dart'
     show FlutterQuillLocalizations;
 import 'package:intl/date_symbol_data_local.dart';
 
-import 'screens/calendar_screen.dart';
 import 'screens/chats_list_screen.dart';
+import 'screens/connector_screen.dart';
 import 'screens/news_feed_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/mail_screen.dart';
@@ -292,7 +292,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     if (mounted) setState(() {});
   }
 
-  /// Бейдж «Ещё» — документы на согласование. Сервисы с подписью
+  /// Бейдж «Чаты» и строка «Согласование» в них. Сервисы с подписью
   /// [DocumentPendingService] сам пропускает без свежего кода доступа.
   Future<void> _refreshPendingDocuments() async {
     try {
@@ -335,6 +335,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   int get _unreadChatsCount =>
       ChatService.instance.chats.fold<int>(0, (sum, c) => sum + c.unreadCount);
 
+  int get _chatsTabCount =>
+      _unreadChatsCount + DocumentPendingService.instance.totalCount;
+
   Widget _buildTab(int index) {
     return switch (index) {
       HomeTabs.news => NewsFeedScreen(
@@ -342,8 +345,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         openNewsId: widget.openNewsId,
       ),
       HomeTabs.chats => const ChatsListScreen(),
+      HomeTabs.calls => const ConnectorScreen(),
       HomeTabs.mail => const MailScreen(isTab: true),
-      HomeTabs.calendar => const CalendarScreen(),
       _ => const MoreScreen(),
     };
   }
@@ -398,9 +401,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             icon: CupertinoIcons.chat_bubble_2,
             activeIcon: CupertinoIcons.chat_bubble_2_fill,
             label: 'Чаты',
-            badge: _unreadChatsCount > 0
-                ? Chat.unreadBadgeLabel(_unreadChatsCount)
+            // Документы на согласование считаем здесь, а не в «Ещё»:
+            // строка «Согласование» закреплена в чатах, и один и тот же
+            // документ не должен подсвечивать две вкладки сразу.
+            badge: _chatsTabCount > 0
+                ? Chat.unreadBadgeLabel(_chatsTabCount)
                 : null,
+          ),
+          const _TabItem(
+            icon: CupertinoIcons.phone,
+            activeIcon: CupertinoIcons.phone_fill,
+            label: 'Звонки',
           ),
           _TabItem(
             icon: CupertinoIcons.envelope,
@@ -408,19 +419,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             label: 'Почта',
             badge: _countBadge(MailUnreadService.instance.unreadCount),
           ),
-          const _TabItem(
-            icon: CupertinoIcons.calendar,
-            activeIcon: CupertinoIcons.calendar,
-            label: 'Календарь',
-          ),
           _TabItem(
             icon: CupertinoIcons.ellipsis_circle,
             activeIcon: CupertinoIcons.ellipsis_circle_fill,
             label: 'Ещё',
-            badge: _countBadge(
-              DocumentPendingService.instance.totalCount +
-                  SurveyPendingService.instance.pendingCount,
-            ),
+            badge: _countBadge(SurveyPendingService.instance.pendingCount),
           ),
         ],
       ),

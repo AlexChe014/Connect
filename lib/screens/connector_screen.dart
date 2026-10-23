@@ -2,10 +2,12 @@ import 'package:flutter/cupertino.dart';
 
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
+import '../widgets/app_title_bar.dart';
 import 'create_instant_meeting_screen.dart';
 import 'schedule_video_meeting_screen.dart';
 
-/// Раздел «Коннектор»: мгновенная встреча или планирование в календаре.
+/// Вкладка «Звонки» (раздел Коннектора): мгновенная встреча или
+/// планирование в календаре.
 class ConnectorScreen extends StatefulWidget {
   const ConnectorScreen({super.key, this.showAppBar = true});
 
@@ -58,7 +60,6 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
   @override
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -73,26 +74,9 @@ class _ConnectorScreenState extends State<ConnectorScreen> {
               const AppGlassGlow(),
               CustomScrollView(
                 slivers: [
-                  CupertinoSliverNavigationBar(
-                    largeTitle: const Text('Коннектор'),
-                    leading: CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      onPressed: () => Navigator.maybePop(context),
-                      child: Icon(
-                        CupertinoIcons.back,
-                        size: 26,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
-                    ),
-                    // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                    // Размытие — только при прокрутке (AppGlassBarBlur).
-                    backgroundColor: CupertinoColors.systemGroupedBackground
-                        .resolveFrom(context)
-                        .withValues(alpha: 0),
-                    automaticBackgroundVisibility: false,
-                    enableBackgroundFilterBlur: blur,
-                    border: null,
+                  AppSliverTitleBar(
+                    title: const Text('Звонки'),
+                    blur: blur,
                   ),
                   const SliverToBoxAdapter(
                     child: AppGlassSectionLabel(

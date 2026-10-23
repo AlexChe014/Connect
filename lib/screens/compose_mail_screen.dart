@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_message.dart';
@@ -13,7 +14,10 @@ import '../widgets/app_icon_badge.dart';
 import '../widgets/booking_glass_form.dart';
 import '../utils/file_size_format.dart';
 import '../widgets/mail_glass.dart';
+import '../widgets/mail_recipient_field.dart';
 import '../widgets/staff_user_picker_sheet.dart';
+import 'mail_provider_picker_screen.dart';
+import 'mail_screen.dart';
 
 class _PendingAttachment {
   final String filename;
@@ -29,9 +33,13 @@ class ComposeMailScreen extends StatefulWidget {
     this.replyTo,
     this.replyAll = false,
     this.forwardOf,
+    this.initialTo = const [],
   });
 
   final MailConnection connection;
+
+  /// Готовые получатели нового письма — например, из карточки сотрудника.
+  final List<MailRecipient> initialTo;
   final MailMessage? replyTo;
 
   /// Ответить всем: в «Кому» — отправитель и все получатели исходного
@@ -39,12 +47,80 @@ class ComposeMailScreen extends StatefulWidget {
   final bool replyAll;
   final MailMessage? forwardOf;
 
+  /// Новое письмо из приложения (кнопка «Почта» в карточке сотрудника):
+  /// отправляем с ящика по умолчанию. Если ящик не подключён — предлагаем
+  /// подключить его или открыть стороннюю почту.
+  static Future<void> openNew(
+    BuildContext context, {
+    required MailRecipient to,
+  }) async {
+    List<MailConnection> connections;
+    try {
+      connections = await MailScreen.loadConnectionsForCurrentUser();
+    } catch (_) {
+      connections = const [];
+    }
+    if (!context.mounted) return;
+    final sendable = connections.where((c) => c.canSend && c.isActive);
+    final connection =
+        sendable.where((c) => c.isDefault).firstOrNull ?? sendable.firstOrNull;
+    if (connection != null) {
+      await Navigator.of(context).push<bool>(
+        CupertinoPageRoute<bool>(
+          builder: (context) =>
+              ComposeMailScreen(connection: connection, initialTo: [to]),
+        ),
+      );
+      return;
+    }
+
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Почта не подключена'),
+        message: const Text(
+          'Подключите свой почтовый ящик, чтобы писать письма из приложения.',
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context, 'connect'),
+            child: const Text('Подключить ящик'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'external'),
+            child: const Text('Открыть другую почту'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (!context.mounted) return;
+    if (choice == 'external') {
+      await launchUrl(Uri(scheme: 'mailto', path: to.email));
+    } else if (choice == 'connect') {
+      final created = await Navigator.of(context).push<bool>(
+        CupertinoPageRoute<bool>(
+          builder: (context) => const MailProviderPickerScreen(),
+        ),
+      );
+      if (created == true && context.mounted) {
+        await openNew(context, to: to);
+      }
+    }
+  }
+
   @override
   State<ComposeMailScreen> createState() => _ComposeMailScreenState();
 }
 
 class _ComposeMailScreenState extends State<ComposeMailScreen> {
-  final _toController = TextEditingController();
+  late final MailRecipientController _toController;
+  late final MailRecipientController _ccController;
+  final _bccController = MailRecipientController();
   final _subjectController = TextEditingController();
   final _bodyController = TextEditingController();
 
@@ -53,11 +129,19 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   final List<_PendingAttachment> _attachments = [];
   bool _isSending = false;
   String? _toError;
+  String? _copyError;
   String? _subjectError;
+
+  /// Поля «Копия» и «Скрытая» свёрнуты в одну строку, пока их не открыли —
+  /// как в «Почте» iOS.
+  bool _showCopyFields = false;
 
   /// Значения полей при открытии — чтобы понять, есть ли что терять
   /// при выходе без отправки.
   late final String _initialTo;
+  late final String _initialCc;
+
+  static const _labelWidth = 72.0;
   late final String _initialSubject;
   late final String _initialBody;
 
@@ -76,15 +160,14 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       mailEmailOnly(address).toLowerCase() == _ownEmail();
 
   /// Кому отвечать. На своё письмо (из «Отправленных») — его получателям,
-  /// а не себе; «всем» — отправителю, получателям и копии без себя.
+  /// а не себе; «всем» — отправителю и получателям без себя (копия исходного
+  /// письма уходит в поле «Копия», см. [_replyAllCopy]).
   List<String> _replyRecipients(MailMessage message) {
     final from = message.from.trim();
     final to = MailMessage.splitAddresses(message.to);
-    final cc = MailMessage.splitAddresses(message.cc);
     final candidates = <String>[
       if (!_isOwn(from) && from.isNotEmpty) from,
       if (widget.replyAll || _isOwn(from)) ...to,
-      if (widget.replyAll) ...cc,
     ];
     final seen = <String>{};
     final result = candidates
@@ -94,14 +177,34 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     return result.isEmpty && from.isNotEmpty ? [from] : result;
   }
 
+  /// «Ответить всем»: копия исходного письма без себя и без тех, кто уже
+  /// в «Кому».
+  List<String> _replyAllCopy(MailMessage message, List<String> to) {
+    final seen = to.map((a) => mailEmailOnly(a).toLowerCase()).toSet();
+    return MailMessage.splitAddresses(message.cc)
+        .where((a) => !_isOwn(a))
+        .where((a) => seen.add(mailEmailOnly(a).toLowerCase()))
+        .toList();
+  }
+
   @override
   void initState() {
     super.initState();
     final replyTo = widget.replyTo;
     final forwardOf = widget.forwardOf;
     final dateFormat = DateFormat('d MMMM yyyy, HH:mm', 'ru_RU');
+    final to = replyTo != null ? _replyRecipients(replyTo) : const <String>[];
+    _toController = MailRecipientController([
+      ...widget.initialTo,
+      ...to.map(MailRecipient.parse),
+    ]);
+    _ccController = MailRecipientController(
+      replyTo != null && widget.replyAll
+          ? _replyAllCopy(replyTo, to).map(MailRecipient.parse)
+          : const [],
+    );
+    _showCopyFields = _ccController.recipients.isNotEmpty;
     if (replyTo != null) {
-      _toController.text = _replyRecipients(replyTo).join(', ');
       _subjectController.text = _replyPrefix.hasMatch(replyTo.subject)
           ? replyTo.subject
           : 'Re: ${replyTo.subject}';
@@ -127,14 +230,17 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           '${(forwardOf.to ?? '').isEmpty ? '' : 'Кому: ${forwardOf.to}\n'}'
           '\n$quote';
     }
-    _initialTo = _toController.text;
+    _initialTo = _toController.snapshot;
+    _initialCc = _ccController.snapshot;
     _initialSubject = _subjectController.text;
     _initialBody = _bodyController.text;
   }
 
   bool get _hasUnsavedChanges =>
       _attachments.isNotEmpty ||
-      _toController.text != _initialTo ||
+      _toController.snapshot != _initialTo ||
+      _ccController.snapshot != _initialCc ||
+      !_bccController.isEmpty ||
       _subjectController.text != _initialSubject ||
       _bodyController.text != _initialBody;
 
@@ -171,6 +277,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   @override
   void dispose() {
     _toController.dispose();
+    _ccController.dispose();
+    _bccController.dispose();
     _subjectController.dispose();
     _bodyController.dispose();
     super.dispose();
@@ -200,62 +308,71 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     setState(() => _attachments.removeAt(index));
   }
 
-  /// Адреса из поля «Кому»: можно перечислять через запятую или «;».
-  List<String> get _recipients =>
-      MailMessage.splitAddresses(_toController.text);
+  List<MailRecipientController> get _fields => [
+    _toController,
+    _ccController,
+    _bccController,
+  ];
 
   /// Получатели одной строкой в формате списка адресов (RFC 5322) —
   /// так `to` и уходит на сервер.
-  String get _toValue => _recipients.join(', ');
+  String get _toValue => _toController.emails.join(', ');
 
-  /// Добавляет в «Кому» e-mail сотрудников из справочника компании. Шторка
-  /// не закрывается после выбора — можно отметить сразу несколько человек.
-  Future<void> _pickEmployees() async {
+  /// Добавляет в поле сотрудников из справочника компании. Шторка не
+  /// закрывается после выбора — можно отметить сразу несколько человек,
+  /// повторное нажатие снимает отметку.
+  Future<void> _pickEmployees(MailRecipientController field) async {
     FocusManager.instance.primaryFocus?.unfocus();
     await StaffUserPickerSheet.show(
       context,
-      selectedIds: const {},
+      title: 'Получатели',
+      selectedIds: field.userIds,
       validateUser: (user) {
         final email = user.email?.trim() ?? '';
         if (email.isEmpty) {
           return 'У сотрудника ${user.fullName} не указан e-mail';
         }
-        final lower = email.toLowerCase();
-        if (_recipients.any((r) => r.toLowerCase() == lower)) {
+        if (_fields.any((f) => f.contains(email))) {
           return '$email уже есть среди получателей';
         }
         return null;
       },
       onUserSelected: (user) {
-        final email = user.email!.trim();
-        setState(() {
-          _toController.text = [..._recipients, email].join(', ');
-          _toError = null;
-        });
+        field.add(MailRecipient.fromStaff(user));
+        _clearRecipientErrors();
       },
+      onUserDeselected: (user) => field.removeUser(user.id),
     );
   }
 
-  bool _validate() {
-    final recipients = _recipients;
-    final subject = _subjectController.text.trim();
-    final invalid = recipients.where((r) => !_looksLikeEmail(r)).toList();
+  void _clearRecipientErrors() {
+    if (_toError == null && _copyError == null) return;
     setState(() {
-      _toError = recipients.isEmpty
-          ? 'Введите адрес получателя'
-          : invalid.isNotEmpty
-          ? 'Некорректный email: ${invalid.join(', ')}'
-          : null;
-      _subjectError = subject.isEmpty ? 'Введите тему письма' : null;
+      _toError = null;
+      _copyError = null;
     });
-    return _toError == null && _subjectError == null;
   }
 
-  /// Принимает и `Имя <a@b.ru>`, и просто `a@b.ru`.
-  static bool _looksLikeEmail(String value) {
-    final match = RegExp(r'<([^>]+)>').firstMatch(value);
-    final address = (match?.group(1) ?? value).trim();
-    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(address);
+  bool _validate() {
+    final invalid = _toController.commitInput();
+    final invalidCopy = [
+      ..._ccController.commitInput(),
+      ..._bccController.commitInput(),
+    ];
+    final subject = _subjectController.text.trim();
+    setState(() {
+      _toError = invalid.isNotEmpty
+          ? 'Некорректный email: ${invalid.join(', ')}'
+          : _toController.recipients.isEmpty
+          ? 'Введите адрес получателя'
+          : null;
+      _copyError = invalidCopy.isEmpty
+          ? null
+          : 'Некорректный email в копии: ${invalidCopy.join(', ')}';
+      if (_copyError != null) _showCopyFields = true;
+      _subjectError = subject.isEmpty ? 'Введите тему письма' : null;
+    });
+    return _toError == null && _copyError == null && _subjectError == null;
   }
 
   Future<void> _send() async {
@@ -276,6 +393,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             ),
           )
           .toList();
+      final cc = _ccController.emails;
+      final bcc = _bccController.emails;
       // /mail/smtp/reply/{email} и /mail/smtp/forward/{email} отправляют с
       // ящика исходного письма и связывают ответ с перепиской.
       if (replyTo != null) {
@@ -285,6 +404,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             to: _toValue,
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
+            cc: cc,
+            bcc: bcc,
             attachments: files,
           ),
         );
@@ -296,6 +417,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             to: _toValue,
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
+            cc: cc,
+            bcc: bcc,
             attachments: files,
           ),
         );
@@ -306,6 +429,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
             to: _toValue,
             subject: _subjectController.text.trim(),
             body: _bodyController.text,
+            cc: cc,
+            bcc: bcc,
             attachments: files,
           ),
         );
@@ -327,7 +452,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
   Widget _fieldLabel(BuildContext context, String text) {
     return SizedBox(
-      width: 58,
+      width: _labelWidth,
       child: Text(
         text,
         style: TextStyle(
@@ -344,8 +469,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     color: CupertinoColors.separator.resolveFrom(context),
   );
 
-  /// «Кому», «От» и «Тема» — одной стеклянной карточкой с подписями
-  /// слева, как в «Почте» iOS.
+  /// «Кому», «Копия», «От» и «Тема» — одной стеклянной карточкой с
+  /// подписями слева, как в «Почте» iOS.
   Widget _buildHeaderFields(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
     final fieldStyle = TextStyle(fontSize: 15, color: label);
@@ -357,41 +482,66 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         shadows: AppGlass.controlShadow,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 6, 4),
-              child: Row(
-                children: [
-                  _fieldLabel(context, 'Кому:'),
-                  Expanded(
-                    child: CupertinoTextField(
-                      controller: _toController,
-                      placeholder: 'email@example.com',
-                      keyboardType: TextInputType.emailAddress,
-                      autocorrect: false,
-                      minLines: 1,
-                      maxLines: 4,
-                      enabled: !_isSending,
-                      decoration: const BoxDecoration(),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      style: fieldStyle,
-                      onChanged: (_) {
-                        if (_toError != null) setState(() => _toError = null);
-                      },
-                    ),
-                  ),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(40, 40),
-                    onPressed: _isSending ? null : _pickEmployees,
-                    child: Icon(
-                      CupertinoIcons.person_crop_circle_badge_plus,
-                      size: 24,
-                      color: label,
-                    ),
-                  ),
-                ],
-              ),
+            MailRecipientField(
+              label: 'Кому:',
+              controller: _toController,
+              labelWidth: _labelWidth,
+              placeholder: 'Имя или email',
+              enabled: !_isSending,
+              onChanged: _clearRecipientErrors,
+              onPickEmployees: () => _pickEmployees(_toController),
             ),
+            _separator(context),
+            if (_showCopyFields) ...[
+              MailRecipientField(
+                label: 'Копия:',
+                controller: _ccController,
+                labelWidth: _labelWidth,
+                enabled: !_isSending,
+                onChanged: _clearRecipientErrors,
+                onPickEmployees: () => _pickEmployees(_ccController),
+              ),
+              _separator(context),
+              MailRecipientField(
+                label: 'Скрытая:',
+                controller: _bccController,
+                labelWidth: _labelWidth,
+                enabled: !_isSending,
+                onChanged: _clearRecipientErrors,
+                onPickEmployees: () => _pickEmployees(_bccController),
+              ),
+            ] else
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _isSending
+                    ? null
+                    : () => setState(() => _showCopyFields = true),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Копия, скрытая копия',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 15,
+                        color: CupertinoColors.tertiaryLabel.resolveFrom(
+                          context,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             _separator(context),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -517,7 +667,7 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final error = _toError ?? _subjectError;
+    final error = _toError ?? _copyError ?? _subjectError;
     return PopScope(
       canPop: _isSending || !_hasUnsavedChanges,
       onPopInvokedWithResult: (didPop, result) {

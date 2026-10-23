@@ -12,6 +12,7 @@ class StaffUser {
   final String? phone;
   final DateTime? birthday;
   final String? department;
+  final String? company;
   final String? position;
   final String? workStatus;
   final List<String> roles;
@@ -27,6 +28,7 @@ class StaffUser {
     this.phone,
     this.birthday,
     this.department,
+    this.company,
     this.position,
     this.workStatus,
     this.roles = const [],
@@ -107,6 +109,12 @@ class StaffUser {
     );
 
     final department = _departmentLabel(json);
+    final company = _namedEntityLabel(json, [
+      'company',
+      'company_name',
+      'organization',
+      'organization_name',
+    ]);
     final position = _namedEntityLabel(json, [
       'position',
       'job_title',
@@ -137,6 +145,7 @@ class StaffUser {
       phone: phone,
       birthday: birthday,
       department: department,
+      company: company,
       position: position,
       workStatus: workStatus,
       roles: roles,

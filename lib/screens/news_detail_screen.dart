@@ -15,6 +15,7 @@ import '../utils/app_feedback.dart';
 import '../utils/html_text_utils.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/chat_message_text.dart';
 import '../widgets/news_glass.dart';
@@ -511,19 +512,18 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: groupedBg,
-        navigationBar: CupertinoNavigationBar(
-          middle: const Text('Новость'),
-          // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-          // Размытие — только при прокрутке (AppGlassBarBlur).
-          backgroundColor: groupedBg.withValues(alpha: 0),
-          automaticBackgroundVisibility: false,
-          enableBackgroundFilterBlur: blur,
-          border: null,
+        navigationBar: AppTitleBar(
+          title: const Text('Новость'),
+          blur: blur,
           leading: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: Size.zero,
             onPressed: () => Navigator.maybePop(context),
-            child: Icon(CupertinoIcons.back, size: 26, color: label),
+            child: Icon(
+              CupertinoIcons.back,
+              size: AppTitleBar.iconSize,
+              color: label,
+            ),
           ),
           trailing: _canDeletePost()
               ? CupertinoButton(
@@ -534,7 +534,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                       ? const CupertinoActivityIndicator()
                       : Icon(
                           CupertinoIcons.ellipsis_circle,
-                          size: 26,
+                          size: AppTitleBar.iconSize,
                           color: label,
                         ),
                 )

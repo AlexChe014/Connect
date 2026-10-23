@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 import '../models/mail/mail_connection.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
+import '../services/mail_sync_notice_service.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/booking_glass_form.dart';
@@ -198,6 +199,32 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
     return null;
   }
 
+  /// Письма с сервера подтягиваются не сразу — предупреждаем, чтобы пустой
+  /// список во входящих не выглядел как ошибка.
+  Future<void> _showSyncNotice() {
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Ящик подключён'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            'Письма будут загружены в ближайшее время. Загрузка идёт '
+            'постепенно и может занять до нескольких часов, если в ящике '
+            'много писем.',
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     final error = _validate();
     setState(() => _errorText = error);
@@ -238,7 +265,7 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
           ),
         );
       } else {
-        await MailRepository.instance.createConnection(
+        final created = await MailRepository.instance.createConnection(
           CreateMailConnectionRequest(
             service: _provider.serviceValue,
             email: _isCorporate
@@ -261,6 +288,12 @@ class _MailConnectionFormScreenState extends State<MailConnectionFormScreen> {
             canSend: _isCorporate ? true : null,
           ),
         );
+        final email = created.email.isNotEmpty
+            ? created.email
+            : (_isCorporate ? _emailController.text : _loginController.text);
+        await MailSyncNoticeService.instance.markConnected(email);
+        if (!mounted) return;
+        await _showSyncNotice();
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);

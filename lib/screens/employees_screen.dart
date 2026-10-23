@@ -10,6 +10,7 @@ import '../services/chat_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/employee_row.dart';
 import 'employee_detail_screen.dart';
 
@@ -254,7 +255,6 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -279,26 +279,19 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   child: CustomScrollView(
                     controller: _scrollController,
                     slivers: [
-                      CupertinoSliverNavigationBar(
-                        largeTitle: const Text('Сотрудники'),
+                      AppSliverTitleBar(
+                        title: const Text('Сотрудники'),
                         leading: CupertinoButton(
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
                           onPressed: () => Navigator.pop(context),
                           child: Icon(
                             CupertinoIcons.back,
-                            size: 26,
+                            size: AppSliverTitleBar.iconSize,
                             color: label,
                           ),
                         ),
-                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                        // Размытие — только при прокрутке (AppGlassBarBlur).
-                        backgroundColor: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0),
-                        automaticBackgroundVisibility: false,
-                        enableBackgroundFilterBlur: blur,
-                        border: null,
+                        blur: blur,
                       ),
                       SliverToBoxAdapter(
                         child: Padding(

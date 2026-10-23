@@ -15,7 +15,7 @@ import '../widgets/app_icon_badge.dart';
 import '../widgets/chat_avatar.dart';
 import 'bonus_program_screen.dart';
 import 'bookings_screen.dart';
-import 'connector_screen.dart';
+import 'calendar_screen.dart';
 import 'disk_screen.dart';
 import 'documents_signing_screen.dart';
 import 'employees_screen.dart';
@@ -224,10 +224,10 @@ class _MoreScreenState extends State<MoreScreen> {
                     child: AppGlassSection(
                       children: [
                         _item(
-                          icon: CupertinoIcons.video_camera_solid,
-                          color: CupertinoColors.systemGreen,
-                          title: 'Коннектор',
-                          onTap: () => _open(const ConnectorScreen()),
+                          icon: CupertinoIcons.calendar,
+                          color: CupertinoColors.systemRed,
+                          title: 'Календарь',
+                          onTap: () => _open(const CalendarScreen()),
                         ),
                         _item(
                           icon: CupertinoIcons.doc_text_fill,

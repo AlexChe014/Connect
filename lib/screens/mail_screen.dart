@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/employee_row.dart';
 import 'mail_connection_form_screen.dart';
 import 'mail_inbox_screen.dart';
@@ -208,7 +209,6 @@ class _MailScreenState extends State<MailScreen> {
     }
     final label = CupertinoColors.label.resolveFrom(context);
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -228,16 +228,9 @@ class _MailScreenState extends State<MailScreen> {
                   onRefresh: _loadConnections,
                   child: CustomScrollView(
                     slivers: [
-                      CupertinoSliverNavigationBar(
-                        largeTitle: const Text('Почта'),
-                        // Прозрачная: под шапкой остаётся системное размытие, а
-                        // заливка дала бы на цветном пятне видимую границу.
-                        backgroundColor: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0),
-                        automaticBackgroundVisibility: false,
-                        enableBackgroundFilterBlur: blur,
-                        border: null,
+                      AppSliverTitleBar(
+                        title: const Text('Почта'),
+                        blur: blur,
                         leading: widget.isTab
                             ? null
                             : CupertinoButton(
@@ -246,7 +239,7 @@ class _MailScreenState extends State<MailScreen> {
                                 onPressed: () => Navigator.maybePop(context),
                                 child: Icon(
                                   CupertinoIcons.back,
-                                  size: 26,
+                                  size: AppSliverTitleBar.iconSize,
                                   color: label,
                                 ),
                               ),
@@ -256,7 +249,7 @@ class _MailScreenState extends State<MailScreen> {
                           onPressed: _openCreateConnection,
                           child: Icon(
                             CupertinoIcons.add_circled,
-                            size: 26,
+                            size: AppSliverTitleBar.iconSize,
                             color: label,
                           ),
                         ),

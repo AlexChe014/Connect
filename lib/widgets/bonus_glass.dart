@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show RefreshIndicator;
 import 'package:intl/intl.dart';
 
 import 'app_glass.dart';
+import 'app_title_bar.dart';
 import 'confetti_overlay.dart';
 
 /// Общие детали раздела «Бонусная программа» в стиле Liquid Glass:
@@ -25,8 +26,8 @@ String pointsWord(int points) {
 }
 
 /// Экран раздела: прозрачная шапка с кнопкой «назад», под ней
-/// `CustomScrollView` из [slivers]. С [largeTitle] — крупный заголовок,
-/// как у корневых экранов «Ещё».
+/// `CustomScrollView` из [slivers]. С [largeTitle] — заголовок в строке
+/// с кнопками ([AppSliverTitleBar]), как у корневых экранов «Ещё».
 class BonusGlassScaffold extends StatelessWidget {
   const BonusGlassScaffold({
     super.key,
@@ -70,24 +71,24 @@ class BonusGlassScaffold extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: Size.zero,
       onPressed: canPop ? () => Navigator.maybePop(context) : null,
-      child: Icon(CupertinoIcons.back, size: 26, color: label),
+      child: Icon(
+        CupertinoIcons.back,
+        size: AppSliverTitleBar.iconSize,
+        color: label,
+      ),
     );
 
     return AppGlassBarBlur(
-      threshold: largeTitle ? AppGlassBarBlur.largeTitleThreshold : 0,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: groupedBg,
         navigationBar: largeTitle
             ? null
-            : CupertinoNavigationBar(
-                middle: Text(title),
+            : AppTitleBar(
+                title: Text(title),
                 leading: back,
                 trailing: trailing,
                 backgroundColor: barBg,
-                automaticBackgroundVisibility: false,
-                // Размытие — только при прокрутке (AppGlassBarBlur).
-                enableBackgroundFilterBlur: blur,
-                border: null,
+                blur: blur,
               ),
         // Без Material-предка любой Text, не переопределивший все поля стиля
         // явно, откатывается на debug-заглушку MaterialApp.
@@ -121,14 +122,11 @@ class BonusGlassScaffold extends StatelessWidget {
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     slivers: [
                       if (largeTitle)
-                        CupertinoSliverNavigationBar(
-                          largeTitle: Text(title),
+                        AppSliverTitleBar(
+                          title: Text(title),
                           leading: back,
                           trailing: trailing,
-                          backgroundColor: barBg,
-                          automaticBackgroundVisibility: false,
-                          enableBackgroundFilterBlur: blur,
-                          border: null,
+                          blur: blur,
                         )
                       else
                         SliverToBoxAdapter(

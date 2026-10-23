@@ -10,6 +10,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/employee_row.dart';
 import 'create_booking_screen.dart';
 import 'employee_detail_screen.dart';
@@ -290,7 +291,6 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
   @override
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -310,26 +310,19 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
                   onRefresh: _load,
                   child: CustomScrollView(
                     slivers: [
-                      CupertinoSliverNavigationBar(
-                        largeTitle: const Text('Избранное'),
+                      AppSliverTitleBar(
+                        title: const Text('Избранное'),
                         leading: CupertinoButton(
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
                           onPressed: () => Navigator.maybePop(context),
                           child: Icon(
                             CupertinoIcons.back,
-                            size: 26,
+                            size: AppSliverTitleBar.iconSize,
                             color: CupertinoColors.label.resolveFrom(context),
                           ),
                         ),
-                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                        // Размытие — только при прокрутке (AppGlassBarBlur).
-                        backgroundColor: CupertinoColors.systemGroupedBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0),
-                        automaticBackgroundVisibility: false,
-                        enableBackgroundFilterBlur: blur,
-                        border: null,
+                        blur: blur,
                       ),
                       SliverToBoxAdapter(child: _buildSegmentedControl()),
                       _buildResultsSliver(),

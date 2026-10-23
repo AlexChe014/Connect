@@ -20,6 +20,7 @@ import '../utils/file_size_format.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import '../widgets/home_shortcut_button.dart';
 import '../widgets/mail_glass.dart';
@@ -866,7 +867,6 @@ class _DiskScreenState extends State<DiskScreen> {
     final label = CupertinoColors.label.resolveFrom(context);
     final task = _task;
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
         child: DefaultTextStyle(
@@ -931,25 +931,18 @@ class _DiskScreenState extends State<DiskScreen> {
 
   Widget _buildNavBar(BuildContext context, {required bool blur}) {
     final label = CupertinoColors.label.resolveFrom(context);
-    return CupertinoSliverNavigationBar(
-      largeTitle: Text(
-        _displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-      // Размытие — только при прокрутке (AppGlassBarBlur).
-      backgroundColor: CupertinoColors.systemGroupedBackground
-          .resolveFrom(context)
-          .withValues(alpha: 0),
-      automaticBackgroundVisibility: false,
-      enableBackgroundFilterBlur: blur,
-      border: null,
+    return AppSliverTitleBar(
+      title: Text(_displayName, maxLines: 1, overflow: TextOverflow.ellipsis),
+      blur: blur,
       leading: CupertinoButton(
         padding: EdgeInsets.zero,
         minimumSize: Size.zero,
         onPressed: () => Navigator.maybePop(context),
-        child: Icon(CupertinoIcons.back, size: 26, color: label),
+        child: Icon(
+          CupertinoIcons.back,
+          size: AppSliverTitleBar.iconSize,
+          color: label,
+        ),
       ),
       trailing: _isBusy
           ? const CupertinoActivityIndicator()
@@ -959,7 +952,7 @@ class _DiskScreenState extends State<DiskScreen> {
               onPressed: _showSortMenu,
               child: Icon(
                 CupertinoIcons.arrow_up_arrow_down,
-                size: 22,
+                size: AppSliverTitleBar.iconSize,
                 color: label,
               ),
             ),

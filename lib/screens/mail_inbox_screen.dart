@@ -14,9 +14,11 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/mail_sync_notice_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
@@ -132,6 +134,65 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       (_) => _refreshVisible(),
     );
     _loadFolders();
+    MailSyncNoticeService.instance.ensureLoaded().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Ящик подключили недавно — сервер ещё забирает письма из IMAP.
+  bool get _isInitialSync =>
+      MailSyncNoticeService.instance.isSyncing(_connection.email);
+
+  Widget _buildSyncNotice(BuildContext context) {
+    final blue = CupertinoColors.systemBlue.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(18),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                CupertinoIcons.arrow_down_circle_fill,
+                color: blue,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Письма загружаются. Ящик подключён недавно — письма '
+                  'появятся в ближайшее время и будут подгружаться '
+                  'постепенно.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
+                ),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(32, 24),
+                onPressed: () async {
+                  await MailSyncNoticeService.instance.dismiss(
+                    _connection.email,
+                  );
+                  if (mounted) setState(() {});
+                },
+                child: Icon(
+                  CupertinoIcons.xmark,
+                  size: 15,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -825,19 +886,12 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       padding: const EdgeInsets.only(left: 16),
       minimumSize: Size.zero,
       onPressed: onPressed,
-      child: Icon(icon, size: 26, color: label),
+      child: Icon(icon, size: AppSliverTitleBar.iconSize, color: label),
     );
 
-    return CupertinoSliverNavigationBar(
-      largeTitle: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-      // Размытие — только при прокрутке (AppGlassBarBlur).
-      backgroundColor: CupertinoColors.systemBackground
-          .resolveFrom(context)
-          .withValues(alpha: 0),
-      automaticBackgroundVisibility: false,
-      enableBackgroundFilterBlur: blur,
-      border: null,
+    return AppSliverTitleBar(
+      title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      blur: blur,
       leading: _isEditing
           ? CupertinoButton(
               padding: EdgeInsets.zero,
@@ -851,7 +905,11 @@ class _MailInboxScreenState extends State<MailInboxScreen>
               padding: EdgeInsets.zero,
               minimumSize: Size.zero,
               onPressed: () => Navigator.maybePop(context),
-              child: Icon(CupertinoIcons.back, size: 26, color: label),
+              child: Icon(
+                CupertinoIcons.back,
+                size: AppSliverTitleBar.iconSize,
+                color: label,
+              ),
             ),
       trailing: _isEditing
           ? CupertinoButton(
@@ -979,9 +1037,13 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         SliverAppEmptyState(
           icon: _searchQuery.isNotEmpty
               ? CupertinoIcons.search
+              : _isInitialSync
+              ? CupertinoIcons.arrow_down_circle
               : CupertinoIcons.tray,
           message: _searchQuery.isNotEmpty
               ? 'Ничего не найдено'
+              : _isInitialSync
+              ? 'Письма ещё загружаются\nОни появятся здесь в ближайшее время'
               : _selectedFolder != null
               ? 'В папке «${_selectedFolder!.displayName}» нет писем'
               : 'Нет писем',
@@ -1057,7 +1119,6 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         !_connection.isActive || (_connection.lastError ?? '').isNotEmpty;
 
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemBackground,
         child: DefaultTextStyle(
@@ -1102,7 +1163,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                             ),
                           ),
                         if (hasConnectionError)
-                          SliverToBoxAdapter(child: _buildErrorBanner(context)),
+                          SliverToBoxAdapter(child: _buildErrorBanner(context))
+                        else if (_isInitialSync && !_isSearchMode)
+                          SliverToBoxAdapter(child: _buildSyncNotice(context)),
                         ..._buildListSlivers(context),
                         // Последнее письмо не должно прятаться под панелью.
                         SliverToBoxAdapter(

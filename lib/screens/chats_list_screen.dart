@@ -4,7 +4,10 @@ import 'package:connect/config/app_theme.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
 import 'package:connect/screens/create_group_chat_screen.dart';
+import 'package:connect/screens/documents_signing_screen.dart';
+import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/document_pending_service.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
@@ -14,6 +17,7 @@ import 'package:connect/widgets/swipe_actions_row.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../widgets/app_title_bar.dart';
 
 enum _ChatFilter { all, direct, group, favorite }
 
@@ -75,15 +79,25 @@ class ChatsListScreen extends StatefulWidget {
 
 class _ChatsListScreenState extends State<ChatsListScreen> {
   final _chat = ChatService.instance;
+  final _pending = DocumentPendingService.instance;
   final _searchCtrl = TextEditingController();
   final _swipeGroup = SwipeGroupController();
   String _query = '';
   _ChatFilter _filter = _ChatFilter.all;
+  bool _approvalsPinned = ChatPreferencesService.instance.approvalsPinned;
 
   @override
   void initState() {
     super.initState();
     _chat.addListener(_onChats);
+    _pending.addListener(_onChats);
+    ChatPreferencesService.instance.ensureLoaded().then((_) {
+      if (!mounted) return;
+      setState(
+        () =>
+            _approvalsPinned = ChatPreferencesService.instance.approvalsPinned,
+      );
+    });
     _chat.init();
     _chat.loadContacts();
   }
@@ -91,6 +105,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   @override
   void dispose() {
     _chat.removeListener(_onChats);
+    _pending.removeListener(_onChats);
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -116,6 +131,95 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       });
     }
     return list.toList(growable: false);
+  }
+
+  /// Строка «Согласование» — только у тех, кто вводил личный код 1С. Это
+  /// не чат с сообщениями: она показывает очередь документов и сама ничего
+  /// не присылает, поэтому push о документе приходит один.
+  bool get _showApprovals {
+    if (!_pending.hasServices || _filter != _ChatFilter.all) return false;
+    final q = _query.trim().toLowerCase();
+    return q.isEmpty || 'согласование'.contains(q);
+  }
+
+  /// Где в [chats] стоит строка «Согласование»: закреплённая — первой,
+  /// откреплённая — после закреплённых чатов, по дате свежего документа.
+  /// В 1С у документа только день, поэтому чаты того же дня выше.
+  int _approvalsIndex(List<Chat> chats) {
+    if (_approvalsPinned) return 0;
+    final latest = _pending.latestDocumentAt;
+    for (var i = 0; i < chats.length; i++) {
+      final c = chats[i];
+      if (c.isPinned || latest == null) continue;
+      final t = c.lastMessageAt;
+      if (t == null || latest.isAfter(t)) return i;
+    }
+    return chats.length;
+  }
+
+  /// Строка внутри списка чатов; иначе (загрузка, пусто) — над заглушкой.
+  bool get _approvalsInList =>
+      _chat.chats.isNotEmpty && _filteredChats.isNotEmpty;
+
+  Future<void> _toggleApprovalsPin() async {
+    final next = !_approvalsPinned;
+    setState(() => _approvalsPinned = next);
+    await ChatPreferencesService.instance.setApprovalsPinned(next);
+  }
+
+  Future<void> _showApprovalsActions() async {
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Согласование'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, 'pin'),
+            child: Text(_approvalsPinned ? 'Открепить' : 'Закрепить'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (choice == 'pin' && mounted) await _toggleApprovalsPin();
+  }
+
+  Widget _buildApprovalsRow() {
+    final latest = _pending.latestDocumentAt;
+    return SwipeActionsRow(
+      id: '__approvals__',
+      groupController: _swipeGroup,
+      borderRadius: BorderRadius.zero,
+      actions: [
+        SwipeAction(
+          icon: _approvalsPinned
+              ? CupertinoIcons.pin_slash
+              : CupertinoIcons.pin_fill,
+          label: _approvalsPinned ? 'Открепить' : 'Закрепить',
+          color: CupertinoColors.systemOrange,
+          onTap: _toggleApprovalsPin,
+        ),
+      ],
+      child: _ApprovalsRow(
+        pending: _pending,
+        isPinned: _approvalsPinned,
+        time: latest != null ? _formatLastMessageTime(latest) : '',
+        onTap: _openApprovals,
+        onLongPress: _showApprovalsActions,
+      ),
+    );
+  }
+
+  Future<void> _openApprovals() async {
+    await Navigator.of(context).push<void>(
+      CupertinoPageRoute<void>(
+        builder: (context) => const DocumentsSigningScreen(),
+      ),
+    );
+    if (mounted) unawaited(_pending.refreshKnownServices());
   }
 
   String _emptyMessage() {
@@ -206,20 +310,25 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       );
     }
 
+    final approvalsAt = _showApprovals ? _approvalsIndex(filtered) : null;
     return SliverPadding(
       padding: EdgeInsets.only(
         top: 4,
         bottom: MediaQuery.paddingOf(context).bottom + 16,
       ),
       sliver: SliverList.separated(
-        itemCount: filtered.length,
+        itemCount: filtered.length + (approvalsAt != null ? 1 : 0),
         separatorBuilder: (context, index) => Container(
           height: 0.5,
           margin: const EdgeInsets.only(left: 76),
           color: CupertinoColors.separator.resolveFrom(context),
         ),
         itemBuilder: (context, index) {
-          final c = filtered[index];
+          if (index == approvalsAt) return _buildApprovalsRow();
+          final c =
+              filtered[approvalsAt != null && index > approvalsAt
+                  ? index - 1
+                  : index];
           return SwipeActionsRow(
             id: c.id,
             groupController: _swipeGroup,
@@ -245,7 +354,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                 icon: c.isFavorite
                     ? CupertinoIcons.star_slash
                     : CupertinoIcons.star_fill,
-                label: c.isFavorite ? 'Убрать из избранного' : 'Избранное',
+                label: c.isFavorite ? 'Убрать' : 'Избранное',
                 color: CupertinoColors.systemYellow,
                 onTap: () => _chat.toggleFavorite(c.id),
               ),
@@ -317,7 +426,6 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
   @override
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
-      threshold: AppGlassBarBlur.largeTitleThreshold,
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemBackground,
         child: DefaultTextStyle(
@@ -337,16 +445,9 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                   onRefresh: _chat.refreshChats,
                   child: CustomScrollView(
                     slivers: [
-                      CupertinoSliverNavigationBar(
-                        largeTitle: const Text('Чаты'),
-                        // Прозрачная: заливка дала бы на цветном пятне видимую границу.
-                        // Размытие — только при прокрутке (AppGlassBarBlur).
-                        backgroundColor: CupertinoColors.systemBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0),
-                        automaticBackgroundVisibility: false,
-                        enableBackgroundFilterBlur: blur,
-                        border: null,
+                      AppSliverTitleBar(
+                        title: const Text('Чаты'),
+                        blur: blur,
                         trailing: CupertinoButton(
                           padding: EdgeInsets.zero,
                           minimumSize: Size.zero,
@@ -355,12 +456,27 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                             // Карандаш, как в «Сообщениях»: новый чат — это
                             // «написать», а не «добавить».
                             CupertinoIcons.square_pencil,
-                            size: 26,
+                            size: AppSliverTitleBar.iconSize,
                             color: CupertinoColors.label.resolveFrom(context),
                           ),
                         ),
                       ),
                       SliverToBoxAdapter(child: _buildSearchAndFilters()),
+                      if (_showApprovals && !_approvalsInList)
+                        SliverToBoxAdapter(
+                          child: Column(
+                            children: [
+                              _buildApprovalsRow(),
+                              Container(
+                                height: 0.5,
+                                margin: const EdgeInsets.only(left: 76),
+                                color: CupertinoColors.separator.resolveFrom(
+                                  context,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       _buildSliverBody(),
                     ],
                   ),
@@ -967,6 +1083,147 @@ class _ChatRow extends StatelessWidget {
                   ],
                 ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _documentsPlural(int n) {
+  final mod10 = n % 10;
+  final mod100 = n % 100;
+  if (mod10 == 1 && mod100 != 11) return 'документ ждёт';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return 'документа ждут';
+  }
+  return 'документов ждут';
+}
+
+/// Системная строка «Согласование» в стиле [_ChatRow]: вместо последнего
+/// сообщения — сколько документов ждут решения, бейдж — их число, время —
+/// дата самого свежего из них.
+class _ApprovalsRow extends StatelessWidget {
+  const _ApprovalsRow({
+    required this.pending,
+    required this.isPinned,
+    required this.time,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  final DocumentPendingService pending;
+  final bool isPinned;
+  final String time;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  String get _subtitle {
+    final count = pending.totalCount;
+    if (count > 0) return '$count ${_documentsPlural(count)} вашего решения';
+    if (pending.loading.isNotEmpty) return 'Проверяем документы…';
+    // Сервисы с подписью без свежего кода не опрашиваются, ошибки — тоже
+    // не повод писать «нет документов».
+    if (pending.counts.isEmpty || pending.errors.isNotEmpty) {
+      return 'Откройте, чтобы проверить документы';
+    }
+    return 'Нет документов на согласование';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = pending.totalCount;
+    final tertiary = CupertinoColors.tertiaryLabel.resolveFrom(context);
+    return Semantics(
+      button: true,
+      label: count > 0 ? 'Согласование, документов: $count' : 'Согласование',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: CupertinoColors.systemOrange.resolveFrom(context),
+                ),
+                child: const Icon(
+                  CupertinoIcons.doc_text_fill,
+                  size: 24,
+                  color: CupertinoColors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Согласование',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isPinned)
+                        Icon(
+                          CupertinoIcons.pin_fill,
+                          size: 12,
+                          color: tertiary,
+                        ),
+                      if (isPinned && time.isNotEmpty) const SizedBox(width: 4),
+                      if (time.isNotEmpty)
+                        Text(
+                          time,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: tertiary,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (count > 0) ...[
+                    const SizedBox(height: 4),
+                    _UnreadBadge(count: count),
+                  ],
+                ],
+              ),
             ],
           ),
         ),

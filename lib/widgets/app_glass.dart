@@ -160,15 +160,10 @@ class AppGlassGlow extends StatelessWidget {
 /// шов, а в покое под шапкой и размывать нечего.
 ///
 /// Оборачивает весь `CupertinoPageScaffold`: прокрутка из его тела
-/// всплывает сюда, а флаг уходит в `enableBackgroundFilterBlur` шапки.
-/// Для крупного заголовка [threshold] — высота, которую он съедает при
-/// сворачивании: до этого контент под шапку ещё не заходит.
+/// всплывает сюда, а флаг уходит в `blur` шапки ([AppSliverTitleBar]) или
+/// `enableBackgroundFilterBlur` у `CupertinoNavigationBar`.
 class AppGlassBarBlur extends StatefulWidget {
   const AppGlassBarBlur({super.key, required this.builder, this.threshold = 0});
-
-  /// Высота, на которую сворачивается крупный заголовок
-  /// `CupertinoSliverNavigationBar`.
-  static const largeTitleThreshold = 52.0;
 
   final Widget Function(BuildContext context, bool blur) builder;
   final double threshold;
@@ -315,7 +310,8 @@ class AppGlassActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = CupertinoColors.label.resolveFrom(context);
+    // Единственный акцент — фирменный синий, как кнопки действий в Контактах.
+    const color = AppColors.primary;
     return Opacity(
       opacity: onTap == null ? 0.5 : 1,
       child: AppGlass(
