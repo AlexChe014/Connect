@@ -36,6 +36,7 @@ import 'services/survey_pending_service.dart';
 import 'services/theme_mode_service.dart';
 import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
+import 'widgets/call_overlay.dart';
 import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
 
@@ -170,6 +171,10 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
                     ),
                     const HomeShortcutButton(),
                     const VpnBanner(),
+                    // Экран звонка — над всем, в т.ч. над Navigator: при
+                    // сворачивании в окошко звонок продолжается, пока
+                    // пользователь ходит по приложению.
+                    const CallOverlayHost(),
                   ],
                 ),
               ),

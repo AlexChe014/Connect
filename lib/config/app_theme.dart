@@ -60,6 +60,14 @@ abstract final class AppColors {
     color: Color(0x99FFFFFF),
     darkColor: Color(0x661C1C1E),
   );
+
+  /// Заливка плавающей панели там, где размытие выключено
+  /// ([AppGlass.blurSupported]): без него контент под панелью не должен
+  /// читаться сквозь неё.
+  static const glassSolidFill = CupertinoDynamicColor.withBrightness(
+    color: Color(0xF5FFFFFF),
+    darkColor: Color(0xF22C2C2E),
+  );
   static const glassBorder = CupertinoDynamicColor.withBrightness(
     color: Color(0xB3FFFFFF),
     darkColor: Color(0x26FFFFFF),
@@ -106,9 +114,13 @@ abstract final class AppColors {
     Color(0xFF858994),
   ];
 
-  /// HTML-письма свёрстаны под белый фон — подложка WebView остаётся
-  /// белой и в тёмной теме, иначе чёрный текст письма не читается.
-  static const mailBodyBackground = Color(0xFFFFFFFF);
+  /// Подложка HTML-письма. Письма свёрстаны под белый фон: в тёмной теме
+  /// их цвета инвертируются, и белый становится этим графитом. Если
+  /// пользователь вернул письму исходные цвета — подложка снова белая.
+  static const mailBodyBackground = CupertinoDynamicColor.withBrightness(
+    color: Color(0xFFFFFFFF),
+    darkColor: Color(0xFF1C1E22),
+  );
 
   static const double radius = 12;
   static const double buttonRadius = 12;
@@ -161,6 +173,45 @@ abstract final class AppFestiveColors {
 }
 
 /// Единая шкала отступов, чтобы padding/gap не подбирались на глаз по экрану.
+/// Экран звонка. Тёмный в обеих темах, как звонок в iOS: видео и аватар
+/// читаются лучше на тёмном, а светлый экран слепит в темноте у уха.
+abstract final class AppCallColors {
+  AppCallColors._();
+
+  // Фон: глубокий синий сверху в графит снизу.
+  static const backgroundTop = Color(0xFF14213D);
+  static const backgroundBottom = Color(0xFF0B0E14);
+
+  // Мягкие пятна света за аватаром — стеклу кнопок есть что размывать.
+  static const glowBlue = Color(0xFF1677FF);
+  static const glowViolet = Color(0xFF6E5BFF);
+  static const glowCyan = Color(0xFF22B8CF);
+
+  /// Подложка карточки с видео, пока Jitsi не отрисовал первый кадр.
+  static const stage = Color(0xFF040404);
+
+  // Круглые стеклянные кнопки.
+  static const buttonFill = Color(0x2EFFFFFF);
+  static const buttonBorder = Color(0x33FFFFFF);
+
+  /// Включённое состояние («микрофон выключен», «динамик») — светлая
+  /// кнопка с тёмной иконкой, как в Телефоне iOS.
+  static const buttonActiveFill = Color(0xF2FFFFFF);
+  static const buttonActiveIcon = Color(0xFF111827);
+  static const hangUp = Color(0xFFFF3B30);
+  static const accept = Color(0xFF34C759);
+
+  static const textPrimary = Colors.white;
+  static const textSecondary = Color(0xB3FFFFFF);
+  static const textTertiary = Color(0x80FFFFFF);
+
+  /// Значок «микрофон выключен» у собеседника.
+  static const mutedBadge = Color(0xFFFF453A);
+
+  /// Тень свёрнутого окошка звонка над приложением.
+  static const miniShadow = Color(0x66000000);
+}
+
 abstract final class AppSpacing {
   AppSpacing._();
 

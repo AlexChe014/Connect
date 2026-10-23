@@ -16,9 +16,14 @@ class MailBodyContent extends StatefulWidget {
     super.key,
     required this.message,
     this.loadAttachment,
+    this.keepOriginalColors = false,
   });
 
   final MailMessage message;
+
+  /// В тёмной теме не перекрашивать письмо, а показать его как есть — на
+  /// белой подложке (если автоматическая инверсия испортила вёрстку).
+  final bool keepOriginalColors;
 
   /// Скачивает вложение — для встроенных картинок (`<img src="cid:...">`:
   /// логотипы, подписи Outlook). Без него такие картинки остаются битыми.
@@ -79,6 +84,230 @@ class _MailBodyContentState extends State<MailBodyContent> {
   /// оставляли под собой пустое место, пока WebView грузится.
   static const _initialHeight = 120.0;
 
+  /// Тёмные цвета письма. Не инверсия целиком (белый текст на цветной
+  /// плашке от неё становился тёмным), а перекраска каждого элемента по
+  /// его итоговым цветам: светлые фоны темнеют до подложки с сохранением
+  /// оттенка, насыщенные плашки лишь чуть темнеют, тёмный текст светлеет,
+  /// а затем текст подтягивается до контраста 4.5 со своим новым фоном.
+  /// Картинки и блоки с фоновой картинкой (баннеры) не трогаем. Исходные
+  /// inline-стили запоминаются — `mailSetDark(false)` возвращает письмо
+  /// как было, без перезагрузки.
+  static const _darkColorsScript = r'''
+<script>
+(function () {
+  var saved = null;
+
+  function parse(c) {
+    var m = /rgba?\(([^)]+)\)/.exec(c || '');
+    if (!m) return null;
+    var p = m[1].split(/[\s,\/]+/).filter(Boolean).map(parseFloat);
+    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+  }
+  function css(c) {
+    return 'rgb(' + Math.round(c.r) + ',' + Math.round(c.g) + ',' +
+        Math.round(c.b) + ')';
+  }
+  function toHsl(c) {
+    var r = c.r / 255, g = c.g / 255, b = c.b / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var l = (max + min) / 2, h = 0, s = 0, d = max - min;
+    if (d > 0) {
+      s = d / (1 - Math.abs(2 * l - 1));
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+    }
+    return { h: h, s: s, l: l };
+  }
+  function fromHsl(h, s, l) {
+    var c = (1 - Math.abs(2 * l - 1)) * s;
+    var x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+    var r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255, a: 1 };
+  }
+  function lum(c) {
+    function ch(v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    }
+    return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b);
+  }
+  function contrast(a, b) {
+    var x = lum(a), y = lum(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+
+  // Фон и рамки: белый становится подложкой, светлые — чуть светлее неё
+  // (сохраняется рисунок письма), насыщенные средние лишь темнеют.
+  function darkBg(c) {
+    var hsl = toHsl(c);
+    if (hsl.l >= 0.75) {
+      var l = 0.11 + (1 - hsl.l) * 0.6;
+      if (hsl.s < 0.1) {
+        var base = window.mailDarkBase, d = (l - 0.11) * 255;
+        return { r: base[0] + d, g: base[1] + d, b: base[2] + d, a: 1 };
+      }
+      return fromHsl(hsl.h, Math.min(hsl.s, 0.5), l);
+    }
+    if (hsl.l > 0.3) return fromHsl(hsl.h, hsl.s, hsl.l * 0.65);
+    return null;
+  }
+  function lightText(c, bg) {
+    var hsl = toHsl(c);
+    var l = hsl.l < 0.5 ? 0.9 - hsl.l * 0.6 : hsl.l;
+    var out = fromHsl(hsl.h, hsl.s, l);
+    // Светлый текст остаётся светлее фона: белый заголовок на цветной
+    // плашке не должен превращаться в тёмный.
+    var up = lum(out) >= lum(bg);
+    for (var i = 0; i < 20 && contrast(out, bg) < 4.5; i++) {
+      l = up ? Math.min(1, l + 0.05) : Math.max(0, l - 0.05);
+      out = fromHsl(hsl.h, hsl.s, l);
+    }
+    return out;
+  }
+
+  var SKIP = { IMG: 1, VIDEO: 1, PICTURE: 1, CANVAS: 1, SCRIPT: 1,
+      STYLE: 1, BR: 1, svg: 1 };
+  var SIDES = ['top', 'right', 'bottom', 'left'];
+
+  function set(el, prop, value) {
+    saved.push([el, prop, el.style.getPropertyValue(prop),
+        el.style.getPropertyPriority(prop)]);
+    el.style.setProperty(prop, value, 'important');
+  }
+
+  function apply() {
+    saved = [];
+    var body = document.body;
+    var els = [body].concat(Array.prototype.slice.call(
+        body.querySelectorAll('*')));
+    // Сначала читаем все исходные цвета, потом пишем: иначе дети
+    // унаследовали бы уже перекрашенный цвет родителя.
+    var items = [];
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (SKIP[el.tagName] || (el.closest && el.closest('svg'))) continue;
+      var cs = getComputedStyle(el);
+      var borders = [];
+      for (var k = 0; k < 4; k++) {
+        var side = SIDES[k];
+        if (cs.getPropertyValue('border-' + side + '-style') !== 'none' &&
+            parseFloat(cs.getPropertyValue('border-' + side + '-width')) > 0) {
+          borders.push([side, parse(cs.getPropertyValue(
+              'border-' + side + '-color'))]);
+        }
+      }
+      items.push({ el: el, color: parse(cs.color),
+          bg: parse(cs.backgroundColor),
+          image: cs.backgroundImage && cs.backgroundImage !== 'none',
+          borders: borders });
+    }
+    var base = window.mailDarkBase;
+    var pageBg = { r: base[0], g: base[1], b: base[2], a: 1 };
+    var effBg = new Map(), onImage = new Map();
+    for (var j = 0; j < items.length; j++) {
+      var it = items[j], parent = it.el.parentElement;
+      var image = it.image || onImage.get(parent) === true;
+      onImage.set(it.el, image);
+      if (image) continue;
+      var bg = effBg.get(parent) || pageBg;
+      if (it.bg && it.bg.a > 0) {
+        var nb = darkBg(it.bg);
+        if (nb) set(it.el, 'background-color', css(nb));
+        if (it.bg.a > 0.5) bg = nb || it.bg;
+      }
+      effBg.set(it.el, bg);
+      if (it.color) set(it.el, 'color', css(lightText(it.color, bg)));
+      for (var b = 0; b < it.borders.length; b++) {
+        var bc = it.borders[b][1];
+        var nbc = bc && bc.a > 0 && darkBg(bc);
+        if (nbc) set(it.el, 'border-' + it.borders[b][0] + '-color', css(nbc));
+      }
+    }
+  }
+
+  function restore() {
+    for (var i = saved.length - 1; i >= 0; i--) {
+      var s = saved[i];
+      if (s[2]) s[0].style.setProperty(s[1], s[2], s[3]);
+      else s[0].style.removeProperty(s[1]);
+    }
+    saved = null;
+  }
+
+  window.mailSetDark = function (on) {
+    if (!document.body) return;
+    document.documentElement.classList.toggle('mail-dark', on);
+    if (on && !saved) apply();
+    else if (!on && saved) restore();
+  };
+})();
+</script>
+''';
+
+  /// Письмо под ширину экрана. Рассылки свёрстаны фиксированными
+  /// таблицами (обычно 600px) и вылезали за правый край. Сначала всё, что
+  /// шире экрана, делаем резиновым: таблицы — 100%, ячейки и блоки — по
+  /// содержимому. Если письмо всё равно не влезает (колонки фиксированной
+  /// ширины, широкие картинки в ряд) — уменьшаем его целиком, как Apple
+  /// Mail, а высоту для WebView пересчитываем с этим масштабом.
+  static const _fitScript = r'''
+<script>
+(function () {
+  function overflow() {
+    return document.documentElement.scrollWidth -
+        document.documentElement.clientWidth;
+  }
+  function fit() {
+    var body = document.body;
+    if (!body || window.mailFitScale) return;
+    var vw = document.documentElement.clientWidth;
+    if (overflow() <= 1) return;
+    var wide = [];
+    var els = body.querySelectorAll('*');
+    for (var i = 0; i < els.length; i++) {
+      var tag = els[i].tagName;
+      if (tag === 'IMG' || tag === 'VIDEO' || tag === 'CANVAS') continue;
+      if (els[i].offsetWidth > vw) wide.push(els[i]);
+    }
+    for (var j = 0; j < wide.length; j++) {
+      var el = wide[j], st = el.style;
+      st.setProperty('min-width', '0', 'important');
+      if (el.tagName === 'TABLE') {
+        st.setProperty('width', '100%', 'important');
+      } else {
+        st.setProperty('width', 'auto', 'important');
+        st.setProperty('max-width', '100%', 'important');
+      }
+      if (el.hasAttribute('width')) el.removeAttribute('width');
+    }
+    var extra = overflow();
+    if (extra > 1) {
+      var width = vw + extra;
+      var scale = vw / width;
+      body.style.setProperty('overflow', 'visible', 'important');
+      body.style.setProperty('width', width + 'px', 'important');
+      body.style.transformOrigin = '0 0';
+      body.style.transform = 'scale(' + scale + ')';
+      document.documentElement.style.overflowX = 'hidden';
+      window.mailFitScale = scale;
+    }
+    if (window.mailReportHeight) window.mailReportHeight();
+  }
+  fit();
+  window.addEventListener('load', fit);
+})();
+</script>
+''';
+
   WebViewController? _controller;
   double _contentHeight = _initialHeight;
 
@@ -99,15 +328,27 @@ class _MailBodyContentState extends State<MailBodyContent> {
   /// подменить письмо, если его успели заменить.
   int _loadToken = 0;
 
+  /// Письмо показывается в тёмных цветах: тёмная тема и пользователь не
+  /// попросил исходные цвета. Контроллер создаётся в
+  /// didChangeDependencies — тему в initState ещё не прочитать.
+  bool? _darkColors;
+
+  Color get _background => _darkColors == true
+      ? AppColors.mailBodyBackground.darkColor
+      : AppColors.mailBodyBackground.color;
+
   @override
-  void initState() {
-    super.initState();
-    _initController();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncDarkColors();
   }
 
   @override
   void didUpdateWidget(covariant MailBodyContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.keepOriginalColors != widget.keepOriginalColors) {
+      _syncDarkColors();
+    }
     // Экран сначала может показать письмо из списка, а потом подменить его
     // полной версией с сервера — без перезагрузки WebView остался бы старый
     // (или пустой) HTML.
@@ -117,6 +358,38 @@ class _MailBodyContentState extends State<MailBodyContent> {
       _isRendered = false;
       _initController();
     }
+  }
+
+  /// Переключение цветов не перезагружает письмо: на открытой странице
+  /// включается или выключается стиль инверсии.
+  void _syncDarkColors() {
+    final dark =
+        CupertinoTheme.brightnessOf(context) == Brightness.dark &&
+        !widget.keepOriginalColors;
+    if (dark == _darkColors) return;
+    final isFirst = _darkColors == null;
+    _darkColors = dark;
+    if (isFirst) {
+      _initController();
+      return;
+    }
+    final controller = _controller;
+    if (controller == null) return;
+    unawaited(controller.setBackgroundColor(_background));
+    unawaited(_applyDarkColors(controller, _pageFinished));
+  }
+
+  Future<void> _applyDarkColors(
+    WebViewController controller,
+    Completer<void> pageFinished,
+  ) async {
+    await pageFinished.future;
+    if (!mounted || controller != _controller) return;
+    try {
+      await controller.runJavaScript(
+        'window.mailSetDark(${_darkColors == true});',
+      );
+    } catch (_) {}
   }
 
   void _initController() {
@@ -129,7 +402,7 @@ class _MailBodyContentState extends State<MailBodyContent> {
     final pageFinished = _pageFinished;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(AppColors.mailBodyBackground)
+      ..setBackgroundColor(_background)
       ..addJavaScriptChannel(_heightChannel, onMessageReceived: _onHeight)
       ..addJavaScriptChannel(_selectionChannel, onMessageReceived: _onSelection)
       ..setNavigationDelegate(
@@ -251,12 +524,24 @@ class _MailBodyContentState extends State<MailBodyContent> {
   /// картинок/таблиц, перенос длинных ссылок, плюс скрипт, сообщающий
   /// высоту содержимого — WebView растягивается по ней и скроллится вместе
   /// со страницей, а не отдельным окном внутри.
+  ///
+  ///
+  /// Тёмные цвета — см. [_darkColorsScript]. Свои dark-стили писем
+  /// (`prefers-color-scheme: dark`) отключены: WebView включает их по
+  /// системной теме, а не по теме приложения, и перекраска сделала бы
+  /// уже тёмное письмо обратно светлым.
   String _prepareHtml(String html) {
-    const head = '''
+    final base = AppColors.mailBodyBackground.darkColor.toARGB32();
+    final baseRgb = [(base >> 16) & 0xFF, (base >> 8) & 0xFF, base & 0xFF];
+    final head =
+        '''
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="only light">
 <style>
+  :root { color-scheme: only light !important; }
   html { background: #ffffff; -webkit-text-size-adjust: 100%; }
+  html.mail-dark { background: rgb(${baseRgb.join(',')}) !important; }
   body { margin: 0 !important; padding: 12px !important; color: #000000;
          font-family: -apple-system, Roboto, Arial, sans-serif;
          word-wrap: break-word; overflow-wrap: anywhere; overflow-x: auto;
@@ -267,20 +552,24 @@ class _MailBodyContentState extends State<MailBodyContent> {
   pre { white-space: pre-wrap; }
 </style>
 ''';
-    const script = '''
+    const baseScript = '''
 <script>
 (function () {
   var last = 0;
   function report() {
     var b = document.body;
     if (!b) return;
-    var h = Math.ceil(Math.max(b.scrollHeight, b.offsetHeight,
+    // mailFitScale — письмо уменьшено под ширину экрана (см. mailFit),
+    // а scrollHeight/offsetHeight считаются без этого уменьшения.
+    var z = window.mailFitScale || 1;
+    var h = Math.ceil(Math.max(b.scrollHeight * z, b.offsetHeight * z,
         b.getBoundingClientRect().height));
     if (h > 0 && Math.abs(h - last) >= 1) {
       last = h;
       MailBodyHeight.postMessage(String(h));
     }
   }
+  window.mailReportHeight = report;
   window.addEventListener('load', report);
   document.addEventListener('DOMContentLoaded', report);
   var imgs = document.images;
@@ -313,8 +602,15 @@ class _MailBodyContentState extends State<MailBodyContent> {
 })();
 </script>
 ''';
+    final script =
+        '$baseScript$_fitScript<script>window.mailDarkBase = [${baseRgb.join(',')}];'
+        '</script>$_darkColorsScript'
+        '<script>window.mailSetDark(${_darkColors == true});</script>';
 
-    var doc = html.trim();
+    var doc = html.trim().replaceAll(
+      RegExp(r'prefers-color-scheme\s*:\s*dark', caseSensitive: false),
+      'prefers-color-scheme: none',
+    );
     // Свой viewport письма (часто width=600 или вовсе фиксированный)
     // заменяем нашим — иначе на телефоне оно не масштабируется.
     doc = doc.replaceAll(
@@ -395,10 +691,10 @@ class _MailBodyContentState extends State<MailBodyContent> {
                 ),
               ),
               if (!_isRendered)
-                const Positioned.fill(
+                Positioned.fill(
                   child: ColoredBox(
-                    color: AppColors.mailBodyBackground,
-                    child: Center(child: CupertinoActivityIndicator()),
+                    color: _background,
+                    child: const Center(child: CupertinoActivityIndicator()),
                   ),
                 ),
             ],

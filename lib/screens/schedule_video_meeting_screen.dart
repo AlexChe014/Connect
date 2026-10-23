@@ -116,8 +116,16 @@ class _ScheduleVideoMeetingScreenState
         ),
       );
 
+      // Ссылку в чат шлём только если встреча начинается прямо сейчас
+      // (ближайший слот). Для будущих встреч участников оповещает сервер,
+      // а рассылка по личным чатам лишь задерживает создание.
+      final startsNow = !_startDateTime.isAfter(
+        DateTime.now().add(
+          const Duration(minutes: BookingTimeUtils.slotMinutes),
+        ),
+      );
       var invited = 0;
-      if (_participants.isNotEmpty) {
+      if (startsNow && _participants.isNotEmpty) {
         invited = await ConnectorInviteService.instance.inviteUsers(
           session: session,
           users: _participants,

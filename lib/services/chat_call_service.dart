@@ -273,7 +273,14 @@ class ChatCallService extends ChangeNotifier {
         _liveDirectCallId = callId;
         _appendCallStartedMessage(chat.id, callId);
         _startHeartbeat(callId);
-        await openConnectorSession(session, callId: callId, endWhenLeave: true);
+        final peer = peerFor(chat.id);
+        await openConnectorSession(
+          session,
+          callId: callId,
+          endWhenLeave: true,
+          title: peer.title,
+          avatarUrl: peer.avatarUrl,
+        );
         return;
       }
 
@@ -333,14 +340,30 @@ class ChatCallService extends ChangeNotifier {
     if (call.isDirect) {
       _liveDirectCallId = call.callId;
       _startHeartbeat(call.callId);
+      final peer = peerFor(call.chatId);
       await openConnectorSession(
         session,
         callId: call.callId,
         endWhenLeave: true,
+        title: peer.title,
+        avatarUrl: peer.avatarUrl,
       );
     } else {
       await openConnectorSession(session);
     }
+  }
+
+  /// Имя и аватар собеседника 1:1 для экрана звонка — из списка чатов.
+  ({String? title, String? avatarUrl}) peerFor(String? chatId) {
+    final chat = chatId == null ? null : ChatService.instance.chatById(chatId);
+    if (chat == null) return (title: null, avatarUrl: null);
+    final peerAvatar = chat.peerAvatarUrl?.trim();
+    return (
+      title: chat.title,
+      avatarUrl: peerAvatar != null && peerAvatar.isNotEmpty
+          ? peerAvatar
+          : chat.avatarUrl,
+    );
   }
 
   /// Локальный выход из Jitsi: завершить звонок на бэкенде для обеих сторон.

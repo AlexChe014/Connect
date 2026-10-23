@@ -70,6 +70,14 @@ String _formatLastMessageTime(DateTime d) {
       : formatted;
 }
 
+/// В 1С у документа только день, без времени: сегодняшний показываем
+/// «сегодня», а не «00:00».
+String _formatDocumentDay(DateTime d) {
+  final local = d.toLocal();
+  if (_dateOnly(local) == _dateOnly(DateTime.now())) return 'сегодня';
+  return _formatLastMessageTime(local);
+}
+
 class ChatsListScreen extends StatefulWidget {
   const ChatsListScreen({super.key});
 
@@ -206,7 +214,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
       child: _ApprovalsRow(
         pending: _pending,
         isPinned: _approvalsPinned,
-        time: latest != null ? _formatLastMessageTime(latest) : '',
+        time: latest != null ? _formatDocumentDay(latest) : '',
         onTap: _openApprovals,
         onLongPress: _showApprovalsActions,
       ),
@@ -1133,6 +1141,7 @@ class _ApprovalsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = pending.totalCount;
     final tertiary = CupertinoColors.tertiaryLabel.resolveFrom(context);
+    final accent = CupertinoColors.systemOrange.resolveFrom(context);
     return Semantics(
       button: true,
       label: count > 0 ? 'Согласование, документов: $count' : 'Согласование',
@@ -1150,14 +1159,21 @@ class _ApprovalsRow extends StatelessWidget {
                 width: 48,
                 height: 48,
                 alignment: Alignment.center,
+                // Мягкая подложка того же оттенка и яркая иконка — как
+                // системные бейджи iOS, не перетягивает внимание с чатов.
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: CupertinoColors.systemOrange.resolveFrom(context),
+                  color: accent.withValues(
+                    alpha: CupertinoTheme.brightnessOf(context) ==
+                            Brightness.dark
+                        ? 0.24
+                        : 0.15,
+                  ),
                 ),
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.doc_text_fill,
                   size: 24,
-                  color: CupertinoColors.white,
+                  color: accent,
                 ),
               ),
               const SizedBox(width: 12),

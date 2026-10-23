@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:connect/config/app_theme.dart';
 import 'package:connect/config/call_config.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/widgets/call_glass.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 
 /// Результат экрана «Звоним…».
 enum OutgoingCallOutcome {
@@ -201,73 +204,86 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _cancel();
       },
-      child: CupertinoPageScaffold(
-        backgroundColor: CupertinoColors.black,
-        child: SafeArea(
-          // SafeArea/CupertinoPageScaffold дают этому экрану loose-констрейнты
-          // по ширине (в отличие от ListView/CustomScrollView на других экранах),
-          // поэтому Column без принудительной ширины схлопывается по самому
-          // широкому ребёнку (обычно по имени) вместо всей ширины экрана —
-          // и все «центрированные» элементы визуально уезжают влево.
-          child: SizedBox(
-            width: double.infinity,
-            child: Column(
-              children: [
-                const Spacer(flex: 2),
-                AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (context, child) {
-                    final scale = 1 + _pulseController.value * 0.12;
-                    return Transform.scale(scale: scale, child: child);
-                  },
-                  child: ChatAvatar(chat: chat, radius: 56),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  chat.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: CupertinoColors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _statusOverride ?? (_ringing ? 'Идут гудки…' : 'Вызов…'),
-                  style: TextStyle(
-                    color: CupertinoColors.white.withValues(alpha: 0.7),
-                    fontSize: 16,
-                  ),
-                ),
-                const Spacer(flex: 3),
-                CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: _statusOverride == null ? _cancel : null,
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.destructiveRed.resolveFrom(
-                        context,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,
+        child: CupertinoPageScaffold(
+          backgroundColor: AppCallColors.backgroundBottom,
+          // Тот же фон и кнопки, что у экрана разговора (CallOverlayHost):
+          // после ответа экран не «перескакивает» в другой стиль.
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const CallBackground(),
+              SafeArea(
+                // SafeArea/CupertinoPageScaffold дают этому экрану loose-
+                // констрейнты по ширине, поэтому Column без принудительной
+                // ширины схлопывается по самому широкому ребёнку (обычно по
+                // имени), и «центрированные» элементы уезжают влево.
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Column(
+                    children: [
+                      const Spacer(flex: 2),
+                      AnimatedBuilder(
+                        animation: _pulseController,
+                        builder: (context, child) {
+                          final scale = 1 + _pulseController.value * 0.08;
+                          return Transform.scale(scale: scale, child: child);
+                        },
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppCallColors.glowBlue.withValues(
+                                  alpha: 0.45,
+                                ),
+                                blurRadius: 52,
+                              ),
+                            ],
+                          ),
+                          child: ChatAvatar(chat: chat, radius: 64),
+                        ),
                       ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.phone_down_fill,
-                      color: CupertinoColors.white,
-                      size: 30,
-                    ),
+                      const SizedBox(height: 44),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          chat.title,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppCallColors.textPrimary,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _statusOverride ??
+                            (_ringing ? 'Идут гудки…' : 'Вызов…'),
+                        style: const TextStyle(
+                          color: AppCallColors.textSecondary,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const Spacer(flex: 3),
+                      CallRoundButton(
+                        icon: CupertinoIcons.phone_down_fill,
+                        label: 'Отменить',
+                        destructive: true,
+                        size: 72,
+                        onPressed: _statusOverride == null ? _cancel : null,
+                      ),
+                      const SizedBox(height: 40),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Отменить',
-                  style: TextStyle(color: CupertinoColors.white, fontSize: 14),
-                ),
-                const SizedBox(height: 40),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

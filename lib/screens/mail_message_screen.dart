@@ -62,6 +62,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
   bool _isLoading = true;
   bool _isDeleting = false;
   bool _showDetails = false;
+
+  /// В тёмной теме письмо показывается в исходных цветах, на белом.
+  bool _originalMailColors = false;
   VoidCallback? _releaseHomeSuppress;
 
   @override
@@ -583,6 +586,31 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
   }
 
+  /// Солнце / луна в шапке: в тёмной теме HTML-письмо перекрашивается, а
+  /// если вёрстка от этого пострадала — его можно вернуть в исходные цвета.
+  Widget? _buildMailColorsToggle(
+    BuildContext context,
+    MailMessage? message,
+    Color color,
+  ) {
+    if (message == null ||
+        !MailBodyContent.rendersHtml(message) ||
+        CupertinoTheme.brightnessOf(context) != Brightness.dark) {
+      return null;
+    }
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: () =>
+          setState(() => _originalMailColors = !_originalMailColors),
+      child: Icon(
+        _originalMailColors ? CupertinoIcons.moon : CupertinoIcons.sun_max,
+        size: AppTitleBar.iconSize,
+        color: color,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final message = _message;
@@ -604,7 +632,9 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
               color: label,
             ),
           ),
-          trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
+          trailing: _isDeleting
+              ? const CupertinoActivityIndicator()
+              : _buildMailColorsToggle(context, message, label),
         ),
         child: DefaultTextStyle(
           style: TextStyle(
@@ -644,6 +674,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                             : const EdgeInsets.all(16),
                         child: MailBodyContent(
                           message: message,
+                          keepOriginalColors: _originalMailColors,
                           loadAttachment: (attachment) =>
                               MailRepository.instance.downloadAttachment(
                                 connectionId: widget.connection.id,

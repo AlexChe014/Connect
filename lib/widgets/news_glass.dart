@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import '../config/app_theme.dart';
 import '../models/news_item.dart';
 import '../utils/file_size_format.dart';
+import 'app_glass.dart';
 import 'app_icon_badge.dart';
 import 'app_network_image.dart';
 import 'chat_avatar.dart';
@@ -109,15 +110,26 @@ class NewsCoverImage extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-              child: AppNetworkImage(
-                url: url,
-                width: double.infinity,
-                height: double.infinity,
+            if (AppGlass.blurSupported)
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                child: AppNetworkImage(
+                  url: url,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              )
+            else
+              // Дешёвое «размытие» без фильтра: крошечная копия снимка,
+              // растянутая с билинейной фильтрацией.
+              CachedNetworkImage(
+                imageUrl: url,
+                memCacheWidth: 24,
                 fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                errorWidget: (context, url, error) => const SizedBox.shrink(),
               ),
-            ),
             const ColoredBox(color: AppColors.scrimFaint),
             AppNetworkImage(
               url: url,
@@ -146,34 +158,37 @@ class _PhotoCountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      color: AppColors.scrim,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            CupertinoIcons.photo_on_rectangle,
+            size: 13,
+            color: CupertinoColors.white,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.white,
+            ),
+          ),
+        ],
+      ),
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          color: AppColors.scrim,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                CupertinoIcons.photo_on_rectangle,
-                size: 13,
-                color: CupertinoColors.white,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: CupertinoColors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      child: AppGlass.blurSupported
+          ? BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: badge,
+            )
+          : badge,
     );
   }
 }

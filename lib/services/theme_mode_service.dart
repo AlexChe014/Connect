@@ -4,22 +4,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Выбранное оформление: светлое, тёмное или как в системе.
 ///
-/// Живёт только на устройстве. По умолчанию — светлое: тёмная тема
-/// включается вручную в «Ещё → Оформление», пока все экраны не проверены.
+/// Живёт только на устройстве. По умолчанию — как в системе; вручную
+/// меняется в «Ещё → Оформление».
 class ThemeModeService {
   ThemeModeService._();
   static final ThemeModeService instance = ThemeModeService._();
 
   static const _key = 'app_theme_mode';
 
-  final ValueNotifier<ThemeMode> mode = ValueNotifier(ThemeMode.light);
+  final ValueNotifier<ThemeMode> mode = ValueNotifier(ThemeMode.system);
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     mode.value = switch (prefs.getString(_key)) {
+      'light' => ThemeMode.light,
       'dark' => ThemeMode.dark,
-      'system' => ThemeMode.system,
-      _ => ThemeMode.light,
+      _ => ThemeMode.system,
     };
   }
 

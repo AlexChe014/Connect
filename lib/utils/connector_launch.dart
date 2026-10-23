@@ -5,15 +5,21 @@ import '../services/jitsi_meeting_service.dart';
 
 /// Открывает конференцию через Jitsi Meet SDK (Android/iOS).
 /// На прочих платформах — браузер с JWT.
+///
+/// [title]/[avatarUrl] — собеседник 1:1 для экрана звонка.
 Future<void> openConnectorSession(
   ConnectorSession session, {
   String? callId,
   bool endWhenLeave = false,
+  String? title,
+  String? avatarUrl,
 }) {
   return JitsiMeetingService.instance.joinSession(
     session,
     callId: callId,
     endWhenLeave: endWhenLeave,
+    title: title,
+    avatarUrl: avatarUrl,
     onLeave: endWhenLeave
         ? (id, {failed = false}) => ChatCallService.instance.onLocalCallLeft(
             id,

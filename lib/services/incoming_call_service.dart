@@ -12,9 +12,12 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/services/jitsi_meeting_service.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'
+    show ScaffoldMessenger, SnackBar, SnackBarAction, Text;
 import 'package:flutter/services.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
 import 'package:flutter_callkit_incoming/entities/call_event.dart';
@@ -50,6 +53,13 @@ class IncomingCallService {
   static const _dismissedPrefsKey = 'callkit_remote_dismissed';
 
   StreamSubscription<CallEvent?>? _eventSub;
+
+  /// Звонки, отклонённые как «занято», пока шёл другой разговор: после
+  /// разговора показываем «Пока вы разговаривали, вам звонили…».
+  final Map<String, ({String name, String? chatId})> _missedWhileBusy = {};
+
+  /// Последнее значение, переданное в AppDelegate (`setInCall`).
+  bool? _nativeInCall;
   bool _initialized = false;
   String? _lastVoipToken;
   String? _pendingVoipToken;
@@ -70,6 +80,12 @@ class IncomingCallService {
     _initialized = true;
 
     _eventSub = FlutterCallkitIncoming.onEvent.listen(_onCallEvent);
+
+    if (Platform.isIOS) {
+      _voipPushChannel.setMethodCallHandler(_onVoipChannelCall);
+    }
+    ChatCallService.instance.addListener(_onBusyChanged);
+    JitsiMeetingService.instance.addListener(_onBusyChanged);
 
     if (Platform.isAndroid) {
       await FlutterCallkitIncoming.onBackgroundMessage(
@@ -99,6 +115,8 @@ class IncomingCallService {
   Future<void> dispose() async {
     await _eventSub?.cancel();
     _eventSub = null;
+    ChatCallService.instance.removeListener(_onBusyChanged);
+    JitsiMeetingService.instance.removeListener(_onBusyChanged);
     _initialized = false;
   }
 
@@ -308,6 +326,7 @@ class IncomingCallService {
           'Incoming $callId while busy — auto-decline',
           name: 'callkit',
         );
+        _rememberMissed(callId, payload.callerName, payload.chatId);
         unawaited(
           ChatCallRepository.instance.declineCall(
             callId,
@@ -364,7 +383,7 @@ class IncomingCallService {
 
     switch (event) {
       case CallEventActionCallIncoming(:final callKitParams):
-        await _onIncomingShown(callKitParams.id);
+        await _onIncomingShown(callKitParams);
       case CallEventActionCallAccept(:final callKitParams):
         await _onAccept(callKitParams);
       case CallEventActionCallDecline(:final callKitParams):
@@ -386,6 +405,72 @@ class IncomingCallService {
     await _onAccept(params);
   }
 
+  /// iOS: VoIP-пуш, пришедший во время разговора (AppDelegate не показал
+  /// CallKit, см. `isInCall`). Обычно это «занято»; если разговор уже
+  /// закончился — handlePushData покажет звонок как обычно.
+  Future<void> _onVoipChannelCall(MethodCall call) async {
+    if (call.method != 'incomingWhileInCall') return;
+    final args = call.arguments;
+    if (args is! Map) return;
+    await handlePushData(
+      args.map((key, value) => MapEntry(key.toString(), value)),
+    );
+  }
+
+  void _onBusyChanged() {
+    final busy = ChatCallService.instance.isBusy;
+    if (Platform.isIOS && busy != _nativeInCall) {
+      _nativeInCall = busy;
+      unawaited(
+        _voipPushChannel.invokeMethod<void>('setInCall', busy).catchError((
+          Object e,
+        ) {
+          AppLogger.d('setInCall failed', name: 'callkit', error: e);
+        }),
+      );
+    }
+    if (!busy && _missedWhileBusy.isNotEmpty) _showMissedWhileBusy();
+  }
+
+  void _rememberMissed(String callId, String callerName, String? chatId) {
+    final name = callerName.trim();
+    _missedWhileBusy[callId] = (
+      name: name.isEmpty || name == 'Connect' ? 'коллега' : name,
+      chatId: chatId == null || chatId.isEmpty ? null : chatId,
+    );
+  }
+
+  void _showMissedWhileBusy() {
+    final context = AppNavigationService.navigatorKey.currentContext;
+    final messenger = context == null
+        ? null
+        : ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    final missed = _missedWhileBusy.values.toList();
+    _missedWhileBusy.clear();
+
+    final names = <String>{for (final m in missed) m.name}.join(', ');
+    final chats = <String>{
+      for (final m in missed)
+        if (m.chatId != null) m.chatId!,
+    };
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text('Пока вы разговаривали, вам звонили: $names'),
+          action: chats.length == 1
+              ? SnackBarAction(
+                  label: 'Открыть чат',
+                  onPressed: () =>
+                      AppNavigationService.openChatById(chats.first),
+                )
+              : null,
+        ),
+      );
+  }
+
   bool _isBusyFor(String callId) {
     final calls = ChatCallService.instance;
     if (calls.liveDirectCallId == callId) return false;
@@ -396,12 +481,18 @@ class IncomingCallService {
   /// CallKit показал входящий (и для FCM-пути, и для VoIP, показанного нативно).
   /// Сообщаем серверу «ringing» — звонящий видит «Идут гудки…», а сервер
   /// возвращает актуальный статус: устаревший VoIP-пуш сразу гасим.
-  Future<void> _onIncomingShown(String callId) async {
+  Future<void> _onIncomingShown(CallKitParams params) async {
+    final callId = params.id;
     if (callId.isEmpty) return;
     _shownCallIds.add(callId);
 
     if (_isBusyFor(callId)) {
       AppLogger.d('CallKit $callId while busy — auto-decline', name: 'callkit');
+      _rememberMissed(
+        callId,
+        params.nameCaller ?? '',
+        params.extra?['chat_id']?.toString(),
+      );
       await dismissRemotely(callId);
       unawaited(
         ChatCallRepository.instance.declineCall(
@@ -529,7 +620,14 @@ class IncomingCallService {
       final session = await ConnectorRepository.instance.join(room);
       // Не закрываем CallKit до входа в Jitsi — иначе на lock screen
       // приложение может не подняться на передний план.
-      await openConnectorSession(session, callId: callId, endWhenLeave: true);
+      final peer = ChatCallService.instance.peerFor(chatId);
+      await openConnectorSession(
+        session,
+        callId: callId,
+        endWhenLeave: true,
+        title: peer.title ?? params.nameCaller,
+        avatarUrl: peer.avatarUrl ?? params.avatar,
+      );
       await FlutterCallkitIncoming.endCall(callId);
     } catch (e) {
       AppLogger.e('Accept call: join failed', name: 'callkit', error: e);

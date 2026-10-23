@@ -379,16 +379,22 @@ class _MoreScreenState extends State<MoreScreen> {
                   left: 0,
                   right: 0,
                   height: MediaQuery.paddingOf(context).top,
-                  child: ClipRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: ColoredBox(
-                        color: AppColors.groupedBackground
-                            .resolveFrom(context)
-                            .withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ),
+                  child: AppGlass.blurSupported
+                      ? ClipRect(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                            child: ColoredBox(
+                              color: AppColors.groupedBackground
+                                  .resolveFrom(context)
+                                  .withValues(alpha: 0.7),
+                            ),
+                          ),
+                        )
+                      : ColoredBox(
+                          color: AppColors.groupedBackground
+                              .resolveFrom(context)
+                              .withValues(alpha: 0.96),
+                        ),
                 ),
             ],
           ),
