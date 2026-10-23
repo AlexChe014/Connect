@@ -452,50 +452,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     return CupertinoPageScaffold(
       backgroundColor: AppColors.groupedBackground.resolveFrom(context),
       navigationBar: CupertinoNavigationBar(
-        // Полупрозрачная — сообщения уходят под размытую шапку.
+        // Прозрачная: сообщения растворяются под ней в [_EdgeFade],
+        // а не обрезаются кромкой размытой полосы.
         backgroundColor: AppColors.groupedBackground
             .resolveFrom(context)
-            .withValues(alpha: 0.7),
+            .withValues(alpha: 0),
         automaticBackgroundVisibility: false,
+        enableBackgroundFilterBlur: false,
         border: null,
-        middle: GestureDetector(
-          onTap: _openSettings,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ChatAvatar(chat: c, radius: 16),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      c.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label.resolveFrom(context),
-                      ),
-                    ),
-                    if (c.isGroup && c.memberNames.isNotEmpty)
-                      Text(
-                        '${c.memberNames.length} участников',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: CupertinoColors.secondaryLabel.resolveFrom(
-                            context,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        middle: _ChatTitleCapsule(chat: c, onTap: _openSettings),
         trailing: startingCall
             ? const Padding(
                 padding: EdgeInsets.only(right: 8),
@@ -634,6 +599,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         ),
                 ),
               ),
+              _EdgeFade.top(
+                height:
+                    MediaQuery.paddingOf(context).top + _topOverlayHeight + 24,
+              ),
+              _EdgeFade.bottom(height: _bottomOverlayHeight + 24),
               Positioned(
                 top: MediaQuery.paddingOf(context).top,
                 left: 0,
@@ -1485,6 +1455,107 @@ class _EditBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Имя собеседника в стеклянной капсуле: отделяет шапку от ленты
+/// сообщений и подсказывает, что по нажатию откроются настройки чата.
+class _ChatTitleCapsule extends StatelessWidget {
+  const _ChatTitleCapsule({required this.chat, required this.onTap});
+
+  final Chat chat;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final online = chat.peerIsOnline;
+    final (String? status, Color statusColor) = chat.isGroup
+        ? (
+            chat.members.isEmpty ? null : '${chat.members.length} участников',
+            secondary,
+          )
+        : switch (online) {
+            true => ('в сети', AppColors.primary),
+            false => ('не в сети', secondary),
+            null => (null, secondary),
+          };
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(22),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ChatAvatar(chat: chat, radius: 16),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      chat.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ),
+                    if (status != null)
+                      Text(
+                        status,
+                        maxLines: 1,
+                        style: TextStyle(fontSize: 12, color: statusColor),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Мягкое затухание ленты у края экрана — как scroll edge effect в iOS 26:
+/// под шапкой и полем ввода сообщения растворяются в фоне.
+class _EdgeFade extends StatelessWidget {
+  const _EdgeFade.top({required this.height}) : fromTop = true;
+  const _EdgeFade.bottom({required this.height}) : fromTop = false;
+
+  final double height;
+  final bool fromTop;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = AppColors.groupedBackground.resolveFrom(context);
+    return Positioned(
+      top: fromTop ? 0 : null,
+      bottom: fromTop ? null : 0,
+      left: 0,
+      right: 0,
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
+              end: fromTop ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: [bg, bg.withValues(alpha: 0.85), bg.withValues(alpha: 0)],
+              stops: const [0, 0.6, 1],
+            ),
+          ),
+        ),
       ),
     );
   }

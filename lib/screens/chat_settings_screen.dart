@@ -773,63 +773,81 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     final selfId = _service.selfUserId;
     final groupedBg = AppColors.groupedBackground.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: AppTitleBar(
-        title: const Text('Настройки чата'),
-        // Полупрозрачная — содержимое уходит под размытую шапку.
-        backgroundColor: groupedBg.withValues(alpha: 0.7),
-        blur: true,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            // Мягкое цветное пятно за шапкой: стеклу есть что размывать,
-            // иначе на ровном сером оно выглядит как обычная карточка.
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 420,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.22),
-                      AppColors.primary.withValues(alpha: 0.08),
-                      groupedBg.withValues(alpha: 0),
-                    ],
-                  ),
+    // Заголовка нет: шапка экрана — аватар и имя. Имя появляется в панели,
+    // только когда оно само уехало под неё.
+    return AppGlassBarBlur(
+      builder: (context, blur) => AppGlassBarBlur(
+        threshold: _titleRevealOffset,
+        builder: (context, showTitle) => CupertinoPageScaffold(
+          backgroundColor: groupedBg,
+          navigationBar: AppTitleBar(
+            blur: blur,
+            // Скрытое имя не должно перехватывать нажатия на аватар,
+            // заходящий под шапку.
+            title: IgnorePointer(
+              ignoring: !showTitle,
+              child: Center(
+                child: AnimatedOpacity(
+                  opacity: showTitle ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Text(_chat.title, style: _barTitleStyle),
                 ),
               ),
             ),
-            if (_busy)
-              const Center(child: CupertinoActivityIndicator(radius: 14))
-            else
-              Builder(
-                // Свой context — под скаффолдом, где в MediaQuery уже учтена
-                // высота полупрозрачной шапки.
-                builder: (context) => ListView(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.paddingOf(context).top + 20,
-                    bottom: MediaQuery.paddingOf(context).bottom + 32,
-                  ),
-                  children: _buildContent(context, selfId),
-                ),
+            // Иконка заодно уравновешивает «назад», и имя стоит по центру.
+            trailing: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: _togglePin,
+              child: Icon(
+                _chat.isPinned ? CupertinoIcons.pin_fill : CupertinoIcons.pin,
+                color: _chat.isPinned ? AppColors.primary : null,
               ),
-          ],
+            ),
+          ),
+          child: DefaultTextStyle(
+            style: TextStyle(
+              fontFamily: '.SF Pro Text',
+              decoration: TextDecoration.none,
+              color: CupertinoColors.label.resolveFrom(context),
+              fontSize: 16,
+            ),
+            child: Stack(
+              children: [
+                const AppGlassGlow(),
+                if (_busy)
+                  const Center(child: CupertinoActivityIndicator(radius: 14))
+                else
+                  Builder(
+                    // Свой context — под скаффолдом, где в MediaQuery уже
+                    // учтена высота прозрачной шапки.
+                    builder: (context) => ListView(
+                      padding: EdgeInsets.only(
+                        // Аватар чуть заходит под пустую шапку — иначе над
+                        // ним остаётся целая строка пустого места.
+                        top: MediaQuery.paddingOf(context).top - 20,
+                        bottom: MediaQuery.paddingOf(context).bottom + 32,
+                      ),
+                      children: _buildContent(context, selfId),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+
+  /// Прокрутка, после которой имя под аватаром скрыто шапкой:
+  /// отступ −20 + аватар 88 + зазор 12 + половина строки имени.
+  static const _titleRevealOffset = 95.0;
+
+  static const _barTitleStyle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.4,
+  );
 
   List<Widget> _buildContent(BuildContext context, int? selfId) {
     return [
@@ -907,22 +925,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
           ],
         ),
       ),
-      _glassSection(
-        children: [
-          CupertinoListTile(
-            leading: _iconBadge(
-              _chat.isPinned
-                  ? CupertinoIcons.pin_slash
-                  : CupertinoIcons.pin_fill,
-              CupertinoColors.systemOrange.resolveFrom(context),
-            ),
-            title: Text(_chat.isPinned ? 'Открепить чат' : 'Закрепить чат'),
-            onTap: _togglePin,
-          ),
-        ],
-      ),
-      _buildGalleryTabs(context),
-      _buildGalleryContent(context),
+      // Закрепление — иконкой в шапке.
       if (_canManage && _chat.isGroup)
         _glassSection(
           children: [
@@ -937,6 +940,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             ),
           ],
         ),
+      _buildGalleryTabs(context),
+      _buildGalleryContent(context),
       if (_chat.isGroup && _chat.members.isNotEmpty) ...[
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),

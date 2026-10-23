@@ -8,12 +8,16 @@ class ChatMemberSummary {
     required this.displayName,
     this.avatarUrl,
     this.isAdmin = false,
+    this.isOnline,
   });
 
   final int userId;
   final String displayName;
   final String? avatarUrl;
   final bool isAdmin;
+
+  /// `is_online` пользователя; null — сервер его не прислал.
+  final bool? isOnline;
 }
 
 /// Диалог (личный или групповой).
@@ -112,6 +116,15 @@ class Chat {
   }
 
   List<String> get memberNames => members.map((m) => m.displayName).toList();
+
+  /// «В сети» ли собеседник личного чата; null — неизвестно.
+  bool? get peerIsOnline {
+    if (isGroup || peerUserId == null) return null;
+    for (final m in members) {
+      if (m.userId == peerUserId) return m.isOnline;
+    }
+    return null;
+  }
 
   static String unreadBadgeLabel(int count) {
     if (count <= 0) return '';

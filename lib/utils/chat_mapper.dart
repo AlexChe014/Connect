@@ -117,10 +117,21 @@ class ChatMapper {
           displayName: userDisplayNameFromJson(user),
           avatarUrl: MediaUrlUtils.normalizeFirstUrl(user['media']),
           isAdmin: map['is_admin'] == true,
+          isOnline: _parseOnline(user['is_online']),
         ),
       );
     }
     return out;
+  }
+
+  static bool? _parseOnline(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return switch (value?.toString().toLowerCase()) {
+      'true' || '1' => true,
+      'false' || '0' => false,
+      _ => null,
+    };
   }
 
   /// Текст, которым чат-бэкенд заменяет содержимое удалённого сообщения.
