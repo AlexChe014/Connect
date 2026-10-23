@@ -89,6 +89,7 @@ class MailMessage {
   MailMessage withRead(bool value) => copyWith(isRead: value);
 
   MailMessage copyWith({
+    int? id,
     String? subject,
     String? from,
     String? to,
@@ -100,7 +101,7 @@ class MailMessage {
     bool? hasAttachments,
     List<MailAttachment>? attachments,
   }) => MailMessage(
-    id: id,
+    id: id ?? this.id,
     subject: subject ?? this.subject,
     from: from ?? this.from,
     to: to ?? this.to,

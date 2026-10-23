@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/bookings/user_booking.dart';
@@ -15,6 +17,7 @@ import '../utils/media_url_utils.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/chat_avatar.dart';
 import 'booking_detail_sheet.dart';
 import 'notifications_screen.dart';
@@ -31,11 +34,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   List<UserBooking> _upcomingBookings = const [];
   bool _bookingsLoading = false;
+  String? _appVersion;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
     NotificationUnreadService.instance.refresh();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() => _appVersion = '${info.version} (${info.buildNumber})');
+    } catch (_) {
+      // Без версии профиль работает — строку просто не показываем.
+    }
   }
 
   Future<void> _openNotifications() async {
@@ -518,6 +534,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Политика конфиденциальности',
             onPressed: _openPrivacyPolicy,
           ),
+          if (_appVersion != null) _versionLabel(_appVersion!),
         ],
       ),
     );
@@ -571,6 +588,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Версия сборки в самом низу профиля: по ней поддержка понимает, какой
+  /// билд у пользователя. Долгое нажатие копирует строку.
+  Widget _versionLabel(String version) {
+    return GestureDetector(
+      onLongPress: () {
+        Clipboard.setData(ClipboardData(text: version));
+        HapticFeedback.selectionClick();
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('Версия скопирована')));
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          'Версия $version',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Колокольчик в шапке с красным счётчиком непрочитанных уведомлений.
   Widget _buildNotificationsButton(BuildContext context) {
     final count = NotificationUnreadService.instance.unreadCount;
@@ -586,7 +628,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(
               CupertinoIcons.bell,
-              size: 26,
+              size: AppSliverTitleBar.iconSize,
               color: CupertinoColors.label.resolveFrom(context),
             ),
             if (count > 0)
@@ -635,10 +677,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           onRefresh: _loadProfile,
           child: CustomScrollView(
             slivers: [
-              CupertinoSliverNavigationBar(
-                largeTitle: const Text('Профиль'),
+              AppSliverTitleBar(
+                title: const Text('Профиль'),
                 backgroundColor: CupertinoColors.systemGroupedBackground,
-                border: null,
                 trailing: ListenableBuilder(
                   listenable: NotificationUnreadService.instance,
                   builder: (context, _) => _buildNotificationsButton(context),

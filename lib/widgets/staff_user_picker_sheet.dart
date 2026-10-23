@@ -18,10 +18,17 @@ class StaffUserPickerSheet extends StatefulWidget {
     required this.selectedIds,
     required this.onUserSelected,
     this.validateUser,
+    this.onUserDeselected,
+    this.title = 'Участники',
   });
 
   final Set<String> selectedIds;
   final ValueChanged<StaffUser> onUserSelected;
+
+  /// Если задан, повторное нажатие на отмеченного сотрудника снимает
+  /// отметку; без него отмеченные строки не нажимаются.
+  final ValueChanged<StaffUser>? onUserDeselected;
+  final String title;
 
   /// Доп. проверка перед выбором: вернуть текст ошибки, чтобы показать его
   /// поверх списка и не отмечать сотрудника (например, нет e-mail).
@@ -32,6 +39,8 @@ class StaffUserPickerSheet extends StatefulWidget {
     required Set<String> selectedIds,
     required ValueChanged<StaffUser> onUserSelected,
     String? Function(StaffUser user)? validateUser,
+    ValueChanged<StaffUser>? onUserDeselected,
+    String title = 'Участники',
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -59,6 +68,8 @@ class StaffUserPickerSheet extends StatefulWidget {
             selectedIds: selectedIds,
             onUserSelected: onUserSelected,
             validateUser: validateUser,
+            onUserDeselected: onUserDeselected,
+            title: title,
           ),
         );
       },
@@ -232,6 +243,12 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
   }
 
   void _onUserTap(StaffUser user) {
+    final onDeselected = widget.onUserDeselected;
+    if (_selectedIds.contains(user.id) && onDeselected != null) {
+      setState(() => _selectedIds.remove(user.id));
+      onDeselected(user);
+      return;
+    }
     if (_selectedIds.contains(user.id)) {
       _showError('Участник уже добавлен');
       return;
@@ -262,11 +279,14 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 4, 20, 10),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
               child: Text(
-                'Участники',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                widget.title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             Padding(
@@ -321,6 +341,7 @@ class _StaffUserPickerSheetState extends State<StaffUserPickerSheet> {
                         return _PickerUserTile(
                           user: user,
                           isSelected: isSelected,
+                          canDeselect: widget.onUserDeselected != null,
                           onTap: () => _onUserTap(user),
                         );
                       },
@@ -356,10 +377,12 @@ class _PickerUserTile extends StatelessWidget {
     required this.user,
     required this.isSelected,
     required this.onTap,
+    this.canDeselect = false,
   });
 
   final StaffUser user;
   final bool isSelected;
+  final bool canDeselect;
   final VoidCallback onTap;
 
   @override
@@ -382,7 +405,7 @@ class _PickerUserTile extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: isSelected ? null : onTap,
+        onTap: isSelected && !canDeselect ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(

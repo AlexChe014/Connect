@@ -15,6 +15,7 @@ import '../utils/app_feedback.dart';
 import '../utils/html_text_utils.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/chat_message_text.dart';
 import '../widgets/news_glass.dart';
@@ -508,86 +509,88 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
     );
     final label = CupertinoColors.label.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Новость'),
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.maybePop(context),
-          child: Icon(CupertinoIcons.back, size: 26, color: label),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: AppTitleBar(
+          title: const Text('Новость'),
+          blur: blur,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => Navigator.maybePop(context),
+            child: Icon(
+              CupertinoIcons.back,
+              size: AppTitleBar.iconSize,
+              color: label,
+            ),
+          ),
+          trailing: _canDeletePost()
+              ? CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  onPressed: _isDeletingPost ? null : _showPostActions,
+                  child: _isDeletingPost
+                      ? const CupertinoActivityIndicator()
+                      : Icon(
+                          CupertinoIcons.ellipsis_circle,
+                          size: AppTitleBar.iconSize,
+                          color: label,
+                        ),
+                )
+              : null,
         ),
-        trailing: _canDeletePost()
-            ? CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: _isDeletingPost ? null : _showPostActions,
-                child: _isDeletingPost
-                    ? const CupertinoActivityIndicator()
-                    : Icon(
-                        CupertinoIcons.ellipsis_circle,
-                        size: 26,
-                        color: label,
-                      ),
-              )
-            : null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            Builder(
-              // Свой context — под скаффолдом, где в MediaQuery уже учтена
-              // высота полупрозрачной шапки.
-              builder: (context) => RefreshIndicator.adaptive(
-                edgeOffset: MediaQuery.paddingOf(context).top,
-                onRefresh: () async {
-                  await Future.wait([_refreshNews(), _loadComments()]);
-                },
-                child: ListView(
-                  controller: _scrollController,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    MediaQuery.paddingOf(context).top + 8,
-                    16,
-                    _CommentComposer.reservedHeight(context) + 16,
-                  ),
-                  children: [
-                    VisibilityDetector(
-                      key: Key('news-detail-${_news.id}'),
-                      onVisibilityChanged: _onNewsFullyVisible,
-                      child: _buildPost(context),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              Builder(
+                // Свой context — под скаффолдом, где в MediaQuery уже учтена
+                // высота полупрозрачной шапки.
+                builder: (context) => RefreshIndicator.adaptive(
+                  edgeOffset: MediaQuery.paddingOf(context).top,
+                  onRefresh: () async {
+                    await Future.wait([_refreshNews(), _loadComments()]);
+                  },
+                  child: ListView(
+                    controller: _scrollController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.paddingOf(context).top + 8,
+                      16,
+                      _CommentComposer.reservedHeight(context) + 16,
                     ),
-                    ..._buildComments(context),
-                  ],
+                    children: [
+                      VisibilityDetector(
+                        key: Key('news-detail-${_news.id}'),
+                        onVisibilityChanged: _onNewsFullyVisible,
+                        child: _buildPost(context),
+                      ),
+                      ..._buildComments(context),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _CommentComposer(
-                controller: _commentController,
-                isSending: _sendingComment,
-                onSend: _sendComment,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _CommentComposer(
+                  controller: _commentController,
+                  isSending: _sendingComment,
+                  onSend: _sendComment,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

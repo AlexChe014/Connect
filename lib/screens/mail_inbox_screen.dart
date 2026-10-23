@@ -14,9 +14,11 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/mail_sync_notice_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
@@ -31,9 +33,14 @@ class MailInboxScreen extends StatefulWidget {
     super.key,
     required this.connection,
     this.connections = const [],
+    this.isTab = false,
   });
 
   final MailConnection connection;
+
+  /// Экран — корень вкладки «Почта»: без кнопки «назад», а кнопку «Домой»
+  /// прячет сама оболочка, пока вкладка активна.
+  final bool isTab;
 
   /// Остальные подключённые ящики пользователя — чтобы показать
   /// переключатель в шапке. Если пуст или содержит только [connection],
@@ -118,13 +125,74 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     WidgetsBinding.instance.addObserver(this);
     // Нижняя стеклянная панель занимает всю ширину — плавающая кнопка
     // «Домой» легла бы поверх поиска (см. HomeShortcutButton).
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
+    if (!widget.isTab) {
+      _releaseHomeSuppress = HomeShortcutButton.suppress();
+    }
     MailUnreadService.instance.mailChanges.addListener(_refreshVisible);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) => _refreshVisible(),
     );
     _loadFolders();
+    MailSyncNoticeService.instance.ensureLoaded().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// Ящик подключили недавно — сервер ещё забирает письма из IMAP.
+  bool get _isInitialSync =>
+      MailSyncNoticeService.instance.isSyncing(_connection.email);
+
+  Widget _buildSyncNotice(BuildContext context) {
+    final blue = CupertinoColors.systemBlue.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(18),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                CupertinoIcons.arrow_down_circle_fill,
+                color: blue,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Письма загружаются. Ящик подключён недавно — письма '
+                  'появятся в ближайшее время и будут подгружаться '
+                  'постепенно.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
+                ),
+              ),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(32, 24),
+                onPressed: () async {
+                  await MailSyncNoticeService.instance.dismiss(
+                    _connection.email,
+                  );
+                  if (mounted) setState(() {});
+                },
+                child: Icon(
+                  CupertinoIcons.xmark,
+                  size: 15,
+                  color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -422,6 +490,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
           initialMessage: message,
           folders: _folders,
           currentFolder: _selectedFolder,
+          onMove: (folder) => _moveMessage(message, folder),
         ),
       ),
     );
@@ -529,6 +598,40 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось удалить письмо')),
       );
+    }
+  }
+
+  /// Письмо сразу скрывается из списка, перенос идёт в фоне; при ошибке
+  /// возвращается на место.
+  Future<void> _moveMessage(MailMessage message, MailFolder folder) async {
+    final connectionId = _connection.id;
+    setState(() => _pendingDeleteIds.add(message.id));
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text('Письмо перемещено в «${folder.displayName}»')),
+      );
+    try {
+      await MailRepository.instance.moveMessage(
+        connectionId: connectionId,
+        messageId: message.id,
+        folderId: folder.id,
+      );
+      MailUnreadService.instance.invalidate();
+      if (!mounted) return;
+      setState(() {
+        _messages.removeWhere((m) => m.id == message.id);
+        _searchResults?.removeWhere((m) => m.id == message.id);
+        _pendingDeleteIds.remove(message.id);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _pendingDeleteIds.remove(message.id));
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Не удалось переместить письмо')),
+        );
     }
   }
 
@@ -777,24 +880,18 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         : folder.displayName;
   }
 
-  Widget _buildNavBar(BuildContext context) {
+  Widget _buildNavBar(BuildContext context, {required bool blur}) {
     final label = CupertinoColors.label.resolveFrom(context);
     Widget iconButton(IconData icon, VoidCallback onPressed) => CupertinoButton(
       padding: const EdgeInsets.only(left: 16),
       minimumSize: Size.zero,
       onPressed: onPressed,
-      child: Icon(icon, size: 24, color: label),
+      child: Icon(icon, size: AppSliverTitleBar.iconSize, color: label),
     );
 
-    return CupertinoSliverNavigationBar(
-      largeTitle: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-      // дала бы на цветном пятне видимую границу.
-      backgroundColor: CupertinoColors.systemBackground
-          .resolveFrom(context)
-          .withValues(alpha: 0),
-      automaticBackgroundVisibility: false,
-      border: null,
+    return AppSliverTitleBar(
+      title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      blur: blur,
       leading: _isEditing
           ? CupertinoButton(
               padding: EdgeInsets.zero,
@@ -802,11 +899,17 @@ class _MailInboxScreenState extends State<MailInboxScreen>
               onPressed: () => _setEditing(false),
               child: Text('Отмена', style: TextStyle(color: label)),
             )
+          : widget.isTab
+          ? null
           : CupertinoButton(
               padding: EdgeInsets.zero,
               minimumSize: Size.zero,
               onPressed: () => Navigator.maybePop(context),
-              child: Icon(CupertinoIcons.back, size: 26, color: label),
+              child: Icon(
+                CupertinoIcons.back,
+                size: AppSliverTitleBar.iconSize,
+                color: label,
+              ),
             ),
       trailing: _isEditing
           ? CupertinoButton(
@@ -824,6 +927,10 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                 if (_folders.isNotEmpty)
                   iconButton(CupertinoIcons.folder, _showFolderPicker),
                 iconButton(CupertinoIcons.ellipsis_circle, _showMoreMenu),
+                // Во вкладке нижняя панель уступила место таббару —
+                // «написать» переезжает в шапку, как «+» в Чатах.
+                if (widget.isTab)
+                  iconButton(CupertinoIcons.square_pencil, _openCompose),
               ],
             ),
     );
@@ -930,9 +1037,13 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         SliverAppEmptyState(
           icon: _searchQuery.isNotEmpty
               ? CupertinoIcons.search
+              : _isInitialSync
+              ? CupertinoIcons.arrow_down_circle
               : CupertinoIcons.tray,
           message: _searchQuery.isNotEmpty
               ? 'Ничего не найдено'
+              : _isInitialSync
+              ? 'Письма ещё загружаются\nОни появятся здесь в ближайшее время'
               : _selectedFolder != null
               ? 'В папке «${_selectedFolder!.displayName}» нет писем'
               : 'Нет писем',
@@ -1007,71 +1118,90 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     final hasConnectionError =
         !_connection.isActive || (_connection.lastError ?? '').isNotEmpty;
 
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: () => _loadMessages(forceSync: true),
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    final metrics = notification.metrics;
-                    if (metrics.pixels >= metrics.maxScrollExtent - 200) {
-                      _loadMoreMessages();
-                    }
-                    return false;
-                  },
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    slivers: [
-                      _buildNavBar(context),
-                      SliverToBoxAdapter(child: _buildAccountChip(context)),
-                      if (hasConnectionError)
-                        SliverToBoxAdapter(child: _buildErrorBanner(context)),
-                      ..._buildListSlivers(context),
-                      // Последнее письмо не должно прятаться под панелью.
-                      SliverToBoxAdapter(
-                        child: SizedBox(
-                          height: MailFloatingBar.reservedHeight(context),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: () => _loadMessages(forceSync: true),
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      final metrics = notification.metrics;
+                      if (metrics.pixels >= metrics.maxScrollExtent - 200) {
+                        _loadMoreMessages();
+                      }
+                      return false;
+                    },
+                    child: CustomScrollView(
+                      controller: _scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      slivers: [
+                        _buildNavBar(context, blur: blur),
+                        SliverToBoxAdapter(child: _buildAccountChip(context)),
+                        if (widget.isTab)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                              child: CupertinoSearchTextField(
+                                controller: _searchController,
+                                placeholder: 'Поиск писем',
+                                onChanged: _onSearchChanged,
+                              ),
+                            ),
+                          ),
+                        if (hasConnectionError)
+                          SliverToBoxAdapter(child: _buildErrorBanner(context))
+                        else if (_isInitialSync && !_isSearchMode)
+                          SliverToBoxAdapter(child: _buildSyncNotice(context)),
+                        ..._buildListSlivers(context),
+                        // Последнее письмо не должно прятаться под панелью.
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: widget.isTab && !_isEditing
+                                ? MediaQuery.paddingOf(context).bottom + 16
+                                : MailFloatingBar.reservedHeight(context),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _isEditing
-                  ? _EditToolbar(
-                      selectedCount: _selectedIds.length,
-                      isBusy: _isBulkActing,
-                      onMarkRead: () => _bulkMarkRead(read: true),
-                      onMarkUnread: () => _bulkMarkRead(read: false),
-                      onDelete: _bulkDelete,
-                    )
-                  : _SearchComposeBar(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      onCompose: () => _openCompose(),
-                    ),
-            ),
-          ],
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _isEditing
+                    ? _EditToolbar(
+                        selectedCount: _selectedIds.length,
+                        isBusy: _isBulkActing,
+                        onMarkRead: () => _bulkMarkRead(read: true),
+                        onMarkUnread: () => _bulkMarkRead(read: false),
+                        onDelete: _bulkDelete,
+                      )
+                    : widget.isTab
+                    ? const SizedBox.shrink()
+                    : _SearchComposeBar(
+                        controller: _searchController,
+                        onChanged: _onSearchChanged,
+                        onCompose: () => _openCompose(),
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

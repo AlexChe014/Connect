@@ -19,6 +19,8 @@ import 'package:flutter/material.dart'
     show ScaffoldMessenger, SnackBar, showModalBottomSheet;
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:connect/widgets/app_icon_badge.dart';
+import '../widgets/app_title_bar.dart';
 
 final _urlRegExp = RegExp(r'(https?:\/\/[^\s<>"\)]+)', caseSensitive: false);
 
@@ -765,18 +767,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     return AppGlassSection(margin: margin, children: children);
   }
 
-  Widget _iconBadge(IconData icon, Color color) {
-    return Container(
-      width: 29,
-      height: 29,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Icon(icon, size: 17, color: CupertinoColors.white),
-    );
-  }
+  Widget _iconBadge(IconData icon, Color color) =>
+      AppIconBadge(icon: icon, color: color);
 
   @override
   Widget build(BuildContext context) {
@@ -787,11 +779,11 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
 
     return CupertinoPageScaffold(
       backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text('Настройки чата'),
+      navigationBar: AppTitleBar(
+        title: const Text('Настройки чата'),
         // Полупрозрачная — содержимое уходит под размытую шапку.
         backgroundColor: groupedBg.withValues(alpha: 0.7),
-        border: null,
+        blur: true,
       ),
       child: DefaultTextStyle(
         style: TextStyle(

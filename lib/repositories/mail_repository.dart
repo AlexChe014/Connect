@@ -145,6 +145,11 @@ class SendMailRequest {
   final String to;
   final String subject;
   final String? body;
+
+  /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
+  /// `cc.*`/`bcc.*` как email.
+  final List<String> cc;
+  final List<String> bcc;
   final List<http.MultipartFile> attachments;
 
   const SendMailRequest({
@@ -152,6 +157,8 @@ class SendMailRequest {
     required this.to,
     required this.subject,
     this.body,
+    this.cc = const [],
+    this.bcc = const [],
     this.attachments = const [],
   });
 }
@@ -161,6 +168,11 @@ class ReplyMailRequest {
   final String to;
   final String subject;
   final String? body;
+
+  /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
+  /// `cc.*`/`bcc.*` как email.
+  final List<String> cc;
+  final List<String> bcc;
   final List<http.MultipartFile> attachments;
 
   const ReplyMailRequest({
@@ -168,22 +180,33 @@ class ReplyMailRequest {
     required this.to,
     required this.subject,
     this.body,
+    this.cc = const [],
+    this.bcc = const [],
     this.attachments = const [],
   });
 }
 
 class ForwardMailRequest {
+  final int connectionId;
   final int messageId;
   final String to;
   final String subject;
   final String? body;
+
+  /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
+  /// `cc.*`/`bcc.*` как email.
+  final List<String> cc;
+  final List<String> bcc;
   final List<http.MultipartFile> attachments;
 
   const ForwardMailRequest({
+    required this.connectionId,
     required this.messageId,
     required this.to,
     required this.subject,
     this.body,
+    this.cc = const [],
+    this.bcc = const [],
     this.attachments = const [],
   });
 }
@@ -335,7 +358,10 @@ class MailRepository {
         'Сервер вернул почтовое подключение вместо письма',
       );
     }
-    return MailMessage.fromJson(data);
+    // В ответе `id` — IMAP UID письма, а не id записи в БД, который нужен
+    // ответу, пересылке и вложениям (иначе «No query results for model
+    // Email»). Возвращаем id, по которому письмо и запрашивали.
+    return MailMessage.fromJson(data).copyWith(id: messageId);
   }
 
   /// Поиск писем по теме и адресам среди всех подключений пользователя
@@ -549,6 +575,8 @@ class MailRepository {
     if (body != null && body.isNotEmpty) {
       fields['body_text'] = body;
     }
+    fields.addAll(_multipartList('cc', request.cc));
+    fields.addAll(_multipartList('bcc', request.bcc));
     final decoded = await ApiClient.instance.postMultipart(
       MailRoutes.smtpSendUrl,
       fields: fields,
@@ -559,62 +587,75 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось отправить письмо');
   }
 
+  // Поля — как в ReplyEmailRequest/ForwardEmailRequest бэкенда: текст
+  // ответа читается из `body_text`, текст пересылки — из `message`; поле
+  // `body` сервер молча отбрасывал, и письмо уходило пустым.
   Future<void> replyMail(ReplyMailRequest request) async {
-    if (request.attachments.isNotEmpty) {
-      final decoded = await ApiClient.instance.postMultipart(
-        MailRoutes.smtpReplyUrl(request.messageId),
-        fields: {
-          'to': request.to,
-          'subject': request.subject,
-          if (request.body != null && request.body!.trim().isNotEmpty)
-            'body': request.body!,
-        },
-        files: request.attachments,
-      );
-      _unwrapMailData(decoded, 'Не удалось ответить на письмо');
-      return;
-    }
-    final body = <String, dynamic>{
+    final fields = <String, String>{
       'to': request.to,
       'subject': request.subject,
+      if (request.body != null && request.body!.trim().isNotEmpty)
+        'body_text': request.body!,
     };
-    if (request.body != null && request.body!.trim().isNotEmpty) {
-      body['body'] = request.body;
-    }
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.smtpReplyUrl(request.messageId),
-      body: body,
-    );
+    final decoded = request.attachments.isNotEmpty
+        ? await ApiClient.instance.postMultipart(
+            MailRoutes.smtpReplyUrl(request.messageId),
+            fields: {
+              ...fields,
+              ..._multipartList('cc', request.cc),
+              ..._multipartList('bcc', request.bcc),
+            },
+            files: request.attachments,
+          )
+        : await ApiClient.instance.post(
+            MailRoutes.smtpReplyUrl(request.messageId),
+            body: {
+              ...fields,
+              if (request.cc.isNotEmpty) 'cc': request.cc,
+              if (request.bcc.isNotEmpty) 'bcc': request.bcc,
+            },
+          );
     _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
 
+  /// Пересылка идёт через `/mail/smtp/send`, а не `/mail/smtp/forward`:
+  /// forward на бэкенде падает с 500 на каждом письме (вызывает `->format()`
+  /// у даты-строки из ImapService::getMessage и `->getName()` у массива
+  /// `from`) — см. docs/BACKEND_MAIL_FIXES.md, п. 15. Поэтому `body` — текст
+  /// пользователя вместе с цитатой исходного письма. Сервер принимает в `to`
+  /// ровно один адрес (`email`), нескольким получателям шлём по отдельности;
+  /// копия и скрытая копия уходят только с первым письмом — иначе каждый
+  /// из них получил бы по экземпляру на каждого адресата.
   Future<void> forwardMail(ForwardMailRequest request) async {
-    if (request.attachments.isNotEmpty) {
-      final decoded = await ApiClient.instance.postMultipart(
-        MailRoutes.smtpForwardUrl(request.messageId),
-        fields: {
-          'to': request.to,
-          'subject': request.subject,
-          if (request.body != null && request.body!.trim().isNotEmpty)
-            'body': request.body!,
-        },
-        files: request.attachments,
+    final recipients = MailMessage.splitAddresses(
+      request.to,
+    ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
+    var first = true;
+    for (final to in recipients.isEmpty ? [request.to] : recipients) {
+      await sendMail(
+        SendMailRequest(
+          connectionId: request.connectionId,
+          to: to,
+          subject: request.subject,
+          body: request.body,
+          cc: first ? request.cc : const [],
+          bcc: first ? request.bcc : const [],
+          attachments: request.attachments,
+        ),
       );
-      _unwrapMailData(decoded, 'Не удалось переслать письмо');
-      return;
+      first = false;
     }
-    final body = <String, dynamic>{
-      'to': request.to,
-      'subject': request.subject,
-    };
-    if (request.body != null && request.body!.trim().isNotEmpty) {
-      body['body'] = request.body;
-    }
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.smtpForwardUrl(request.messageId),
-      body: body,
-    );
-    _unwrapMailData(decoded, 'Не удалось переслать письмо');
+  }
+
+  /// Массив для multipart: `cc[0]=a@x`, `cc[1]=b@y` — Laravel собирает
+  /// из этого `cc` как массив.
+  static Map<String, String> _multipartList(String key, List<String> values) =>
+      {for (var i = 0; i < values.length; i++) '$key[$i]': values[i]};
+
+  /// `Имя <a@x>` → `a@x`.
+  static String _bareAddress(String address) {
+    final match = RegExp(r'<([^>]+)>').firstMatch(address);
+    return (match?.group(1) ?? address).trim();
   }
 
   // --- Internal helpers ---

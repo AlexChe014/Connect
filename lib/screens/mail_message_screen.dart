@@ -17,6 +17,7 @@ import '../services/crash_reporting_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
@@ -34,6 +35,7 @@ class MailMessageScreen extends StatefulWidget {
     this.initialMessage,
     this.folders = const [],
     this.currentFolder,
+    this.onMove,
   });
 
   final MailConnection connection;
@@ -44,6 +46,11 @@ class MailMessageScreen extends StatefulWidget {
   /// Папка, из которой открыто письмо: её не предлагаем в «Переместить»,
   /// и по ней понятно, что письмо своё (Отправленные/Черновики).
   final MailFolder? currentFolder;
+
+  /// Перемещение берёт на себя список: экран сразу закрывается, письмо
+  /// пропадает из списка, а запрос идёт в фоне — сервер переносит письмо
+  /// по IMAP несколько секунд, и раньше казалось, что ничего не происходит.
+  final ValueChanged<MailFolder>? onMove;
 
   @override
   State<MailMessageScreen> createState() => _MailMessageScreenState();
@@ -223,6 +230,14 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
     if (folder == null || !mounted) return;
 
+    final onMove = widget.onMove;
+    if (onMove != null) {
+      Navigator.of(context).pop();
+      onMove(folder);
+      return;
+    }
+
+    setState(() => _isDeleting = true);
     try {
       await MailRepository.instance.moveMessage(
         connectionId: widget.connection.id,
@@ -239,6 +254,8 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось переместить письмо')),
       );
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
@@ -573,79 +590,83 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
     final label = CupertinoColors.label.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          onPressed: () => Navigator.maybePop(context),
-          child: Icon(CupertinoIcons.back, size: 26, color: label),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: AppTitleBar(
+          blur: blur,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => Navigator.maybePop(context),
+            child: Icon(
+              CupertinoIcons.back,
+              size: AppTitleBar.iconSize,
+              color: label,
+            ),
+          ),
+          trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
         ),
-        trailing: _isDeleting ? const CupertinoActivityIndicator() : null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 15,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            if (_isLoading)
-              const SafeArea(child: AppPageLoader())
-            else if (message == null)
-              const SafeArea(child: AppEmptyState(message: 'Письмо не найдено'))
-            else ...[
-              Builder(
-                // Свой context — под скаффолдом, где в MediaQuery уже учтена
-                // высота полупрозрачной шапки.
-                builder: (context) => ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    MediaQuery.paddingOf(context).top + 8,
-                    16,
-                    MailFloatingBar.reservedHeight(context) + 8,
-                  ),
-                  children: [
-                    _buildHeaderCard(context, message),
-                    const SizedBox(height: 10),
-                    AppFlatGlassCard(
-                      // HTML-письмо сам WebView отбивает от краёв, лишний
-                      // отступ карточки только отнимал у него ширину.
-                      padding: MailBodyContent.rendersHtml(message)
-                          ? EdgeInsets.zero
-                          : const EdgeInsets.all(16),
-                      child: MailBodyContent(
-                        message: message,
-                        loadAttachment: (attachment) =>
-                            MailRepository.instance.downloadAttachment(
-                              connectionId: widget.connection.id,
-                              messageId: widget.messageId,
-                              filename: attachment.filename,
-                            ),
-                      ),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 15,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              if (_isLoading)
+                const SafeArea(child: AppPageLoader())
+              else if (message == null)
+                const SafeArea(
+                  child: AppEmptyState(message: 'Письмо не найдено'),
+                )
+              else ...[
+                Builder(
+                  // Свой context — под скаффолдом, где в MediaQuery уже учтена
+                  // высота полупрозрачной шапки.
+                  builder: (context) => ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.paddingOf(context).top + 8,
+                      16,
+                      MailFloatingBar.reservedHeight(context) + 8,
                     ),
-                    if (_listedAttachments(message).isNotEmpty)
-                      _buildAttachments(context, message),
-                  ],
+                    children: [
+                      _buildHeaderCard(context, message),
+                      const SizedBox(height: 10),
+                      AppFlatGlassCard(
+                        // HTML-письмо сам WebView отбивает от краёв, лишний
+                        // отступ карточки только отнимал у него ширину.
+                        padding: MailBodyContent.rendersHtml(message)
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.all(16),
+                        child: MailBodyContent(
+                          message: message,
+                          loadAttachment: (attachment) =>
+                              MailRepository.instance.downloadAttachment(
+                                connectionId: widget.connection.id,
+                                messageId: widget.messageId,
+                                filename: attachment.filename,
+                              ),
+                        ),
+                      ),
+                      if (_listedAttachments(message).isNotEmpty)
+                        _buildAttachments(context, message),
+                    ],
+                  ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _buildActionBar(),
-              ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildActionBar(),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

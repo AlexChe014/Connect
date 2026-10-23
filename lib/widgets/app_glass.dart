@@ -155,6 +155,44 @@ class AppGlassGlow extends StatelessWidget {
   }
 }
 
+/// Включает размытие прозрачной шапки только когда под неё уехал контент.
+/// Размытие поверх [AppGlassGlow] даёт на нижней кромке шапки заметный
+/// шов, а в покое под шапкой и размывать нечего.
+///
+/// Оборачивает весь `CupertinoPageScaffold`: прокрутка из его тела
+/// всплывает сюда, а флаг уходит в `blur` шапки ([AppSliverTitleBar]) или
+/// `enableBackgroundFilterBlur` у `CupertinoNavigationBar`.
+class AppGlassBarBlur extends StatefulWidget {
+  const AppGlassBarBlur({super.key, required this.builder, this.threshold = 0});
+
+  final Widget Function(BuildContext context, bool blur) builder;
+  final double threshold;
+
+  @override
+  State<AppGlassBarBlur> createState() => _AppGlassBarBlurState();
+}
+
+class _AppGlassBarBlurState extends State<AppGlassBarBlur> {
+  bool _blur = false;
+
+  bool _onScroll(ScrollNotification notification) {
+    final metrics = notification.metrics;
+    if (notification.depth == 0 && metrics.axis == Axis.vertical) {
+      final blur = metrics.pixels > widget.threshold;
+      if (blur != _blur) setState(() => _blur = blur);
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onScroll,
+      child: widget.builder(context, _blur),
+    );
+  }
+}
+
 /// Длинный ленивый список на «стекле» без размытия: BackdropFilter под
 /// сотнями строк дорог, а ниже шапки размывать всё равно нечего —
 /// та же заливка, кромка и тень, что у [AppGlass].
@@ -272,7 +310,8 @@ class AppGlassActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = CupertinoColors.label.resolveFrom(context);
+    // Единственный акцент — фирменный синий, как кнопки действий в Контактах.
+    const color = AppColors.primary;
     return Opacity(
       opacity: onTap == null ? 0.5 : 1,
       child: AppGlass(
@@ -336,6 +375,49 @@ class AppFlatGlassCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: Padding(padding: padding, child: child),
+      ),
+    );
+  }
+}
+
+/// Основная кнопка экрана во всю ширину — синяя капсула.
+class AppPrimaryButton extends StatelessWidget {
+  const AppPrimaryButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.isLoading = false,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !isLoading;
+    return SizedBox(
+      width: double.infinity,
+      child: CupertinoButton(
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        borderRadius: BorderRadius.circular(26),
+        color: AppColors.primary,
+        disabledColor: isLoading
+            ? AppColors.primary
+            : CupertinoColors.systemGrey4.resolveFrom(context),
+        onPressed: enabled ? onPressed : null,
+        child: isLoading
+            ? const CupertinoActivityIndicator(color: CupertinoColors.white)
+            : Text(
+                label,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: enabled
+                      ? CupertinoColors.white
+                      : CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
+              ),
       ),
     );
   }

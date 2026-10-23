@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import '../config/app_theme.dart';
 import 'app_glass.dart';
 import 'app_icon_badge.dart';
+import 'app_title_bar.dart';
 
 /// Общие детали форм раздела «Календарь» (бронь, встреча, видеовстреча)
 /// в стиле Liquid Glass: прозрачная шапка над цветным пятном, поля на
@@ -44,56 +45,58 @@ class BookingGlassScaffold extends StatelessWidget {
     );
     final label = CupertinoColors.label.resolveFrom(context);
 
-    return CupertinoPageScaffold(
-      backgroundColor: groupedBg,
-      navigationBar: CupertinoNavigationBar(
-        middle: Text(title),
-        // Прозрачная: под шапкой остаётся системное размытие, а заливка
-        // дала бы на цветном пятне видимую границу.
-        backgroundColor: groupedBg.withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        border: null,
-        leading: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: Size.zero,
-          // maybePop, а не pop: экран может перехватить выход через PopScope
-          // (письмо с несохранённым текстом спрашивает подтверждение).
-          onPressed: canPop ? () => Navigator.maybePop(context) : null,
-          child: Icon(CupertinoIcons.back, size: 26, color: label),
-        ),
-        trailing: trailing,
-      ),
-      // Без Material-предка любой Text, не переопределивший все поля стиля
-      // явно, откатывается на debug-заглушку MaterialApp.
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(height: 360),
-            Builder(
-              // Свой context — под скаффолдом, где в MediaQuery уже учтена
-              // высота полупрозрачной шапки.
-              builder: (context) => ListView(
-                controller: controller,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.only(
-                  top: MediaQuery.paddingOf(context).top + 12,
-                  bottom: bottomBar == null
-                      ? MediaQuery.paddingOf(context).bottom + 32
-                      : bottomBarHeight + 16,
-                ),
-                children: children,
-              ),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: groupedBg,
+        navigationBar: AppTitleBar(
+          title: Text(title),
+          blur: blur,
+          leading: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            // maybePop, а не pop: экран может перехватить выход через PopScope
+            // (письмо с несохранённым текстом спрашивает подтверждение).
+            onPressed: canPop ? () => Navigator.maybePop(context) : null,
+            child: Icon(
+              CupertinoIcons.back,
+              size: AppTitleBar.iconSize,
+              color: label,
             ),
-            if (bottomBar != null)
-              Positioned(left: 0, right: 0, bottom: 0, child: bottomBar!),
-          ],
+          ),
+          trailing: trailing,
+        ),
+        // Без Material-предка любой Text, не переопределивший все поля стиля
+        // явно, откатывается на debug-заглушку MaterialApp.
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              Builder(
+                // Свой context — под скаффолдом, где в MediaQuery уже учтена
+                // высота полупрозрачной шапки.
+                builder: (context) => ListView(
+                  controller: controller,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.paddingOf(context).top + 12,
+                    bottom: bottomBar == null
+                        ? MediaQuery.paddingOf(context).bottom + 32
+                        : bottomBarHeight + 16,
+                  ),
+                  children: children,
+                ),
+              ),
+              if (bottomBar != null)
+                Positioned(left: 0, right: 0, bottom: 0, child: bottomBar!),
+            ],
+          ),
         ),
       ),
     );

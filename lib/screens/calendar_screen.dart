@@ -18,7 +18,7 @@ import '../utils/connector_url_utils.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_network_image.dart';
-import '../widgets/menu_button.dart';
+import '../widgets/app_title_bar.dart';
 import 'booking_detail_sheet.dart';
 import 'bookings_screen.dart';
 import 'create_booking_screen.dart';
@@ -505,67 +505,62 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: CustomScrollView(
-                slivers: [
-                  CupertinoSliverNavigationBar(
-                    largeTitle: const Text('Календарь'),
-                    leading: const MenuButton(),
-                    // Прозрачная: под шапкой остаётся системное размытие,
-                    // а заливка дала бы на цветном пятне видимую границу.
-                    backgroundColor: CupertinoColors.systemGroupedBackground
-                        .resolveFrom(context)
-                        .withValues(alpha: 0),
-                    automaticBackgroundVisibility: false,
-                    border: null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_isLoading)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 12),
-                            child: CupertinoActivityIndicator(),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: CustomScrollView(
+                  slivers: [
+                    AppSliverTitleBar(
+                      title: const Text('Календарь'),
+                      blur: blur,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 12),
+                              child: CupertinoActivityIndicator(),
+                            ),
+                          CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            onPressed: _quickBook,
+                            child: Icon(
+                              CupertinoIcons.add_circled,
+                              size: AppSliverTitleBar.iconSize,
+                              color: label,
+                            ),
                           ),
-                        CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          onPressed: _quickBook,
-                          child: Icon(
-                            CupertinoIcons.add_circled,
-                            size: 28,
-                            color: label,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Stack(
-                      children: [
-                        _buildCalendarCard(context),
-                        _buildMonthControls(context),
-                      ],
+                    SliverToBoxAdapter(
+                      child: Stack(
+                        children: [
+                          _buildCalendarCard(context),
+                          _buildMonthControls(context),
+                        ],
+                      ),
                     ),
-                  ),
-                  _buildEventsList(context),
-                ],
+                    _buildEventsList(context),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

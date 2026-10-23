@@ -4,6 +4,7 @@ import UserNotifications
 import PushKit
 import CallKit
 import AVFoundation
+import SafariServices
 import flutter_callkit_incoming
 
 @main
@@ -71,6 +72,54 @@ import flutter_callkit_incoming
       }
     }
     voipChannel = channel
+
+    if let browserRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "ConnectInAppBrowser") {
+      let browserChannel = FlutterMethodChannel(
+        name: "connect/in_app_browser",
+        binaryMessenger: browserRegistrar.messenger()
+      )
+      browserChannel.setMethodCallHandler { [weak self] call, result in
+        guard call.method == "open" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        guard let raw = call.arguments as? String, let url = URL(string: raw) else {
+          result(false)
+          return
+        }
+        result(self?.presentInAppBrowser(url) ?? false)
+      }
+    }
+  }
+
+  // MARK: - Встроенный браузер
+
+  /// Открывает ссылку в Safari-шторке поверх приложения, как в Telegram:
+  /// сверху остаётся зазор с уменьшенным экраном чата, шторка закрывается
+  /// свайпом вниз. url_launcher показывает SFSafariViewController только
+  /// на весь экран, поэтому подаём его сами.
+  private func presentInAppBrowser(_ url: URL) -> Bool {
+    guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+      return false
+    }
+    let window = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
+    guard var top = window?.rootViewController else { return false }
+    while let presented = top.presentedViewController {
+      top = presented
+    }
+
+    let safari = SFSafariViewController(url: url)
+    safari.dismissButtonStyle = .close
+    safari.modalPresentationStyle = .pageSheet
+    if let sheet = safari.sheetPresentationController {
+      sheet.detents = [.large()]
+      sheet.preferredCornerRadius = 16
+    }
+    top.present(safari, animated: true)
+    return true
   }
 
   /// Вкл/выкл доставку VoIP-пушей: выключаем при выходе из аккаунта,

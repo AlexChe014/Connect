@@ -10,6 +10,7 @@ import '../services/chat_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/employee_row.dart';
 import 'employee_detail_screen.dart';
 
@@ -253,75 +254,71 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   @override
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: label,
-          fontSize: 16,
-        ),
-        child: Stack(
-          children: [
-            const AppGlassGlow(),
-            SafeArea(
-              top: false,
-              bottom: false,
-              child: RefreshIndicator.adaptive(
-                onRefresh: () async {
-                  _debounce?.cancel();
-                  _appliedQ = _qController.text.trim();
-                  await _loadFirstPage();
-                },
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    CupertinoSliverNavigationBar(
-                      largeTitle: const Text('Сотрудники'),
-                      leading: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        onPressed: () => Navigator.pop(context),
-                        child: Icon(
-                          CupertinoIcons.back,
-                          size: 26,
-                          color: label,
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: CupertinoColors.systemGroupedBackground,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: label,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: () async {
+                    _debounce?.cancel();
+                    _appliedQ = _qController.text.trim();
+                    await _loadFirstPage();
+                  },
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      AppSliverTitleBar(
+                        title: const Text('Сотрудники'),
+                        leading: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: () => Navigator.pop(context),
+                          child: Icon(
+                            CupertinoIcons.back,
+                            size: AppSliverTitleBar.iconSize,
+                            color: label,
+                          ),
                         ),
+                        blur: blur,
                       ),
-                      // Прозрачная: под шапкой остаётся системное размытие, а заливка
-                      // дала бы на цветном пятне видимую границу.
-                      backgroundColor: CupertinoColors.systemGroupedBackground
-                          .resolveFrom(context)
-                          .withValues(alpha: 0),
-                      automaticBackgroundVisibility: false,
-                      border: null,
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                        child: AppGlass(
-                          borderRadius: BorderRadius.circular(12),
-                          shadows: AppGlass.controlShadow,
-                          child: CupertinoSearchTextField(
-                            controller: _qController,
-                            backgroundColor: const Color(0x00000000),
-                            placeholder: 'Фамилия, имя, отчество или почта',
-                            onSubmitted: (_) {
-                              _debounce?.cancel();
-                              _appliedQ = _qController.text.trim();
-                              _loadFirstPage();
-                            },
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                          child: AppGlass(
+                            borderRadius: BorderRadius.circular(12),
+                            shadows: AppGlass.controlShadow,
+                            child: CupertinoSearchTextField(
+                              controller: _qController,
+                              backgroundColor: const Color(0x00000000),
+                              placeholder: 'Фамилия, имя, отчество или почта',
+                              onSubmitted: (_) {
+                                _debounce?.cancel();
+                                _appliedQ = _qController.text.trim();
+                                _loadFirstPage();
+                              },
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    _buildResultsSliver(),
-                  ],
+                      _buildResultsSliver(),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

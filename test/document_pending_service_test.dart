@@ -102,4 +102,33 @@ void main() {
       service.dispose();
     },
   );
+
+  test('latest pending document date comes from the 1C list caption', () async {
+    final service = DocumentPendingService(
+      load: (id) async => id == 1
+          ? [
+              {
+                'datalist': 'Заявка на оплату от 03.10.2026',
+                'status': 'pending',
+              },
+              // Уже согласованный, хоть и свежее, — не в счёт.
+              {'datalist': 'Договор от 20.10.2026', 'status': 'approved'},
+            ]
+          : [
+              {'datalist': 'Счёт 15.10.2026'},
+              {'datalist': 'Без даты'},
+              {'datalist': 'Битая дата 31.02.2026'},
+            ],
+    );
+    expect(service.hasServices, isFalse);
+    await service.refresh([first, second]);
+    expect(service.hasServices, isTrue);
+    expect(service.latestDocumentAt, DateTime(2026, 10, 15));
+    await service.refresh([first]);
+    expect(service.latestDocumentAt, DateTime(2026, 10, 3));
+    service.reset();
+    expect(service.latestDocumentAt, isNull);
+    expect(service.hasServices, isFalse);
+    service.dispose();
+  });
 }

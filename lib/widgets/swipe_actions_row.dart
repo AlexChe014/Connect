@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 
 /// Одно действие, раскрывающееся по свайпу (иконка + подпись на цветном
 /// фоне), как "Mute"/"Delete" в почте или сообщениях iOS.
@@ -18,15 +19,29 @@ class SwipeAction {
 
 /// Координирует свайпнутые строки одного списка: когда открывается новая,
 /// ранее открытая закрывается сама — как в стандартных списках iOS.
-class SwipeGroupController {
+/// Пока какая-то строка открыта, тап по любой строке списка только закрывает
+/// её, не открывая саму строку.
+class SwipeGroupController extends ChangeNotifier {
   final Map<String, VoidCallback> _closers = {};
   String? _openId;
+
+  bool get hasOpen => _openId != null;
 
   void _register(String id, VoidCallback closer) => _closers[id] = closer;
 
   void _unregister(String id) {
     _closers.remove(id);
-    if (_openId == id) _openId = null;
+    if (_openId == id) _setOpenId(null);
+  }
+
+  void _setOpenId(String? id) {
+    if (_openId == id) return;
+    _openId = id;
+    notifyListeners();
+  }
+
+  void _notifyClosed(String id) {
+    if (_openId == id) _setOpenId(null);
   }
 
   /// Закрывает открытую строку — например, перед переходом на другой экран.
@@ -38,14 +53,16 @@ class SwipeGroupController {
   void _notifyOpened(String id) {
     if (_openId == id) return;
     final previous = _openId;
-    _openId = id;
+    _setOpenId(id);
     if (previous != null) _closers[previous]?.call();
   }
 }
 
 /// Оборачивает [child] так, что свайп влево раскрывает [actions] справа —
 /// аналог `flutter_slidable`, но без внешней зависимости, реализован через
-/// [AnimationController] + [Transform.translate].
+/// [AnimationController] + [Transform.translate]. Кнопки — скруглённые
+/// «таблетки», как выбранная вкладка в нижнем таббаре; открытая строка
+/// закрывается, как только список начинают прокручивать.
 class SwipeActionsRow extends StatefulWidget {
   const SwipeActionsRow({
     super.key,
@@ -71,6 +88,7 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
   static const _actionWidth = 76.0;
 
   late final AnimationController _controller;
+  ValueListenable<bool>? _scrollingNotifier;
 
   double get _maxOffset => widget.actions.length * _actionWidth;
 
@@ -80,8 +98,30 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
-    );
+    )..addListener(_onValueChanged);
     widget.groupController._register(widget.id, _close);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notifier = Scrollable.maybeOf(context)?.position.isScrollingNotifier;
+    if (notifier == _scrollingNotifier) return;
+    _scrollingNotifier?.removeListener(_onScrollingChanged);
+    _scrollingNotifier = notifier?..addListener(_onScrollingChanged);
+  }
+
+  void _onScrollingChanged() {
+    if (_scrollingNotifier?.value ?? false) _close();
+  }
+
+  // Слушаем значение, а не статус: animateTo(0) завершается со статусом
+  // completed, а не dismissed, и закрытие строки иначе не замечалось бы —
+  // группа навсегда считала бы её открытой и глушила тапы по всем строкам.
+  void _onValueChanged() {
+    if (_controller.value == 0) {
+      widget.groupController._notifyClosed(widget.id);
+    }
   }
 
   @override
@@ -96,6 +136,7 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
 
   @override
   void dispose() {
+    _scrollingNotifier?.removeListener(_onScrollingChanged);
     widget.groupController._unregister(widget.id);
     _controller.dispose();
     super.dispose();
@@ -165,28 +206,56 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
                                 _close();
                                 action.onTap();
                               },
-                              child: Container(
+                              child: SizedBox(
                                 width: _actionWidth,
-                                color: action.color,
-                                alignment: Alignment.center,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      action.icon,
-                                      color: CupertinoColors.white,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      action.label,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: CupertinoColors.white,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                    vertical: 6,
+                                  ),
+                                  child: DecoratedBox(
+                                    decoration: ShapeDecoration(
+                                      color: action.color,
+                                      shape: RoundedSuperellipseBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          24,
+                                        ),
                                       ),
                                     ),
-                                  ],
+                                    child: Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              action.icon,
+                                              color: CupertinoColors.white,
+                                              size: 20,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // Одна строка: длинная подпись
+                                            // («Избранное») ужимается, а не
+                                            // переносится по слогам.
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(
+                                                action.label,
+                                                maxLines: 1,
+                                                style: const TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: CupertinoColors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -197,13 +266,21 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
                 ),
                 Transform.translate(
                   offset: Offset(-_controller.value * _maxOffset, 0),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _controller.value > 0 ? _close : null,
-                    child: AbsorbPointer(
-                      absorbing: _controller.value > 0,
-                      child: widget.child,
-                    ),
+                  child: ListenableBuilder(
+                    listenable: widget.groupController,
+                    builder: (context, child) {
+                      // Тап по любой строке, пока какая-то открыта, только
+                      // закрывает её — как в «Почте» и «Сообщениях».
+                      final blocked =
+                          _controller.value > 0 ||
+                          widget.groupController.hasOpen;
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: blocked ? widget.groupController.closeAll : null,
+                        child: AbsorbPointer(absorbing: blocked, child: child),
+                      );
+                    },
+                    child: widget.child,
                   ),
                 ),
               ],

@@ -5,7 +5,7 @@ import '../repositories/profile_repository.dart';
 import 'auth_service.dart';
 
 /// Суммарное число непрочитанных писем во «Входящих» по всем почтовым
-/// подключениям пользователя — источник данных для бейджа в боковом меню.
+/// подключениям пользователя — источник данных для бейджа вкладки «Почта».
 class MailUnreadService extends ChangeNotifier {
   MailUnreadService._();
   static final MailUnreadService instance = MailUnreadService._();

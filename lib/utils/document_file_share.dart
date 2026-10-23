@@ -31,10 +31,20 @@ class DocumentFileShare {
     Map<String, dynamic> response, {
     required String fallbackName,
   }) async {
-    final rawName = (response['namefile'] ?? response['filename'] ?? fallbackName)
+    // 1С отвечает {file, name, ext}: имя приходит без расширения, а без
+    // него Files/QuickLook не понимают тип файла.
+    final rawName = (response['namefile'] ??
+            response['filename'] ??
+            response['name'] ??
+            fallbackName)
         .toString()
         .trim();
-    final fileName = rawName.isEmpty ? 'Файл' : rawName;
+    final ext = response['ext']?.toString().trim().replaceFirst('.', '') ?? '';
+    final baseName = rawName.isEmpty ? 'Файл' : rawName;
+    final fileName =
+        ext.isEmpty || baseName.toLowerCase().endsWith('.${ext.toLowerCase()}')
+            ? baseName
+            : '$baseName.$ext';
 
     for (final key in _base64Keys) {
       final raw = response[key];
@@ -67,6 +77,9 @@ class DocumentFileShare {
     if (value.startsWith('data:') && commaIndex != -1) {
       value = value.substring(commaIndex + 1);
     }
+    // 1С режет base64 на строки по 64 символа через \r\n, а
+    // base64.normalize на переносах падает.
+    value = value.replaceAll(RegExp(r'\s'), '');
     try {
       return base64Decode(base64.normalize(value));
     } catch (_) {

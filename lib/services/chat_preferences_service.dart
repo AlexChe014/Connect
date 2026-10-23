@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Локальные пользовательские настройки чатов — mute и избранное.
+/// Локальные пользовательские настройки чатов — mute, избранное и
+/// закрепление строки «Согласование».
 ///
 /// На сервере нет понятия "чат отключён"/"избранный", поэтому оба флага
 /// живут только на устройстве (аналогично [NotificationPreferencesService]
@@ -13,10 +14,15 @@ class ChatPreferencesService {
 
   static const _mutedKey = 'chat_muted_ids';
   static const _favoriteKey = 'chat_favorite_ids';
+  static const _approvalsPinnedKey = 'chat_approvals_pinned';
 
   Set<String> _muted = {};
   Set<String> _favorites = {};
+  bool _approvalsPinned = true;
   bool _loaded = false;
+
+  /// Закреплена ли системная строка «Согласование» (по умолчанию — да).
+  bool get approvalsPinned => _approvalsPinned;
 
   bool isMuted(String chatId) => _muted.contains(chatId);
   bool isFavorite(String chatId) => _favorites.contains(chatId);
@@ -26,6 +32,7 @@ class ChatPreferencesService {
     final prefs = await SharedPreferences.getInstance();
     _muted = (prefs.getStringList(_mutedKey) ?? const []).toSet();
     _favorites = (prefs.getStringList(_favoriteKey) ?? const []).toSet();
+    _approvalsPinned = prefs.getBool(_approvalsPinnedKey) ?? true;
     _loaded = true;
   }
 
@@ -38,6 +45,13 @@ class ChatPreferencesService {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_mutedKey, _muted.toList());
+  }
+
+  Future<void> setApprovalsPinned(bool pinned) async {
+    await ensureLoaded();
+    _approvalsPinned = pinned;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_approvalsPinnedKey, pinned);
   }
 
   Future<void> setFavorite(String chatId, bool favorite) async {

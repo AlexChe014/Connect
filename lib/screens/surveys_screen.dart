@@ -3,12 +3,16 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 
+import '../config/app_theme.dart';
 import '../models/surveys/survey_invitation.dart';
 import '../repositories/surveys_repository.dart';
 import '../services/survey_pending_service.dart';
 import '../utils/app_feedback.dart';
 import '../widgets/app_empty_state.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
+import '../widgets/app_title_bar.dart';
 import 'survey_form_screen.dart';
 
 /// «Мои опросы»: приглашения, ожидающие ответа, и уже пройденные.
@@ -93,34 +97,86 @@ class _SurveysScreenState extends State<SurveysScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Опросы'),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          color: CupertinoColors.label.resolveFrom(context),
-          decoration: TextDecoration.none,
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            color: CupertinoColors.label.resolveFrom(context),
+            decoration: TextDecoration.none,
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    AppSliverTitleBar(
+                      title: const Text('Опросы'),
+                      leading: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        onPressed: () => Navigator.maybePop(context),
+                        child: Icon(
+                          CupertinoIcons.back,
+                          size: AppSliverTitleBar.iconSize,
+                          color: CupertinoColors.label.resolveFrom(context),
+                        ),
+                      ),
+                      blur: blur,
+                    ),
+                    CupertinoSliverRefreshControl(onRefresh: _load),
+                    ..._buildBody(),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: MediaQuery.paddingOf(context).bottom + 24,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        child: SafeArea(child: _buildBody()),
       ),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) return const AppPageLoader();
+  List<Widget> _buildBody() {
+    if (_isLoading) {
+      return [
+        AppGlassSliverList(
+          itemCount: 5,
+          itemBuilder: (context, index) => const AppSkeletonListTile(),
+        ),
+      ];
+    }
 
     final now = DateTime.now();
     final invitations = _pending.invitations;
     if (invitations.isEmpty && _error != null) {
-      return AppEmptyState(
-        icon: CupertinoIcons.exclamationmark_triangle,
-        message: _error!,
-        onRetry: () => _load(showLoader: true),
-      );
+      return [
+        SliverAppEmptyState(
+          icon: CupertinoIcons.exclamationmark_triangle,
+          message: _error!,
+          onRetry: () => _load(showLoader: true),
+        ),
+      ];
+    }
+    if (invitations.isEmpty) {
+      return const [
+        SliverAppEmptyState(
+          icon: CupertinoIcons.checkmark_seal,
+          message:
+              'Опросов пока нет. Когда вас пригласят пройти опрос, '
+              'он появится здесь.',
+        ),
+      ];
     }
 
     final active = invitations.where((i) => i.isPending(now)).toList()
@@ -132,39 +188,25 @@ class _SurveysScreenState extends State<SurveysScreen> {
         ),
       );
 
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        CupertinoSliverRefreshControl(onRefresh: _load),
-        if (invitations.isEmpty)
-          const SliverAppEmptyState(
-            icon: CupertinoIcons.checkmark_seal,
-            message:
-                'Опросов пока нет. Когда вас пригласят пройти опрос, '
-                'он появится здесь.',
-          )
-        else ...[
-          if (active.isNotEmpty)
-            _section('ОЖИДАЮТ ОТВЕТА', active, now)
-          else
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(32, 20, 32, 4),
-                child: Text(
-                  'Все опросы пройдены — спасибо!',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: CupertinoColors.secondaryLabel,
-                  ),
-                ),
+    return [
+      if (active.isNotEmpty)
+        ..._section('Ожидают ответа', active, now)
+      else
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(32, 8, 32, 4),
+            child: Text(
+              'Все опросы пройдены — спасибо!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
               ),
             ),
-          if (past.isNotEmpty) _section('ЗАВЕРШЁННЫЕ', past, now),
-        ],
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
-      ],
-    );
+          ),
+        ),
+      if (past.isNotEmpty) ..._section('Завершённые', past, now),
+    ];
   }
 
   static int _byDeadline(SurveyInvitation a, SurveyInvitation b) {
@@ -176,22 +218,29 @@ class _SurveysScreenState extends State<SurveysScreen> {
     return ac.compareTo(bc);
   }
 
-  Widget _section(String title, List<SurveyInvitation> items, DateTime now) {
-    return SliverToBoxAdapter(
-      child: CupertinoListSection.insetGrouped(
-        header: Text(title),
-        children: [
-          for (final item in items)
-            _SurveyTile(
-              invitation: item,
-              now: now,
-              onTap: item.isPending(now)
-                  ? () => SurveysScreen.openInvitation(context, item)
-                  : null,
-            ),
-        ],
+  List<Widget> _section(
+    String title,
+    List<SurveyInvitation> items,
+    DateTime now,
+  ) {
+    return [
+      SliverToBoxAdapter(child: AppGlassSectionLabel(title)),
+      SliverToBoxAdapter(
+        child: AppGlassSection(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            for (final item in items)
+              _SurveyTile(
+                invitation: item,
+                now: now,
+                onTap: item.isPending(now)
+                    ? () => SurveysScreen.openInvitation(context, item)
+                    : null,
+              ),
+          ],
+        ),
       ),
-    );
+    ];
   }
 }
 
@@ -242,19 +291,10 @@ class _SurveyTile extends StatelessWidget {
         : CupertinoColors.systemGrey;
     final subtitle = _subtitle;
     return CupertinoListTile(
-      leading: Container(
-        width: 29,
-        height: 29,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Icon(
-          invitation.isCompleted ? CupertinoIcons.checkmark_alt : _icon,
-          size: 17,
-          color: CupertinoColors.white,
-        ),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 14, 12),
+      leading: AppIconBadge(
+        icon: invitation.isCompleted ? CupertinoIcons.checkmark_alt : _icon,
+        color: color,
       ),
       title: Text(
         invitation.title.isEmpty ? 'Опрос' : invitation.title,
@@ -279,7 +319,7 @@ class _SurveyTile extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: CupertinoColors.systemRed,
+                      color: AppColors.primary,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Text(

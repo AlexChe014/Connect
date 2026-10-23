@@ -30,6 +30,7 @@ class _SelectedStaffFieldState extends State<SelectedStaffField> {
       context,
       selectedIds: widget.participants.map((u) => u.id).toSet(),
       onUserSelected: widget.onUserAdded,
+      onUserDeselected: widget.onUserRemoved,
     );
   }
 

@@ -1,7 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 
+import '../config/app_theme.dart';
 import '../models/bonus_program/achievement_type.dart';
+import 'app_glass.dart';
+import 'app_icon_badge.dart';
+import 'bonus_glass.dart';
 
 /// Мульти-выбор типов достижений: тап сразу добавляет запись в форму,
 /// шторка остаётся открытой, пока не нажата «Готово».
@@ -144,15 +148,20 @@ class _PickerTypeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    // Заливка и кромка как у AppGlass, но без размытия: строк в списке
+    // много, а BackdropFilter под каждой дорог.
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isSelected
-            ? CupertinoColors.systemGrey5.resolveFrom(context)
-            : CupertinoColors.secondarySystemGroupedBackground.resolveFrom(
-                context,
-              ),
-        borderRadius: BorderRadius.circular(12),
+            ? CupertinoColors.tertiarySystemFill.resolveFrom(context)
+            : (isDark ? const Color(0x80303032) : const Color(0xCCFFFFFF)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? const Color(0x26FFFFFF) : const Color(0xB3FFFFFF),
+        ),
+        boxShadow: isSelected ? null : AppGlass.controlShadow,
       ),
       clipBehavior: Clip.antiAlias,
       child: GestureDetector(
@@ -162,26 +171,33 @@ class _PickerTypeTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
+              const AppIconBadge(
+                icon: CupertinoIcons.rosette,
+                color: CupertinoColors.systemGreen,
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       type.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: CupertinoColors.label,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${type.pointsCost} баллов',
-                      style: const TextStyle(
+                      formatPoints(type.pointsCost),
+                      style: TextStyle(
                         fontSize: 12,
-                        color: CupertinoColors.secondaryLabel,
+                        color: CupertinoColors.secondaryLabel.resolveFrom(
+                          context,
+                        ),
                       ),
                     ),
                   ],
@@ -191,12 +207,12 @@ class _PickerTypeTile extends StatelessWidget {
               if (isSelected)
                 const Icon(
                   CupertinoIcons.checkmark_circle_fill,
-                  color: CupertinoColors.activeBlue,
+                  color: AppColors.primary,
                 )
               else
-                const Icon(
+                Icon(
                   CupertinoIcons.plus_circle,
-                  color: CupertinoColors.systemGrey,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
                 ),
             ],
           ),

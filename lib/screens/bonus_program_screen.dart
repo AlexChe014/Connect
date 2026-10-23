@@ -1,22 +1,25 @@
-import 'dart:math';
-
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show RefreshIndicator;
+import 'package:intl/intl.dart';
 
+import '../config/app_theme.dart';
 import '../models/bonus_program/point_balance.dart';
+import '../models/bonus_program/point_operation.dart';
 import '../models/bonus_program/roulette_config.dart';
+import '../models/bonus_program/shop_item.dart';
 import '../repositories/bonus_program_repository.dart';
 import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/app_loading.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/bonus_glass.dart';
 import 'bonus_achievements_form_screen.dart';
 import 'bonus_history_screen.dart';
 import 'bonus_roulette_screen.dart';
 import 'bonus_shop_screen.dart';
 import 'bonus_transfer_screen.dart';
 
-/// Раздел «Бонусная программа»: баланс баллов и переходы в магазин,
-/// рулетку, перевод баллов коллеге и форму достижений.
+/// Раздел «Бонусная программа» по образцу Apple Cash в «Кошельке»:
+/// карта баланса, ряд действий, лента товаров, на которые можно
+/// потратить баллы, и последние операции.
 class BonusProgramScreen extends StatefulWidget {
   const BonusProgramScreen({super.key});
 
@@ -25,8 +28,12 @@ class BonusProgramScreen extends StatefulWidget {
 }
 
 class _BonusProgramScreenState extends State<BonusProgramScreen> {
+  static const _recentCount = 5;
+
   PointBalance? _balance;
   RouletteConfig? _rouletteConfig;
+  List<ShopItem> _shopItems = [];
+  List<PointOperation> _recent = [];
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -38,7 +45,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
 
   Future<void> _load() async {
     setState(() {
-      _isLoading = true;
+      _isLoading = _balance == null;
       _errorMessage = null;
     });
     try {
@@ -58,143 +65,287 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
       });
       return;
     }
-    // Промо-карточка рулетки необязательна для экрана — не блокируем
-    // основной баланс, если её настройки недоступны.
-    BonusProgramRepository.instance
+    // Колесо, витрина и история необязательны для экрана — не блокируем
+    // баланс, если что-то из них недоступно: блок просто не показывается.
+    final repo = BonusProgramRepository.instance;
+    repo
         .getRouletteConfig()
         .then((config) {
           if (mounted) setState(() => _rouletteConfig = config);
         })
         .catchError((_) {});
+    repo
+        .getShopItems()
+        .then((items) {
+          if (!mounted) return;
+          final available =
+              items.where((i) => i.isActive && !i.isOutOfStock).toList()
+                ..sort((a, b) => a.price.compareTo(b.price));
+          setState(() => _shopItems = available);
+        })
+        .catchError((_) {});
+    repo
+        .getHistory()
+        .then((page) {
+          if (!mounted) return;
+          setState(() => _recent = page.data.take(_recentCount).toList());
+        })
+        .catchError((_) {});
+  }
+
+  /// После перевода, покупки или вращения баланс на главном экране
+  /// должен быть свежим.
+  Future<void> _open(Widget screen) async {
+    await Navigator.of(
+      context,
+    ).push(CupertinoPageRoute(builder: (_) => screen));
+    if (mounted) _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Бонусная программа'),
-        backgroundColor: CupertinoColors.systemGroupedBackground,
-        border: null,
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          color: CupertinoColors.label.resolveFrom(context),
-          decoration: TextDecoration.none,
-        ),
-        child: SafeArea(child: _buildBody()),
-      ),
+    return BonusGlassScaffold(
+      title: 'Бонусная программа',
+      largeTitle: true,
+      onRefresh: _load,
+      slivers: [_buildBody()],
     );
   }
 
   Widget _buildBody() {
-    if (_isLoading) return const AppPageLoader();
+    if (_isLoading) return const BonusSliverLoader();
 
-    if (_errorMessage != null) {
-      return AppEmptyState(
+    final balance = _balance;
+    if (balance == null) {
+      return SliverAppEmptyState(
         icon: CupertinoIcons.exclamationmark_triangle,
-        message: _errorMessage!,
+        message: _errorMessage ?? 'Не удалось загрузить баланс баллов',
         onRetry: _load,
       );
     }
 
-    return RefreshIndicator.adaptive(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        children: [
-          if (_balance != null) _BalanceCard(balance: _balance!),
-          if (_rouletteConfig != null && _rouletteConfig!.enabled) ...[
-            const SizedBox(height: 12),
-            _RoulettePromoCard(
-              config: _rouletteConfig!,
-              onTap: () => Navigator.of(context).push(
-                CupertinoPageRoute(builder: (_) => const BonusRouletteScreen()),
-              ),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Row(
+    final roulette = _rouletteConfig;
+    // Плашка колеса — только когда крутить действительно можно.
+    final showRoulette = roulette != null && roulette.canSpin;
+    return SliverList.list(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: _BalanceCard(balance: balance),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          child: Row(
             children: [
               Expanded(
-                child: _BonusFeatureCard(
-                  icon: CupertinoIcons.clock_fill,
-                  title: 'История баллов',
-                  subtitle: 'Начисления и списания',
-                  colors: const [Color(0xFF36D1DC), Color(0xFF5B86E5)],
-                  onTap: () => Navigator.of(context).push(
-                    CupertinoPageRoute(
-                      builder: (_) => const BonusHistoryScreen(),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _BonusFeatureCard(
+                child: AppGlassActionButton(
                   icon: CupertinoIcons.arrow_right_arrow_left,
-                  title: 'Перевести баллы',
-                  subtitle: 'Поделитесь с коллегой',
-                  colors: const [Color(0xFF8E54E9), Color(0xFF4776E6)],
-                  onTap: () => Navigator.of(context).push(
-                    CupertinoPageRoute(
-                      builder: (_) => const BonusTransferScreen(),
-                    ),
-                  ),
+                  label: 'Перевести',
+                  onTap: () => _open(const BonusTransferScreen()),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AppGlassActionButton(
+                  icon: CupertinoIcons.bag,
+                  label: 'Магазин',
+                  onTap: () => _open(const BonusShopScreen()),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AppGlassActionButton(
+                  icon: CupertinoIcons.dial,
+                  label: 'Колесо',
+                  onTap: () => _open(const BonusRouletteScreen()),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AppGlassActionButton(
+                  icon: CupertinoIcons.rosette,
+                  label: 'Достижения',
+                  onTap: () => _open(const BonusAchievementsFormScreen()),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _BonusFeatureCard(
-                  icon: CupertinoIcons.gift_fill,
-                  title: 'Магазин',
-                  subtitle: 'Обменяйте баллы на призы',
-                  colors: const [Color(0xFFFF5F6D), Color(0xFFFFC371)],
-                  onTap: () => Navigator.of(context).push(
-                    CupertinoPageRoute(
-                      builder: (_) => const BonusShopScreen(),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _BonusFeatureCard(
-                  icon: CupertinoIcons.dial_fill,
-                  title: 'Колесо фортуны',
-                  subtitle: 'Испытайте удачу',
-                  colors: const [Color(0xFFF6D365), Color(0xFFFDA085)],
-                  onTap: () => Navigator.of(context).push(
-                    CupertinoPageRoute(
-                      builder: (_) => const BonusRouletteScreen(),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        ),
+        if (showRoulette)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: _RoulettePromoCard(
+              config: roulette,
+              onTap: () => _open(const BonusRouletteScreen()),
+            ),
           ),
-          const SizedBox(height: 12),
-          _BonusWideCard(
-            icon: CupertinoIcons.rosette,
-            title: 'Форма достижений',
-            subtitle: 'Заявка на бонусные баллы',
-            colors: const [Color(0xFF11998E), Color(0xFF38EF7D)],
-            onTap: () => Navigator.of(context).push(
-              CupertinoPageRoute(
-                builder: (_) => const BonusAchievementsFormScreen(),
+        if (_shopItems.isNotEmpty) ...[
+          _SectionHeader(
+            title: 'Можно получить',
+            onAll: () => _open(const BonusShopScreen()),
+          ),
+          SizedBox(
+            height: 214,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              // Снизу запас под тень карточек.
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              itemCount: _shopItems.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemBuilder: (context, index) => SizedBox(
+                width: 150,
+                child: _ShopPreviewCard(
+                  item: _shopItems[index],
+                  balance: balance.points,
+                  onTap: () => _open(const BonusShopScreen()),
+                ),
               ),
             ),
           ),
+        ],
+        _SectionHeader(
+          title: 'Последние операции',
+          onAll: _recent.isEmpty
+              ? null
+              : () => _open(const BonusHistoryScreen()),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: AppFlatGlassCard(
+            child: _recent.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Text(
+                        'Операций пока нет',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < _recent.length; i++) ...[
+                        if (i > 0)
+                          Container(
+                            height: 0.5,
+                            margin: const EdgeInsets.only(left: 64),
+                            color: CupertinoColors.separator.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        BonusOperationRow(operation: _recent[i]),
+                      ],
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Заголовок блока главного экрана с переходом «Все».
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, this.onAll});
+
+  final String title;
+  final VoidCallback? onAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 26, 12, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+          if (onAll != null)
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              onPressed: onAll,
+              child: const Text(
+                'Все',
+                style: TextStyle(fontSize: 16, color: AppColors.primary),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
+/// Товар в ленте «Можно получить»: на что баллов уже хватает — цена
+/// фирменным синим с галочкой, на остальное — сколько ещё накопить.
+class _ShopPreviewCard extends StatelessWidget {
+  const _ShopPreviewCard({
+    required this.item,
+    required this.balance,
+    required this.onTap,
+  });
+
+  final ShopItem item;
+  final int balance;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final affordable = balance >= item.price;
+    final missing = item.price - balance;
+    return BonusPhotoCard(
+      photoUrl: item.photoUrl,
+      title: item.name,
+      onTap: onTap,
+      footer: affordable
+          ? Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.checkmark_seal_fill,
+                  size: 14,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    formatPoints(item.price),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              'Ещё ${formatPoints(missing)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              ),
+            ),
+    );
+  }
+}
+
+/// Баланс крупной цифрой на фирменном градиенте — как карта в «Кошельке».
 class _BalanceCard extends StatelessWidget {
   const _BalanceCard({required this.balance});
 
@@ -202,85 +353,106 @@ class _BalanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final number = NumberFormat.decimalPattern('ru_RU');
+    const soft = Color(0xD9FFFFFF);
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF7F53E9), Color(0xFFC969E9)],
+          colors: [AppColors.primary, Color(0xFF7B5CFF)],
         ),
-        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7F53E9).withValues(alpha: 0.35),
+            color: AppColors.primary.withValues(alpha: 0.3),
             blurRadius: 18,
-            offset: const Offset(0, 10),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Stack(
         children: [
+          // Крупная полупрозрачная звезда — фактура, как на карте в «Кошельке».
           Positioned(
-            right: -22,
-            top: -26,
+            right: -24,
+            bottom: -34,
             child: Icon(
-              CupertinoIcons.sparkles,
-              size: 120,
+              CupertinoIcons.star_fill,
+              size: 150,
               color: CupertinoColors.white.withValues(alpha: 0.12),
             ),
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ваш баланс',
-                      style: TextStyle(
-                        color: CupertinoColors.white,
-                        fontSize: 14,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'ВАШ БАЛАНС',
+                        style: TextStyle(
+                          fontSize: 13,
+                          letterSpacing: 0.2,
+                          color: soft,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${balance.points} баллов',
-                      style: const TextStyle(
-                        color: CupertinoColors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
+                      const SizedBox(height: 4),
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: number.format(balance.points),
+                              style: const TextStyle(
+                                fontSize: 42,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.8,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
+                            TextSpan(
+                              text: '  ${pointsWord(balance.points)}',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                                color: soft,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Потрачено всего: ${balance.pointsSpentTotal}',
-                      style: const TextStyle(
-                        color: CupertinoColors.white,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
+                      if (balance.pointsSpentTotal > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Потрачено всего: '
+                          '${number.format(balance.pointsSpentTotal)} '
+                          '${pointsWord(balance.pointsSpentTotal)}',
+                          style: const TextStyle(fontSize: 13, color: soft),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
-              Container(
-                width: 48,
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: CupertinoColors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white.withValues(alpha: 0.22),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.star_fill,
+                    size: 22,
+                    color: CupertinoColors.white,
+                  ),
                 ),
-                child: Icon(
-                  CupertinoIcons.creditcard_fill,
-                  color: CupertinoColors.white,
-                  size: 24,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -288,8 +460,9 @@ class _BalanceCard extends StatelessWidget {
   }
 }
 
-/// Яркая карточка-приглашение крутить рулетку прямо с главного экрана
-/// бонусов — привлекает внимание к геймификации, ведёт на [BonusRouletteScreen].
+/// Приглашение крутить рулетку прямо с главного экрана бонусов —
+/// медленно вращающаяся иконка привлекает внимание к геймификации,
+/// ведёт на [BonusRouletteScreen].
 class _RoulettePromoCard extends StatefulWidget {
   const _RoulettePromoCard({required this.config, required this.onTap});
 
@@ -328,48 +501,46 @@ class _RoulettePromoCardState extends State<_RoulettePromoCard>
               : 'Лимит на этот месяц исчерпан')
         : 'Испытайте удачу и выиграйте приз';
 
-    return GestureDetector(
-      onTap: widget.onTap,
+    // Тёплые тона экрана колеса — приглашение выделяется среди
+    // спокойных стеклянных плиток.
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: widget.onTap,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFFF8A3D), Color(0xFFFF5F6D)],
+            colors: [Color(0xFFFF9F43), Color(0xFFFF5E8A)],
           ),
-          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFFF5F6D).withValues(alpha: 0.35),
+              color: const Color(0xFFFF5E8A).withValues(alpha: 0.3),
               blurRadius: 16,
-              offset: const Offset(0, 8),
+              offset: const Offset(0, 6),
             ),
           ],
         ),
         child: Row(
           children: [
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return Transform.rotate(
-                  angle: _controller.value * 2 * pi,
-                  child: child,
-                );
-              },
+            RotationTransition(
+              turns: _controller,
               child: Container(
                 width: 44,
                 height: 44,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: CupertinoColors.white.withValues(alpha: 0.22),
+                  color: CupertinoColors.white.withValues(alpha: 0.24),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   CupertinoIcons.sparkles,
-                  color: CupertinoColors.white,
                   size: 22,
+                  color: CupertinoColors.white,
                 ),
               ),
             ),
@@ -381,218 +552,26 @@ class _RoulettePromoCardState extends State<_RoulettePromoCard>
                   const Text(
                     'Крутите колесо фортуны!',
                     style: TextStyle(
-                      color: CupertinoColors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
+                      color: CupertinoColors.white,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: CupertinoColors.white, fontSize: 13),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: CupertinoColors.white.withValues(alpha: 0.9),
+                    ),
                   ),
                 ],
               ),
             ),
             const Icon(
-              CupertinoIcons.arrow_right_circle_fill,
+              CupertinoIcons.chevron_forward,
+              size: 17,
               color: CupertinoColors.white,
-              size: 26,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Квадратная цветная карточка раздела бонусной программы: крупная
-/// декоративная иконка на градиентном фоне, заголовок и подпись.
-class _BonusFeatureCard extends StatelessWidget {
-  const _BonusFeatureCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.colors,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final List<Color> colors;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 148,
-        padding: const EdgeInsets.all(14),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: colors,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: colors.last.withValues(alpha: 0.35),
-              blurRadius: 14,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -18,
-              bottom: -18,
-              child: Icon(
-                icon,
-                size: 92,
-                color: CupertinoColors.white.withValues(alpha: 0.16),
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.white.withValues(alpha: 0.24),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, size: 21, color: CupertinoColors.white),
-                ),
-                const Spacer(),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: CupertinoColors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: CupertinoColors.white.withValues(alpha: 0.85),
-                    fontSize: 11.5,
-                    height: 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Широкая цветная карточка на всю ширину — для менее «игровых» действий
-/// раздела бонусов, например заявки на достижение.
-class _BonusWideCard extends StatelessWidget {
-  const _BonusWideCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.colors,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final List<Color> colors;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: colors,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: colors.last.withValues(alpha: 0.3),
-              blurRadius: 14,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -14,
-              top: -20,
-              child: Icon(
-                icon,
-                size: 90,
-                color: CupertinoColors.white.withValues(alpha: 0.14),
-              ),
-            ),
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: CupertinoColors.white.withValues(alpha: 0.24),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Icon(icon, size: 23, color: CupertinoColors.white),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: CupertinoColors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: CupertinoColors.white.withValues(alpha: 0.85),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  CupertinoIcons.chevron_forward,
-                  color: CupertinoColors.white,
-                  size: 18,
-                ),
-              ],
             ),
           ],
         ),

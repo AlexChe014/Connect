@@ -2,10 +2,10 @@ import 'package:connect/repositories/connector_repository.dart';
 import 'package:connect/utils/connector_launch.dart';
 import 'package:connect/utils/connector_url_utils.dart';
 import 'package:connect/utils/html_text_utils.dart';
+import 'package:connect/utils/open_link.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 final _urlRegExp = RegExp(r'(https?:\/\/[^\s<>"\)]+)', caseSensitive: false);
 
@@ -60,7 +60,7 @@ class _ChatMessageTextState extends State<ChatMessageText> {
 
     final uri = Uri.tryParse(url);
     if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await openLink(uri);
   }
 
   @override

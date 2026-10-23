@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show RefreshIndicator;
 import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../config/app_theme.dart';
@@ -12,7 +11,9 @@ import '../models/bonus_program/roulette_spin.dart';
 import '../repositories/bonus_program_repository.dart';
 import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
-import '../widgets/confetti_overlay.dart';
+import '../widgets/app_glass.dart';
+import '../widgets/bonus_glass.dart';
+import '../widgets/home_shortcut_button.dart';
 import 'bonus_roulette_prizes_screen.dart';
 
 /// Неотрицательный остаток от деления (Dart `%` уже такой для num,
@@ -34,7 +35,7 @@ class BonusRouletteScreen extends StatefulWidget {
 }
 
 class _BonusRouletteScreenState extends State<BonusRouletteScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   RouletteConfig? _config;
   List<RoulettePrize> _prizes = [];
   bool _isLoading = true;
@@ -42,28 +43,41 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
   String? _errorMessage;
 
   late final AnimationController _spinController;
+
+  /// Фоновая «жизнь» экрана: вращение лучей, бегущие огоньки, парящий приз.
+  late final AnimationController _ambient;
   Animation<double>? _reelAnimation;
   double? _restPosition;
+  late final VoidCallback _releaseHomeSuppress;
 
   @override
   void initState() {
     super.initState();
+    // «Домой» легла бы поверх кнопки «Крутить» (см. HomeShortcutButton).
+    _releaseHomeSuppress = HomeShortcutButton.suppress();
     _spinController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 4000),
     );
+    _ambient = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
     _load();
   }
 
   @override
   void dispose() {
+    _releaseHomeSuppress();
     _spinController.dispose();
+    _ambient.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     setState(() {
-      _isLoading = true;
+      // После вращения лимит обновляется тихо — без мигания загрузкой.
+      _isLoading = _config == null;
       _errorMessage = null;
     });
     try {
@@ -128,9 +142,10 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
     final deltaToAlign = _mod(targetIndex - startPosition, n.toDouble());
     final finalPosition = startPosition + extraLoops * n + deltaToAlign;
 
-    _reelAnimation = Tween<double>(begin: startPosition, end: finalPosition).animate(
-      CurvedAnimation(parent: _spinController, curve: Curves.easeOutCubic),
-    );
+    _reelAnimation = Tween<double>(begin: startPosition, end: finalPosition)
+        .animate(
+          CurvedAnimation(parent: _spinController, curve: Curves.easeOutCubic),
+        );
 
     await _spinController.forward(from: 0);
     if (!mounted) return;
@@ -169,69 +184,50 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
   Future<void> _showResult(RouletteSpin spin) {
     final prize = spin.prize;
     final pending = spin.prizeRequest?.isPending == true;
-    return showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'roulette-result',
-      barrierColor: const Color(0x99000000),
-      transitionDuration: const Duration(milliseconds: 320),
-      pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
-      transitionBuilder: (context, anim, secondaryAnim, child) {
-        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
-        return Opacity(
-          opacity: anim.value.clamp(0, 1),
-          child: Transform.scale(
-            scale: 0.7 + 0.3 * curved.value.clamp(0, 1.2),
-            child: Center(child: _ResultCard(prize: prize, pending: pending)),
-          ),
-        );
-      },
+    return showBonusCelebration(
+      context,
+      title: prize != null ? '🎉 Поздравляем!' : 'Почти получилось',
+      message: prize != null
+          ? 'Вы выиграли:\n«${prize.name}»'
+          : 'В этот раз без приза — попробуйте ещё раз в следующем месяце!',
+      status: prize != null && pending
+          ? 'Заявка на выдачу отправлена на согласование'
+          : null,
+      statusColor: CupertinoColors.systemOrange,
+      photoUrl: prize?.photoUrl,
+      icon: prize != null ? CupertinoIcons.gift_fill : CupertinoIcons.sparkles,
+      celebrate: prize != null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: const Color(0xFFB3402F),
-      navigationBar: CupertinoNavigationBar(
-        middle: const Text(
-          'Колесо фортуны',
-          style: TextStyle(color: CupertinoColors.white),
-        ),
-        backgroundColor: const Color(0x00000000),
-        border: null,
-        brightness: Brightness.dark,
-        trailing: _isLoading
-            ? null
-            : CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: () => Navigator.of(context).push(
-                  CupertinoPageRoute(
-                    builder: (_) => BonusRoulettePrizesScreen(prizes: _prizes),
-                  ),
+    return BonusGlassScaffold(
+      title: 'Колесо фортуны',
+      trailing: _isLoading
+          ? null
+          : CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => Navigator.of(context).push(
+                CupertinoPageRoute(
+                  builder: (_) => BonusRoulettePrizesScreen(prizes: _prizes),
                 ),
-                child: const Icon(CupertinoIcons.question_circle, color: CupertinoColors.white),
               ),
-      ),
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.2),
-            radius: 1.0,
-            colors: [Color(0xFFFFC38A), Color(0xFFFF8A5C), Color(0xFFB3402F)],
-            stops: [0.0, 0.45, 1.0],
-          ),
-        ),
-        child: SafeArea(child: _buildBody()),
-      ),
+              child: Icon(
+                CupertinoIcons.question_circle,
+                size: 24,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+      glow: const _FestiveGlow(),
+      body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CupertinoActivityIndicator(radius: 14, color: CupertinoColors.white),
-      );
+      return const Center(child: CupertinoActivityIndicator(radius: 14));
     }
 
     if (_errorMessage != null) {
@@ -244,21 +240,61 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
 
     final config = _config;
     if (config == null || !config.enabled) {
-      return RefreshIndicator.adaptive(
-        onRefresh: _load,
-        child: const AppEmptyState(
-          icon: CupertinoIcons.sparkles,
-          message: 'Колесо фортуны сейчас недоступно',
-        ),
+      return AppEmptyState(
+        icon: CupertinoIcons.sparkles,
+        message: 'Колесо фортуны сейчас недоступно',
+        onRetry: _load,
       );
     }
 
+    final remaining = config.spinsRemainingThisMonth;
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     return Column(
       children: [
+        const SizedBox(height: 4),
+        const Text(
+          'Испытайте удачу! 🎁',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.4,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Каждое вращение — шанс забрать приз',
+          style: TextStyle(fontSize: 15, color: secondary),
+        ),
         Expanded(child: Center(child: _buildReel())),
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: _buildSpinButton(config),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            MediaQuery.paddingOf(context).bottom + 12,
+          ),
+          child: Column(
+            children: [
+              if (remaining != null) ...[
+                Text(
+                  remaining > 0
+                      ? '🎟 Осталось вращений в этом месяце: $remaining'
+                      : 'Лимит вращений на этот месяц исчерпан',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: secondary),
+                ),
+                const SizedBox(height: 10),
+              ],
+              _SpinButton(
+                label: config.canSpin
+                    ? 'Крутить за ${formatPoints(config.spinCost)}'
+                    : 'Колесо недоступно',
+                isSpinning: _isSpinning,
+                pulse: _ambient,
+                onPressed: config.canSpin ? _spin : null,
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -267,7 +303,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
   Widget _buildReel() {
     if (_prizes.isEmpty) return const SizedBox.shrink();
     return AnimatedBuilder(
-      animation: _spinController,
+      animation: Listenable.merge([_spinController, _ambient]),
       builder: (context, child) {
         final position = _isSpinning && _reelAnimation != null
             ? _reelAnimation!.value
@@ -275,56 +311,227 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
         final n = _prizes.length;
         final centerIndex = ((position.round() % n) + n) % n;
         final currentPrize = _prizes[centerIndex];
-        return Column(
-          mainAxisSize: MainAxisSize.min,
+        final t = _ambient.value;
+        // Приз чуть покачивается вверх-вниз, пока колесо стоит.
+        final float = _isSpinning ? 0.0 : sin(t * 2 * pi * 8) * 4;
+        // Сцена на стекле: крупный приз и лента превью под ним, за ней —
+        // вращающиеся лучи.
+        return Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 150),
-              child: _HeroPrize(
-                key: ValueKey(currentPrize.id),
-                prize: currentPrize,
+            Positioned.fill(
+              child: OverflowBox(
+                maxWidth: 640,
+                maxHeight: 640,
+                child: IgnorePointer(
+                  child: Transform.rotate(
+                    angle: t * 2 * pi * (_isSpinning ? 3 : 1),
+                    child: const CustomPaint(
+                      size: Size(640, 640),
+                      painter: _SunburstPainter(),
+                    ),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 22),
-            Center(child: _ReelStrip(prizes: _prizes, position: position)),
-            const SizedBox(height: 8),
-            const Icon(
-              CupertinoIcons.arrowtriangle_up_fill,
-              color: Color(0xFFFFD166),
-              size: 16,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: AppGlass(
+                borderRadius: BorderRadius.circular(32),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 22, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Transform.translate(
+                        offset: Offset(0, float),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 150),
+                          child: _HeroPrize(
+                            key: ValueKey(currentPrize.id),
+                            prize: currentPrize,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: _ReelStrip(prizes: _prizes, position: position),
+                      ),
+                      const SizedBox(height: 4),
+                      const Icon(
+                        CupertinoIcons.arrowtriangle_up_fill,
+                        color: _kWarmAccent,
+                        size: 14,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         );
       },
     );
   }
+}
 
-  Widget _buildSpinButton(RouletteConfig config) {
-    final enabled = config.canSpin && !_isSpinning;
-    final label = _isSpinning
-        ? 'Крутим...'
-        : (config.canSpin
-              ? 'Крутить за ${config.spinCost} баллов'
-              : 'Колесо недоступно');
-    return SizedBox(
-      width: double.infinity,
-      child: CupertinoButton(
-        onPressed: enabled ? _spin : null,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        borderRadius: BorderRadius.circular(28),
-        color: CupertinoColors.white,
-        disabledColor: CupertinoColors.white.withValues(alpha: 0.5),
-        child: _isSpinning
-            ? const CupertinoActivityIndicator(color: AppColors.primary)
-            : Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
+/// Тёплый акцент колеса — рамка текущего приза и стрелка.
+const _kWarmAccent = Color(0xFFFF7A45);
+
+/// Тёплое праздничное пятно вместо синего [AppGlassGlow]: оранжевый
+/// сверху переходит в розовый и растворяется в фоне.
+class _FestiveGlow extends StatelessWidget {
+  const _FestiveGlow();
+
+  @override
+  Widget build(BuildContext context) {
+    final groupedBg = CupertinoColors.systemGroupedBackground.resolveFrom(
+      context,
+    );
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFFFFB547).withValues(alpha: 0.38),
+                const Color(0xFFFF6FA3).withValues(alpha: 0.22),
+                const Color(0xFFB57CFF).withValues(alpha: 0.12),
+                groupedBg.withValues(alpha: 0),
+              ],
+              stops: const [0, 0.35, 0.65, 1],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Лучи «солнышка» за сценой — под стеклом они размываются в мягкое
+/// мерцание, а вокруг карточки видны как праздничный фон.
+class _SunburstPainter extends CustomPainter {
+  const _SunburstPainter();
+
+  static const _rays = 16;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2;
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFFFFC94D).withValues(alpha: 0.55),
+          const Color(0xFFFF8A65).withValues(alpha: 0.25),
+          const Color(0x00FF8A65),
+        ],
+        stops: const [0.15, 0.55, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+    const sweep = pi / _rays;
+    for (var i = 0; i < _rays; i++) {
+      final start = i * 2 * sweep;
+      final path = Path()
+        ..moveTo(center.dx, center.dy)
+        ..arcTo(
+          Rect.fromCircle(center: center, radius: radius),
+          start,
+          sweep,
+          false,
+        )
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SunburstPainter oldDelegate) => false;
+}
+
+/// Кнопка «Крутить»: тёплый градиент и мягкая пульсация, пока колесо
+/// ждёт вращения.
+class _SpinButton extends StatelessWidget {
+  const _SpinButton({
+    required this.label,
+    required this.isSpinning,
+    required this.pulse,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool isSpinning;
+  final Animation<double> pulse;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null && !isSpinning;
+    final button = CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: enabled ? onPressed : null,
+      child: Container(
+        width: double.infinity,
+        height: 54,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(27),
+          gradient: onPressed == null
+              ? null
+              : const LinearGradient(
+                  colors: [Color(0xFFFF9F43), Color(0xFFFF5E8A)],
                 ),
+          color: onPressed == null
+              ? CupertinoColors.systemGrey4.resolveFrom(context)
+              : null,
+          boxShadow: onPressed == null
+              ? null
+              : [
+                  BoxShadow(
+                    color: const Color(0xFFFF5E8A).withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: isSpinning
+            ? const CupertinoActivityIndicator(color: CupertinoColors.white)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onPressed != null) ...[
+                    const Icon(
+                      CupertinoIcons.sparkles,
+                      size: 20,
+                      color: CupertinoColors.white,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: onPressed == null
+                          ? CupertinoColors.secondaryLabel.resolveFrom(context)
+                          : CupertinoColors.white,
+                    ),
+                  ),
+                ],
               ),
       ),
+    );
+    if (!enabled) return button;
+    return AnimatedBuilder(
+      animation: pulse,
+      builder: (context, child) => Transform.scale(
+        scale: 1 + 0.025 * (0.5 + 0.5 * sin(pulse.value * 2 * pi * 12)),
+        child: child,
+      ),
+      child: button,
     );
   }
 }
@@ -347,11 +554,18 @@ class _PrizeThumb extends StatelessWidget {
         fit: BoxFit.contain,
         width: size,
         height: size,
-        errorWidget: (context, url, error) =>
-            Icon(CupertinoIcons.gift_fill, color: AppColors.primary, size: iconSize),
+        errorWidget: (context, url, error) => Icon(
+          CupertinoIcons.gift_fill,
+          color: AppColors.primary,
+          size: iconSize,
+        ),
       );
     }
-    return Icon(CupertinoIcons.gift_fill, color: AppColors.primary, size: iconSize);
+    return Icon(
+      CupertinoIcons.gift_fill,
+      color: AppColors.primary,
+      size: iconSize,
+    );
   }
 }
 
@@ -366,7 +580,7 @@ class _HeroPrize extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const size = 260.0;
+    const size = 230.0;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -379,14 +593,14 @@ class _HeroPrize extends StatelessWidget {
                   fit: BoxFit.contain,
                   errorWidget: (context, url, error) => const Icon(
                     CupertinoIcons.gift_fill,
-                    color: Color(0xFF242833),
-                    size: 130,
+                    color: AppColors.primary,
+                    size: 120,
                   ),
                 )
               : const Icon(
                   CupertinoIcons.gift_fill,
-                  color: Color(0xFF242833),
-                  size: 130,
+                  color: AppColors.primary,
+                  size: 120,
                 ),
         ),
         Transform.translate(
@@ -457,142 +671,15 @@ class _ReelStrip extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
-            border: isCurrent ? Border.all(color: const Color(0xFFFFD166), width: 2.5) : null,
+            border: isCurrent
+                ? Border.all(color: _kWarmAccent, width: 2.5)
+                : null,
           ),
-          child: Center(child: _PrizeThumb(prize: _prizeAt(i, n), size: size * 0.82)),
+          child: Center(
+            child: _PrizeThumb(prize: _prizeAt(i, n), size: size * 0.82),
+          ),
         ),
       ),
     );
   }
 }
-
-class _ResultCard extends StatelessWidget {
-  const _ResultCard({required this.prize, required this.pending});
-
-  final RoulettePrize? prize;
-  final bool pending;
-
-  @override
-  Widget build(BuildContext context) {
-    final won = prize != null;
-    return DefaultTextStyle(
-      style: const TextStyle(
-        color: CupertinoColors.label,
-        decoration: TextDecoration.none,
-      ),
-      child: SizedBox(
-      width: 300,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.topCenter,
-        children: [
-          if (won)
-            const Positioned(
-              top: -60,
-              child: SizedBox(width: 320, height: 320, child: ConfettiOverlay()),
-            ),
-          Container(
-            margin: const EdgeInsets.only(top: 28),
-            padding: const EdgeInsets.fromLTRB(24, 44, 24, 24),
-            decoration: BoxDecoration(
-              color: CupertinoColors.systemBackground.resolveFrom(context),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x40000000),
-                  blurRadius: 24,
-                  offset: Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  won ? '🎉 Поздравляем!' : 'Почти получилось',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  won
-                      ? 'Вы выиграли:\n«${prize!.name}»'
-                      : 'В этот раз без приза — попробуйте ещё раз в следующем месяце!',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: CupertinoColors.secondaryLabel,
-                  ),
-                ),
-                if (won && pending) ...[
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Заявка на выдачу отправлена на согласование',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: CupertinoColors.systemOrange,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoButton.filled(
-                    borderRadius: BorderRadius.circular(14),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Отлично!'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 0,
-            child: Container(
-              width: 76,
-              height: 76,
-              alignment: Alignment.center,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: won
-                      ? const [Color(0xFFFFD966), Color(0xFFE0A200)]
-                      : const [CupertinoColors.systemGrey4, CupertinoColors.systemGrey3],
-                ),
-                border: Border.all(color: CupertinoColors.white, width: 4),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x40000000),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: won && prize!.photoUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: prize!.photoUrl!,
-                      fit: BoxFit.cover,
-                      width: 68,
-                      height: 68,
-                      errorWidget: (context, url, error) => const Icon(
-                        CupertinoIcons.gift_fill,
-                        color: CupertinoColors.white,
-                        size: 32,
-                      ),
-                    )
-                  : Icon(
-                      won ? CupertinoIcons.gift_fill : CupertinoIcons.sparkles,
-                      color: CupertinoColors.white,
-                      size: 32,
-                    ),
-            ),
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-}
-
