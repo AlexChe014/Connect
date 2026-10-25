@@ -30,7 +30,9 @@ class ChatRealtimeService {
   final Map<String, Subscription> _chatSubs = {};
 
   bool get isStarted => _started;
-  bool get isConnected => _client != null;
+
+  /// Сокет на связи — живые события доходят, частый опрос не нужен.
+  bool get isConnected => _client?.state == ReverbState.connected;
 
   Future<void> start() async {
     if (!AuthService.instance.isAuthenticated) return;

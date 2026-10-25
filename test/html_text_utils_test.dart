@@ -48,4 +48,21 @@ void main() {
       expect(HtmlTextUtils.toPlainText('just a message'), 'just a message');
     });
   });
+
+  group('HtmlTextUtils.toMultilineText', () {
+    test('keeps portal paragraphs and line breaks for copy/edit', () {
+      expect(
+        HtmlTextUtils.toMultilineText('<p>Привет</p>\n<p>мир &amp; всё</p>'),
+        'Привет\nмир & всё',
+      );
+      expect(
+        HtmlTextUtils.toMultilineText('<p>a<br>b</p><p><br></p><p>c</p>'),
+        'a\nb\n\nc',
+      );
+    });
+
+    test('leaves plain multi-line text as is', () {
+      expect(HtmlTextUtils.toMultilineText('plain\ntext'), 'plain\ntext');
+    });
+  });
 }

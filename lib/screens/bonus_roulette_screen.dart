@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import '../services/haptics_service.dart';
 
 import '../config/app_theme.dart';
 import '../models/bonus_program/roulette_config.dart';
@@ -109,7 +109,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
     }
 
     setState(() => _isSpinning = true);
-    HapticFeedback.lightImpact();
+    AppHaptics.light();
 
     RouletteSpin spin;
     try {
@@ -153,7 +153,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
       _restPosition = finalPosition;
       _isSpinning = false;
     });
-    HapticFeedback.heavyImpact();
+    AppHaptics.heavy();
 
     await _showResult(spin);
     if (!mounted) return;

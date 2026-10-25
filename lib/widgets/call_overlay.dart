@@ -8,7 +8,9 @@ import '../config/app_theme.dart';
 import '../config/connect_icons.dart';
 import '../models/call_conference.dart';
 import '../services/app_navigation_service.dart';
+import '../services/haptics_service.dart';
 import '../services/jitsi_meeting_service.dart';
+import 'call_chat_sheet.dart';
 import 'call_glass.dart';
 import 'chat_avatar.dart';
 
@@ -93,6 +95,10 @@ class _CallOverlayHostState extends State<CallOverlayHost> {
   }
 
   void _onBackPressed() {
+    if (_service.conference?.chatOpen ?? false) {
+      _service.closeChat();
+      return;
+    }
     if (_sheet != _CallSheet.none) {
       setState(() => _sheet = _CallSheet.none);
       return;
@@ -250,6 +256,14 @@ class _CallOverlayHostState extends State<CallOverlayHost> {
               onOpenParticipants: () => _openSheet(_CallSheet.participants),
             ),
           ),
+        if (!minimized && !c.isDirect)
+          Positioned.fill(
+            child: CallChatSheet(
+              conference: c,
+              open: c.chatOpen && !ending,
+              onClose: _service.closeChat,
+            ),
+          ),
       ],
     );
 
@@ -315,6 +329,17 @@ class _Stage extends StatelessWidget {
               ),
             ),
           ),
+          // Встреча завершается: Jitsi уже вышел и показывает свою заглушку
+          // с силуэтом — закрываем её названием и «Звонок завершён».
+          if (!c.isDirect)
+            IgnorePointer(
+              ignoring: c.phase != CallPhase.ending,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: c.phase == CallPhase.ending ? 1 : 0,
+                child: _EndedCover(conference: c, compact: minimized),
+              ),
+            ),
           if (!minimized && !audioStage && !c.videoMuted)
             Positioned(
               top: 12,
@@ -371,13 +396,54 @@ class _Stage extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
         onExpand();
       },
       onPanUpdate: (d) => onDragUpdate(d.delta),
       onPanEnd: (_) => onDragEnd(),
       onPanCancel: onDragEnd,
       child: framed,
+    );
+  }
+}
+
+/// Встреча завершена — вместо кадра Jitsi.
+class _EndedCover extends StatelessWidget {
+  const _EndedCover({required this.conference, required this.compact});
+
+  final CallConference conference;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppCallColors.backgroundBottom,
+      child: compact
+          ? const SizedBox.expand()
+          : Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      conference.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppCallColors.textPrimary,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    CallStatusText(conference: conference),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }
@@ -808,7 +874,7 @@ class _SheetRow extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: const Size.fromHeight(52),
       onPressed: () {
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
         onTap();
       },
       child: Padding(

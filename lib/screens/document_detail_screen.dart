@@ -14,6 +14,7 @@ import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
+import '../services/haptics_service.dart';
 
 class DocumentDetailScreen extends StatefulWidget {
   const DocumentDetailScreen({
@@ -112,6 +113,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
         comment: _commentController.text.trim(),
         number: DocumentPayloadUtils.number(_displayDocument),
       );
+      AppHaptics.success();
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
@@ -124,6 +126,7 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
       );
       Navigator.pop(context);
     } catch (e) {
+      AppHaptics.error();
       if (!mounted) return;
       _showError(
         widget.service.isSigningService
@@ -216,10 +219,8 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
     }
   }
 
-  // Экран целиком построен на Cupertino-виджетах без Material Scaffold —
-  // ScaffoldMessenger.showSnackBar в этом случае привязывается к Scaffold
-  // предыдущего экрана в стеке навигации и рисуется под текущей страницей,
-  // поэтому остаётся невидимым. Показываем ошибку диалогом.
+  // Ошибка согласования или скачивания — диалогом, а не SnackBar: её
+  // нельзя пропустить, пока решение по документу не принято.
   void _showError(String fallback, Object error) {
     final message = error is ApiException ? error.message : fallback;
     showCupertinoDialog<void>(

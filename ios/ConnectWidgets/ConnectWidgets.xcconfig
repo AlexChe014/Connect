@@ -1,0 +1,2 @@
+// Версия расширения = версия приложения из pubspec (FLUTTER_BUILD_NAME/NUMBER).
+#include "../Flutter/Generated.xcconfig"

@@ -117,7 +117,11 @@ class ChatRepository {
       } catch (_) {}
     }
 
-    return ChatMessagesPage(messages: messages, members: members);
+    return ChatMessagesPage(
+      messages: messages,
+      members: members,
+      raw: pageUrl == null ? decoded : null,
+    );
   }
 
   /// Загружает всю историю сообщений чата постранично — для клиентской

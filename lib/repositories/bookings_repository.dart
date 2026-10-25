@@ -111,6 +111,51 @@ class BookingsRepository {
     );
   }
 
+  /// Ответ на приглашение: `POST /booking/accept/{id}` или
+  /// `POST /booking/decline/{id}`. Для серии бэкенд меняет статус сразу во
+  /// всех её бронях. `false` в `data` — ответ уже был дан раньше.
+  Future<bool> respondToInvitation({
+    required int bookingId,
+    required bool accept,
+  }) async {
+    final decoded = await ApiClient.instance.post(
+      accept
+          ? BookingsRoutes.acceptUrl(bookingId)
+          : BookingsRoutes.declineUrl(bookingId),
+    );
+    return ApiEnvelope.unwrapData(
+          decoded,
+          defaultErrorMessage: accept
+              ? 'Не удалось принять приглашение'
+              : 'Не удалось отклонить приглашение',
+        ) ==
+        true;
+  }
+
+  /// Поиск по своим броням (`GET /booking/filter`): тема, участники,
+  /// создатель. Пагинации у эндпоинта нет — ограничиваем окно с [from],
+  /// иначе приходит вся история.
+  Future<List<UserBooking>> searchBookings(
+    String query, {
+    required DateTime from,
+  }) async {
+    final decoded = await ApiClient.instance.get(
+      BookingsRoutes.filterUrl,
+      queryParameters: {
+        'q': query,
+        'datetime_start': '${from.millisecondsSinceEpoch ~/ 1000}',
+      },
+    );
+    final list = ApiEnvelope.unwrapDataList(
+      decoded,
+      defaultErrorMessage: 'Не удалось найти встречи',
+    );
+    return list
+        .whereType<Map>()
+        .map((e) => UserBooking.fromJson(e.cast<String, dynamic>()))
+        .toList();
+  }
+
   /// Карточка брони по id (`GET /booking/get/{id}`).
 
   Future<BookingDetail> getBookingById(int bookingId) async {

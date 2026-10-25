@@ -22,6 +22,7 @@ import '../widgets/news_glass.dart';
 import '../widgets/news_people_sheet.dart';
 import '../widgets/news_reactions.dart';
 import 'news_image_viewer_screen.dart';
+import '../services/haptics_service.dart';
 
 class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key, required this.news});
@@ -554,6 +555,7 @@ class _NewsDetailScreenState extends State<NewsDetailScreen> {
                 builder: (context) => RefreshIndicator.adaptive(
                   edgeOffset: MediaQuery.paddingOf(context).top,
                   onRefresh: () async {
+                    AppHaptics.medium();
                     await Future.wait([_refreshNews(), _loadComments()]);
                   },
                   child: ListView(

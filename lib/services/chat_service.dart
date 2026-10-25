@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/add_chat_members_request.dart';
 import 'package:connect/models/chat/chat_file.dart';
+import 'package:connect/models/chat/chat_messages_page.dart';
 import 'package:connect/models/chat/create_chat_request.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat/update_chat_message_request.dart';
@@ -14,6 +16,7 @@ import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/repositories/users_repository.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
+import 'package:connect/services/chat_cache_service.dart';
 import 'package:connect/services/chat_draft_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/utils/chat_mapper.dart';
@@ -82,6 +85,22 @@ class ChatService extends ChangeNotifier {
   final Map<String, bool> _messagesLoading = {};
   final Map<String, String?> _messagesError = {};
 
+  /// Ссылка на следующую (более старую) страницу истории и сколько страниц
+  /// уже загружено. Первая страница перезапрашивается при каждом обновлении,
+  /// а курсор остаётся там, докуда пользователь долистал.
+  final Map<String, String?> _olderPageUrl = {};
+  final Map<String, int> _loadedPages = {};
+  final Set<String> _loadingOlder = {};
+  final Set<String> _olderFailed = {};
+
+  /// Сообщения, показанные из [ChatCacheService] до первого ответа сервера:
+  /// после него они уступают место свежей странице.
+  final Map<String, Set<String>> _cachedMessageIds = {};
+
+  /// Список чатов уже получен (с сервера или из кэша) — до этого пустой
+  /// список нельзя сохранять поверх кэша.
+  bool _chatsReady = false;
+
   bool _isLoading = true;
   bool _isContactsLoading = false;
   String? _error;
@@ -122,6 +141,14 @@ class ChatService extends ChangeNotifier {
 
   String? messagesError(String chatId) => _messagesError[chatId];
 
+  bool hasOlderMessages(String chatId) => _olderPageUrl[chatId] != null;
+
+  bool isLoadingOlder(String chatId) => _loadingOlder.contains(chatId);
+
+  /// Последняя догрузка истории упала — сама по себе не повторяется,
+  /// только по новой прокрутке пользователя.
+  bool olderLoadFailed(String chatId) => _olderFailed.contains(chatId);
+
   Chat? chatById(String id) {
     for (final c in _chats) {
       if (c.id == id) return c;
@@ -129,14 +156,72 @@ class ChatService extends ChangeNotifier {
     return null;
   }
 
-  Future<void> init() async {
+  Future<void>? _initInFlight;
+
+  /// Главный экран и вкладка «Чаты» вызывают это почти одновременно —
+  /// второй вызов ждёт ту же загрузку, а не запускает параллельную.
+  Future<void> init() =>
+      _initInFlight ??= _init().whenComplete(() => _initInFlight = null);
+
+  Future<void> _init() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     await ChatPreferencesService.instance.ensureLoaded();
     await ChatDraftService.instance.ensureLoaded();
     await _refreshSelfProfile();
+    await _restoreCachedChats();
     await refreshChats();
+  }
+
+  /// Последний известный список чатов — сразу на экран, пока идёт запрос.
+  Future<void> _restoreCachedChats() async {
+    final userId = _selfUserId;
+    if (userId == null || _chats.isNotEmpty) return;
+    final cached = await ChatCacheService.instance.readChats(userId);
+    if (cached == null || _selfUserId != userId || _chats.isNotEmpty) return;
+    _chats.addAll(cached.map(_applyLocalFlags));
+    _sortChats();
+    _chatsReady = true;
+    notifyListeners();
+  }
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    final userId = _selfUserId;
+    if (_chatsReady && userId != null) {
+      ChatCacheService.instance.scheduleSaveChats(userId, chats);
+    }
+  }
+
+  /// Выход из аккаунта: в памяти не должно остаться переписки прошлого
+  /// пользователя — иначе после входа под другим аккаунтом мелькнут его
+  /// чаты, а отложенные отметки «прочитано» уйдут от имени нового.
+  void reset() {
+    _selfName = 'Я';
+    _selfUserId = null;
+    _chats.clear();
+    _messages.clear();
+    _pinnedMessages.clear();
+    _messagesLoading.clear();
+    _messagesError.clear();
+    _olderPageUrl.clear();
+    _loadedPages.clear();
+    _loadingOlder.clear();
+    _olderFailed.clear();
+    _pendingReadSync.clear();
+    _cachedMessageIds.clear();
+    _chatsReady = false;
+    unawaited(ChatCacheService.instance.clear());
+    _activeChatId = null;
+    _contacts = const [];
+    _isLoading = true;
+    _error = null;
+    _lastActionError = null;
+    ChatDraftService.instance.reset();
+    ChatPreferencesService.instance.reset();
+    notifyListeners();
   }
 
   Chat _applyLocalFlags(Chat c) {
@@ -178,13 +263,16 @@ class ChatService extends ChangeNotifier {
       final loaded = await ChatRepository.instance.getChats(
         currentUserId: userId,
       );
+      // Пока шёл запрос, пользователь вышел из аккаунта.
+      if (_selfUserId != userId) return;
       _chats
         ..clear()
         ..addAll(loaded.map(_applyLocalFlags));
+      _chatsReady = true;
       _error = null;
       unawaited(_flushPendingReadSync());
     } catch (e) {
-      _error = e is ApiException ? e.message : e.toString();
+      _error = e is ApiException ? e.message : 'Не удалось загрузить чаты';
     } finally {
       if (showLoading) {
         _isLoading = false;
@@ -201,9 +289,11 @@ class ChatService extends ChangeNotifier {
     if (_messagesLoading[chatId] == true) return;
     if (!force && (_messages[chatId]?.isNotEmpty ?? false)) return;
 
-    final hasLocal = _messages[chatId]?.isNotEmpty ?? false;
     _messagesLoading[chatId] = true;
     _messagesError[chatId] = null;
+    final hasLocal =
+        (_messages[chatId]?.isNotEmpty ?? false) ||
+        await _restoreCachedMessages(chatId);
     if (showLoading && !hasLocal) {
       notifyListeners();
     }
@@ -228,11 +318,29 @@ class ChatService extends ChangeNotifier {
         int.parse(chatId),
         currentUserId: userId,
       );
+      if (_selfUserId != userId) return;
+      // Копия из кэша могла устареть сколько угодно (удалённые, сотня новых
+      // поверх) — заменяем её свежей страницей, оставляя только то, что
+      // пришло по сокету или отправлено, пока шёл запрос.
+      final cachedIds = _cachedMessageIds.remove(chatId);
+      final previous = cachedIds == null
+          ? _messages[chatId]
+          : _messages[chatId]?.where((m) => !cachedIds.contains(m.id)).toList();
       _messages[chatId] = _mergeMessages(
         page.messages.data,
-        _messages[chatId],
+        previous,
         knownBeforeFetch: knownBeforeFetch,
       );
+      final raw = page.raw;
+      if (raw != null) {
+        unawaited(
+          ChatCacheService.instance.saveMessagesPage(userId, chatId, raw),
+        );
+      }
+      if (!_loadedPages.containsKey(chatId)) {
+        _loadedPages[chatId] = 1;
+        _olderPageUrl[chatId] = _nextPageOf(page);
+      }
       if (page.members.isNotEmpty) {
         final idx = _chats.indexWhere((c) => c.id == chatId);
         if (idx >= 0) {
@@ -243,7 +351,9 @@ class ChatService extends ChangeNotifier {
       unawaited(loadPinnedMessages(chatId));
       _messagesError[chatId] = null;
     } catch (e) {
-      _messagesError[chatId] = e.toString();
+      _messagesError[chatId] = e is ApiException
+          ? e.message
+          : 'Не удалось загрузить сообщения';
     } finally {
       _messagesLoading[chatId] = false;
       notifyListeners();
@@ -275,14 +385,96 @@ class ChatService extends ChangeNotifier {
       );
       fetched.addAll(page.messages.data);
       found = page.messages.data.any((m) => m.id == messageId);
-      pageUrl = page.messages.hasMore ? page.messages.nextPageUrl : null;
+      pageUrl = _nextPageOf(page);
       pages++;
     } while (!found && pageUrl != null && pages < maxPages);
 
     if (!found) return false;
     _messages[chatId] = _mergeMessages(fetched, _messages[chatId]);
+    if (pages > (_loadedPages[chatId] ?? 0)) {
+      _loadedPages[chatId] = pages;
+      _olderPageUrl[chatId] = pageUrl;
+    }
     notifyListeners();
     return true;
+  }
+
+  /// Следующая страница истории — когда пользователь долистал ленту до верха.
+  Future<void> loadOlderMessages(String chatId) async {
+    final url = _olderPageUrl[chatId];
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (url == null || userId == null || chatIntId == null) return;
+    if (!_loadingOlder.add(chatId)) return;
+    _olderFailed.remove(chatId);
+    notifyListeners();
+
+    try {
+      final page = await ChatRepository.instance.getMessages(
+        chatIntId,
+        currentUserId: userId,
+        pageUrl: url,
+      );
+      if (_selfUserId != userId) return;
+      _messages[chatId] = _mergeMessages(page.messages.data, _messages[chatId]);
+      _loadedPages[chatId] = (_loadedPages[chatId] ?? 1) + 1;
+      _olderPageUrl[chatId] = _nextPageOf(page);
+    } catch (_) {
+      // Курсор не сдвинулся — повторим при следующей прокрутке к верху.
+      _olderFailed.add(chatId);
+    } finally {
+      _loadingOlder.remove(chatId);
+      notifyListeners();
+    }
+  }
+
+  String? _nextPageOf(ChatMessagesPage page) {
+    final next = page.messages.nextPageUrl?.trim();
+    return page.messages.hasMore && next != null && next.isNotEmpty
+        ? next
+        : null;
+  }
+
+  /// Первая страница переписки из [ChatCacheService] — пока сервер не
+  /// ответил. `true`, если на экране теперь есть сообщения.
+  Future<bool> _restoreCachedMessages(String chatId) async {
+    final userId = _selfUserId;
+    final chatIntId = int.tryParse(chatId);
+    if (userId == null || chatIntId == null) return false;
+    final raw = await ChatCacheService.instance.readMessagesPage(
+      userId,
+      chatId,
+    );
+    if (raw == null || _selfUserId != userId) return false;
+    // Пока читали файл, могли прийти сообщения по сокету.
+    if (_messages[chatId]?.isNotEmpty ?? false) return true;
+    try {
+      final page = ChatMapper.unwrapMessagesPage(
+        raw,
+        chatId: chatIntId,
+        currentUserId: userId,
+        messagesBaseUrl: ChatRoutes.messagesUrl(chatIntId),
+      );
+      if (page.data.isEmpty) return false;
+      _messages[chatId] = _mergeMessages(page.data, null);
+      _cachedMessageIds[chatId] = {for (final m in page.data) m.id};
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _forgetHistory(String chatId) {
+    final userId = _selfUserId;
+    if (userId != null) {
+      unawaited(ChatCacheService.instance.removeMessages(userId, chatId));
+    }
+    _cachedMessageIds.remove(chatId);
+    _messages.remove(chatId);
+    _pinnedMessages.remove(chatId);
+    _olderPageUrl.remove(chatId);
+    _loadedPages.remove(chatId);
   }
 
   /// Отмечает входящие сообщения чата как прочитанные — локально (счётчик,
@@ -647,16 +839,16 @@ class ChatService extends ChangeNotifier {
       _lastActionError = null;
       await ChatManagementRepository.instance.deleteChat(chatIntId);
       _chats.removeWhere((c) => c.id == chatId);
-      _messages.remove(chatId);
-      _pinnedMessages.remove(chatId);
+      _forgetHistory(chatId);
       notifyListeners();
       return true;
     } on ApiException catch (e) {
       _lastActionError = e.message;
       notifyListeners();
       return false;
-    } catch (e) {
-      _lastActionError = e.toString();
+    } catch (_) {
+      // Сбой сети или формата: экран покажет свой понятный текст.
+      _lastActionError = null;
       notifyListeners();
       return false;
     }
@@ -707,8 +899,7 @@ class ChatService extends ChangeNotifier {
       );
       if (memberUserId == userId) {
         _chats.removeWhere((c) => c.id == chatId);
-        _messages.remove(chatId);
-        _pinnedMessages.remove(chatId);
+        _forgetHistory(chatId);
       } else {
         await refreshChatDetails(chatId);
       }
@@ -718,8 +909,9 @@ class ChatService extends ChangeNotifier {
       _lastActionError = e.message;
       notifyListeners();
       return false;
-    } catch (e) {
-      _lastActionError = e.toString();
+    } catch (_) {
+      // Сбой сети или формата: экран покажет свой понятный текст.
+      _lastActionError = null;
       notifyListeners();
       return false;
     }
@@ -806,8 +998,9 @@ class ChatService extends ChangeNotifier {
       _lastActionError = e.message;
       notifyListeners();
       return false;
-    } catch (e) {
-      _lastActionError = e.toString();
+    } catch (_) {
+      // Сбой сети или формата: экран покажет свой понятный текст.
+      _lastActionError = null;
       notifyListeners();
       return false;
     }
@@ -904,7 +1097,7 @@ class ChatService extends ChangeNotifier {
       _lastActionError = e.message;
       notifyListeners();
       return false;
-    } catch (e) {
+    } catch (_) {
       final rollbackIdx = _chats.indexWhere((c) => c.id == chatId);
       if (rollbackIdx >= 0) {
         _chats[rollbackIdx] = _chats[rollbackIdx].copyWithDetails(
@@ -912,7 +1105,8 @@ class ChatService extends ChangeNotifier {
         );
         _sortChats();
       }
-      _lastActionError = e.toString();
+      // Сбой сети или формата: экран покажет свой понятный текст.
+      _lastActionError = null;
       notifyListeners();
       return false;
     }
@@ -964,8 +1158,9 @@ class ChatService extends ChangeNotifier {
       _lastActionError = e.message;
       notifyListeners();
       return false;
-    } catch (e) {
-      _lastActionError = e.toString();
+    } catch (_) {
+      // Сбой сети или формата: экран покажет свой понятный текст.
+      _lastActionError = null;
       notifyListeners();
       return false;
     }
@@ -1019,7 +1214,7 @@ class ChatService extends ChangeNotifier {
         chatId,
         sent.copyWith(text: sent.text ?? t, replyTo: replyTo, isRead: true),
       );
-    } catch (e) {
+    } catch (_) {
       _removeLocalMessage(chatId, tempId);
       rethrow;
     }
@@ -1078,42 +1273,49 @@ class ChatService extends ChangeNotifier {
     if (removed) notifyListeners();
   }
 
+  /// Файлы уходят одним сообщением (несколько фото — альбомом).
   Future<void> sendMedia(
     String chatId, {
-    required List<int> bytes,
-    required String fileName,
+    required List<({List<int> bytes, String name})> files,
     String? caption,
     MessageReference? replyTo,
   }) async {
     final userId = _selfUserId;
     final chatIntId = int.tryParse(chatId);
-    if (userId == null || chatIntId == null) return;
-    if (bytes.isEmpty) {
-      throw ApiException(400, 'Файл пустой');
-    }
-    if (bytes.length > ChatFile.maxSizeBytes) {
-      throw ApiException(400, 'Файл больше 10 МБ');
+    if (userId == null || chatIntId == null || files.isEmpty) return;
+    for (final f in files) {
+      if (f.bytes.isEmpty) {
+        throw ApiException(400, 'Файл «${f.name}» пустой');
+      }
+      if (f.bytes.length > ChatFile.maxSizeBytes) {
+        throw ApiException(400, 'Файл «${f.name}» больше 10 МБ');
+      }
     }
 
-    final uploaded = await ChatRepository.instance.uploadFile(
-      chatId: chatIntId,
-      bytes: bytes,
-      filename: fileName,
-    );
+    final uploaded = <ChatFile>[];
+    for (final f in files) {
+      uploaded.add(
+        await ChatRepository.instance.uploadFile(
+          chatId: chatIntId,
+          bytes: f.bytes,
+          filename: f.name,
+        ),
+      );
+    }
     final repliedId = replyTo != null ? int.tryParse(replyTo.messageId) : null;
     final sent = await ChatRepository.instance.sendMessage(
       chatIntId,
       text: caption ?? '',
       currentUserId: userId,
       repliedMessageId: repliedId,
-      fileIds: [uploaded.id],
+      fileIds: [for (final f in uploaded) f.id],
     );
     _appendMessage(
       chatId,
       sent.copyWith(
         replyTo: replyTo ?? sent.replyTo,
         isRead: true,
-        files: sent.files.isNotEmpty ? sent.files : [uploaded],
+        files: sent.files.isNotEmpty ? sent.files : uploaded,
       ),
     );
   }
@@ -1132,32 +1334,60 @@ class ChatService extends ChangeNotifier {
 
     final stickerId = source.stickerId;
     final text = source.text?.trim();
-    if (stickerId == null && (text == null || text.isEmpty)) {
-      _lastActionError = 'Пересылка вложений пока не поддерживается';
+    final hasText = text != null && text.isNotEmpty;
+    if (stickerId == null && !hasText && source.files.isEmpty) {
+      _lastActionError = 'Это сообщение нельзя переслать';
       notifyListeners();
       return false;
     }
 
     try {
       _lastActionError = null;
-      final sent = stickerId != null
-          ? await ChatRepository.instance.sendSticker(
-              chatIntId,
-              stickerId: stickerId,
-              currentUserId: userId,
-              forwardedMessageId: sourceMessageId,
-            )
-          : await ChatRepository.instance.sendTextMessage(
-              chatIntId,
-              text: text!,
-              currentUserId: userId,
-              forwardedMessageId: sourceMessageId,
-            );
+      final ChatMessage sent;
+      if (stickerId != null) {
+        sent = await ChatRepository.instance.sendSticker(
+          chatIntId,
+          stickerId: stickerId,
+          currentUserId: userId,
+          forwardedMessageId: sourceMessageId,
+        );
+      } else if (source.files.isNotEmpty) {
+        // Файл привязан к исходному чату — участники целевого могут не
+        // иметь к нему доступа, поэтому он загружается туда заново.
+        final copies = <ChatFile>[];
+        for (final file in source.files) {
+          final bytes = await ChatRepository.instance.downloadFile(file.id);
+          copies.add(
+            await ChatRepository.instance.uploadFile(
+              chatId: chatIntId,
+              bytes: bytes,
+              filename: file.originalName,
+            ),
+          );
+        }
+        final withFiles = await ChatRepository.instance.sendMessage(
+          chatIntId,
+          text: text ?? '',
+          currentUserId: userId,
+          forwardedMessageId: sourceMessageId,
+          fileIds: [for (final f in copies) f.id],
+        );
+        sent = withFiles.files.isNotEmpty
+            ? withFiles
+            : withFiles.copyWith(files: copies);
+      } else {
+        sent = await ChatRepository.instance.sendTextMessage(
+          chatIntId,
+          text: text!,
+          currentUserId: userId,
+          forwardedMessageId: sourceMessageId,
+        );
+      }
 
       _appendMessage(
         targetChatId,
         sent.copyWith(
-          text: sent.text ?? (stickerId != null ? null : text),
+          text: sent.text ?? (stickerId != null || !hasText ? null : text),
           forwardOf:
               sent.forwardOf ??
               MessageReference(
@@ -1173,8 +1403,9 @@ class ChatService extends ChangeNotifier {
       _lastActionError = e.message;
       notifyListeners();
       return false;
-    } catch (e) {
-      _lastActionError = e.toString();
+    } catch (_) {
+      // Сбой сети или формата: экран покажет свой понятный текст.
+      _lastActionError = null;
       notifyListeners();
       return false;
     }
@@ -1285,6 +1516,8 @@ class ChatService extends ChangeNotifier {
       }
       return;
     }
+
+    if (ChatMapper.isServerCallEndedLine(messageJson)) return;
 
     final mapped = ChatMapper.mapMessage(
       messageJson,

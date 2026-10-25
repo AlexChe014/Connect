@@ -13,11 +13,13 @@ import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/read_receipt.dart';
+import 'package:connect/utils/ru_plural.dart';
 import 'package:connect/widgets/swipe_actions_row.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../widgets/app_title_bar.dart';
+import '../services/haptics_service.dart';
 
 enum _ChatFilter { all, direct, group, favorite }
 
@@ -216,7 +218,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         isPinned: _approvalsPinned,
         time: latest != null ? _formatDocumentDay(latest) : '',
         onTap: _openApprovals,
-        onLongPress: _showApprovalsActions,
+        onLongPress: () {
+          AppHaptics.medium();
+          _showApprovalsActions();
+        },
       ),
     );
   }
@@ -379,7 +384,10 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                   ),
                 );
               },
-              onLongPress: () => _showChatActions(c),
+              onLongPress: () {
+                AppHaptics.medium();
+                _showChatActions(c);
+              },
             ),
           );
         },
@@ -450,7 +458,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: _chat.refreshChats,
+                  onRefresh: AppHaptics.onRefresh(_chat.refreshChats),
                   child: CustomScrollView(
                     slivers: [
                       AppSliverTitleBar(
@@ -1097,15 +1105,8 @@ class _ChatRow extends StatelessWidget {
   }
 }
 
-String _documentsPlural(int n) {
-  final mod10 = n % 10;
-  final mod100 = n % 100;
-  if (mod10 == 1 && mod100 != 11) return 'документ ждёт';
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return 'документа ждут';
-  }
-  return 'документов ждут';
-}
+String _documentsPlural(int n) =>
+    ruPlural(n, 'документ ждёт', 'документа ждут', 'документов ждут');
 
 /// Системная строка «Согласование» в стиле [_ChatRow]: вместо последнего
 /// сообщения — сколько документов ждут решения, бейдж — их число, время —
@@ -1164,8 +1165,8 @@ class _ApprovalsRow extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: accent.withValues(
-                    alpha: CupertinoTheme.brightnessOf(context) ==
-                            Brightness.dark
+                    alpha:
+                        CupertinoTheme.brightnessOf(context) == Brightness.dark
                         ? 0.24
                         : 0.15,
                   ),

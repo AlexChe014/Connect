@@ -81,8 +81,23 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     super.dispose();
   }
 
+  /// Письмо, открытое раньше, — сразу из кэша, пока идёт запрос.
+  Future<void> _showCachedMessage() async {
+    final cached = await MailRepository.instance.cachedMessage(
+      connectionId: widget.connection.id,
+      messageId: widget.messageId,
+    );
+    if (cached == null || !mounted || _message != null) return;
+    if (!cached.hasBody) return;
+    setState(() {
+      _message = cached;
+      _isLoading = false;
+    });
+  }
+
   Future<void> _loadMessage() async {
     setState(() => _isLoading = true);
+    unawaited(_showCachedMessage());
     try {
       final message = await MailRepository.instance.getMessage(
         connectionId: widget.connection.id,
@@ -123,6 +138,11 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       }
     } catch (_) {
       if (!mounted) return;
+      // Без сети письмо уже показано из кэша.
+      if (_message != null) {
+        setState(() => _isLoading = false);
+        return;
+      }
       final fallback = widget.initialMessage;
       setState(() {
         _message = fallback;
@@ -162,8 +182,12 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Удалить письмо?'),
-        content: const Text(
-          'Письмо будет удалено без возможности восстановления.',
+        // Сервер переносит письмо в «Корзину» и удаляет окончательно,
+        // только если оно уже там.
+        content: Text(
+          widget.currentFolder?.isTrash == true
+              ? 'Письмо будет удалено без возможности восстановления.'
+              : 'Письмо будет перемещено в корзину.',
         ),
         actions: [
           CupertinoDialogAction(

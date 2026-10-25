@@ -183,7 +183,7 @@ class AppNavigationService {
       navigator.pushNamedAndRemoveUntil(
         '/home',
         (route) => false,
-        arguments: {'initialIndex': HomeTabs.news, 'openNewsId': newsId},
+        arguments: {'initialIndex': HomeTabs.today, 'openNewsId': newsId},
       ),
     );
   }
@@ -449,7 +449,7 @@ class AppNavigationService {
       await openSurvey(resolveSurveyToken(data));
       return;
     }
-    switch (data['type']) {
+    switch (NotificationTopics.canonicalType(data['type']?.toString())) {
       case 'chat_message':
         final chatId = data['chat_id']?.toString();
         if (chatId != null && chatId.isNotEmpty) {
@@ -466,7 +466,6 @@ class AppNavigationService {
           await openDocumentService(serviceId);
         }
       case 'mail':
-      case 'new_emails':
         final connectionId = data['connection_id']?.toString();
         if (connectionId != null && connectionId.isNotEmpty) {
           await openMailConnection(
@@ -498,7 +497,7 @@ class AppNavigationService {
             navigator.pushNamedAndRemoveUntil(
               '/home',
               (route) => false,
-              arguments: {'initialIndex': HomeTabs.news},
+              arguments: {'initialIndex': HomeTabs.today},
             ),
           );
           await openNotificationInPlace(data);
@@ -513,7 +512,7 @@ class AppNavigationService {
   static Future<bool> openNotificationInPlace(Map<String, dynamic> data) async {
     final navigator = navigatorKey.currentState;
     if (navigator == null) return false;
-    final type = data['type']?.toString() ?? '';
+    final type = NotificationTopics.canonicalType(data['type']?.toString());
     final module = data['module']?.toString();
 
     void push(Widget screen) => unawaited(
@@ -565,7 +564,6 @@ class AppNavigationService {
         case 'document_changes':
           push(const DocumentsSigningScreen());
           return true;
-        case 'new_emails':
         case 'mail':
           final connection = await _findMailConnection(
             resolveDataField(data, ['connection_id']),
@@ -767,12 +765,6 @@ class AppNavigationService {
     }
   }
 
-  static Future<int?> _currentUserId() async {
-    final user = await AuthService.instance.getStoredUser();
-    if (user == null) return null;
-
-    final rawId = user['id'];
-    if (rawId is int) return rawId;
-    return int.tryParse(rawId?.toString() ?? '');
-  }
+  static Future<int?> _currentUserId() =>
+      AuthService.instance.getStoredUserId();
 }

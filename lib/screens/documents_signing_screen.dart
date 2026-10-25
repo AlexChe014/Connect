@@ -16,6 +16,7 @@ import '../widgets/app_title_bar.dart';
 import '../widgets/booking_glass_form.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import 'documents_list_screen.dart';
+import '../services/haptics_service.dart';
 
 class DocumentsSigningScreen extends StatefulWidget {
   const DocumentsSigningScreen({super.key, this.showAppBar = true});
@@ -138,6 +139,29 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
   }
 
   Future<void> _logoutAll() async {
+    final ok =
+        await showCupertinoDialog<bool>(
+          context: context,
+          builder: (context) => CupertinoAlertDialog(
+            title: const Text('Выйти из всех сервисов 1С?'),
+            content: const Text(
+              'Чтобы снова увидеть документы, понадобится личный код доступа.',
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена'),
+              ),
+              CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Выйти'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok || !mounted) return;
     try {
       final removed = await DocumentsRepository.instance.logout();
       if (!mounted) return;
@@ -313,8 +337,9 @@ class _DocumentsSigningScreenState extends State<DocumentsSigningScreen>
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: () =>
-                      _loadServices(promptAccessCodeIfEmpty: false),
+                  onRefresh: AppHaptics.onRefresh(
+                    () => _loadServices(promptAccessCodeIfEmpty: false),
+                  ),
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [

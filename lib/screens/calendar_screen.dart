@@ -7,9 +7,12 @@ import '../models/bookings/create_booking_request.dart';
 import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
+import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../utils/app_feedback.dart';
 import '../utils/booking_time_utils.dart';
 import '../utils/connector_link_join.dart';
+import '../utils/ru_plural.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_network_image.dart';
@@ -73,8 +76,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
     try {
       final userId = await _resolveCurrentUserId();
       if (userId == null) {
-        throw Exception(
-          'Не удалось определить id текущего пользователя. Проверьте авторизацию и ответ профиля (/user/get).',
+        throw ApiException(
+          200,
+          'Не удалось определить пользователя. Выйдите из аккаунта и войдите снова.',
         );
       }
 
@@ -86,7 +90,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = AppFeedback.messageOf(e);
         _isLoading = false;
         _eventsByDay.clear();
       });
@@ -165,9 +169,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  /// Номер последнего запроса месяца: при быстром листании ответ за
+  /// пролистанный месяц может прийти позже и подменить события.
+  int _monthRequest = 0;
+
   Future<void> _loadMonth(DateTime focusedDay) async {
     final userId = _userId;
     if (userId == null) return;
+    final request = ++_monthRequest;
 
     setState(() {
       _isLoading = true;
@@ -195,7 +204,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         list.sort((a, b) => a.datetimeStart.compareTo(b.datetimeStart));
       }
 
-      if (!mounted) return;
+      if (!mounted || request != _monthRequest) return;
       setState(() {
         _eventsByDay
           ..clear()
@@ -203,9 +212,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || request != _monthRequest) return;
       setState(() {
-        _error = e.toString();
+        _error = AppFeedback.messageOf(
+          e,
+          fallback: 'Не удалось загрузить события',
+        );
         _eventsByDay.clear();
         _isLoading = false;
       });
@@ -483,16 +495,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  static String _eventsCount(int n) {
-    final mod10 = n % 10;
-    final mod100 = n % 100;
-    final word = (mod10 == 1 && mod100 != 11)
-        ? 'событие'
-        : (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
-        ? 'события'
-        : 'событий';
-    return '$n $word';
-  }
+  static String _eventsCount(int n) =>
+      '$n ${ruPlural(n, 'событие', 'события', 'событий')}';
 
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);

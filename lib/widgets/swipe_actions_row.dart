@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 
+import '../services/haptics_service.dart';
+
 /// Одно действие, раскрывающееся по свайпу (иконка + подпись на цветном
 /// фоне), как "Mute"/"Delete" в почте или сообщениях iOS.
 class SwipeAction {
@@ -158,16 +160,16 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
 
   void _onDragEnd(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
+    final double target;
     if (velocity < -300) {
-      _controller.animateTo(1, curve: Curves.easeOut);
+      target = 1;
     } else if (velocity > 300) {
-      _controller.animateTo(0, curve: Curves.easeOut);
+      target = 0;
     } else {
-      _controller.animateTo(
-        _controller.value > 0.4 ? 1.0 : 0.0,
-        curve: Curves.easeOut,
-      );
+      target = _controller.value > 0.4 ? 1.0 : 0.0;
     }
+    if (target == 1 && _controller.value < 1) AppHaptics.selection();
+    _controller.animateTo(target, curve: Curves.easeOut);
   }
 
   @override
@@ -203,6 +205,7 @@ class _SwipeActionsRowState extends State<SwipeActionsRow>
                           for (final action in widget.actions)
                             GestureDetector(
                               onTap: () {
+                                AppHaptics.light();
                                 _close();
                                 action.onTap();
                               },

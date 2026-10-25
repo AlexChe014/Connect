@@ -4,16 +4,20 @@ import '../models/bookings/booking_detail.dart';
 import '../models/bookings/update_booking_request.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
+import '../utils/app_feedback.dart';
 import '../utils/booking_time_utils.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/booking_glass_form.dart';
+import '../widgets/booking_pickers.dart';
 import '../widgets/selected_staff_field.dart';
 
 /// Редактирование брони (`POST /booking/update/{id}`).
 ///
-/// Бэкенд на данный момент принимает изменение только темы, описания,
-/// ссылки и участников — дата, время и дни повторения не редактируются,
-/// поэтому здесь они только показаны для контекста, недоступны для правки.
+/// Тема, описание, ссылка и участники меняются всегда. Дату и время можно
+/// перенести только у встречи без объекта ([BookingDetail.canReschedule]):
+/// бэкенд при обновлении не проверяет занятость переговорной. Дни повтора
+/// не редактируются; у всей серии меняется только время — дату каждой
+/// встречи серии бэкенд сохраняет.
 class EditBookingScreen extends StatefulWidget {
   const EditBookingScreen({
     super.key,
@@ -40,6 +44,13 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   bool _isSubmitting = false;
   String? _themeError;
 
+  /// День и получасовые слоты нового времени. Пока пользователь не трогал
+  /// время, оно не отправляется — исходное может быть не кратно 30 минутам.
+  late DateTime _date;
+  late int _startSlotIndex;
+  late int _endSlotIndex;
+  bool _timeChanged = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +59,81 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
     _descriptionController = TextEditingController(text: d.description ?? '');
     _linkController = TextEditingController(text: d.link ?? '');
     _participants = List<StaffUser>.from(d.participants);
+    _date = BookingTimeUtils.startOfDay(d.datetimeStart);
+    final slots = _slots;
+    _startSlotIndex = BookingTimeUtils.nearestSlotIndex(
+      slots,
+      d.datetimeStart,
+      floorToPrevious: true,
+    ).clamp(0, slots.length - 2);
+    _endSlotIndex = BookingTimeUtils.nearestSlotIndex(
+      slots,
+      d.datetimeEnd,
+      floorToPrevious: false,
+    ).clamp(_startSlotIndex + 1, slots.length - 1);
+  }
+
+  List<DateTime> get _slots => BookingTimeUtils.slotsForDate(_date);
+
+  bool get _canChangeDate => !(widget.detail.isRecurring && widget.updateAll);
+
+  int get _minStartIndex => BookingTimeUtils.minStartIndex(_slots, _date);
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showBookingDateSheet(
+      context: context,
+      initial: _date,
+      firstDate: BookingTimeUtils.startOfDay(now),
+      lastDate: DateTime(now.year + 1),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _timeChanged = true;
+      _date = BookingTimeUtils.startOfDay(picked);
+      final slots = _slots;
+      _startSlotIndex = _startSlotIndex.clamp(_minStartIndex, slots.length - 2);
+      if (_endSlotIndex <= _startSlotIndex) {
+        _endSlotIndex = (_startSlotIndex + 1).clamp(0, slots.length - 1);
+      }
+    });
+  }
+
+  Future<void> _pickStart() async {
+    final slots = _slots;
+    final picked = await showBookingTimeSheet(
+      context: context,
+      title: 'Начало',
+      slots: slots,
+      minIndex: _minStartIndex,
+      currentIndex: _startSlotIndex,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _timeChanged = true;
+      // Длительность сохраняем: сдвигаем окончание вместе с началом.
+      final length = _endSlotIndex - _startSlotIndex;
+      _startSlotIndex = picked.clamp(0, slots.length - 2);
+      _endSlotIndex = (_startSlotIndex + length).clamp(
+        _startSlotIndex + 1,
+        slots.length - 1,
+      );
+    });
+  }
+
+  Future<void> _pickEnd() async {
+    final picked = await showBookingTimeSheet(
+      context: context,
+      title: 'Окончание',
+      slots: _slots,
+      minIndex: _startSlotIndex + 1,
+      currentIndex: _endSlotIndex,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _timeChanged = true;
+      _endSlotIndex = picked;
+    });
   }
 
   @override
@@ -70,11 +156,21 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
     });
     if (_themeError != null) return;
 
+    final slots = _slots;
+    final start = _timeChanged ? slots[_startSlotIndex] : null;
+    final end = _timeChanged ? slots[_endSlotIndex] : null;
+    if (start != null && !start.isAfter(DateTime.now())) {
+      _showMessage('Нельзя перенести встречу в прошлое');
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
       await BookingsRepository.instance.updateBooking(
         bookingId: widget.detail.id,
         request: UpdateBookingRequest(
+          datetimeStart: start,
+          datetimeEnd: end,
           theme: theme,
           description: _descriptionController.text.trim(),
           link: _linkController.text.trim(),
@@ -88,7 +184,7 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      _showMessage(e.toString());
+      _showMessage(AppFeedback.messageOf(e));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -112,6 +208,8 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
   @override
   Widget build(BuildContext context) {
     final detail = widget.detail;
+    final canReschedule = detail.canReschedule;
+    final slots = _slots;
     final place = detail.displayObjectName.trim();
     final days = detail.recurring?.daysOfWeek.isNotEmpty ?? false
         ? detail.recurring!.daysOfWeekLabel
@@ -172,20 +270,48 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
         AppGlassSection(
           margin: const EdgeInsets.symmetric(horizontal: 16),
           children: [
-            BookingPickerRow(
-              icon: CupertinoIcons.calendar,
-              color: CupertinoColors.systemOrange.resolveFrom(context),
-              label: 'Дата',
-              value: BookingTimeUtils.formatDateShort(detail.datetimeStart),
-            ),
-            BookingPickerRow(
-              icon: CupertinoIcons.clock_fill,
-              color: CupertinoColors.systemOrange.resolveFrom(context),
-              label: 'Время',
-              value:
-                  '${BookingTimeUtils.formatHm(detail.datetimeStart)}–'
-                  '${BookingTimeUtils.formatHm(detail.datetimeEnd)}',
-            ),
+            if (!canReschedule) ...[
+              BookingPickerRow(
+                icon: CupertinoIcons.calendar,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                label: 'Дата',
+                value: BookingTimeUtils.formatDateShort(detail.datetimeStart),
+              ),
+              BookingPickerRow(
+                icon: CupertinoIcons.clock_fill,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                label: 'Время',
+                value:
+                    '${BookingTimeUtils.formatHm(detail.datetimeStart)}–'
+                    '${BookingTimeUtils.formatHm(detail.datetimeEnd)}',
+              ),
+            ] else ...[
+              BookingPickerRow(
+                icon: CupertinoIcons.calendar,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                label: 'Дата',
+                value: BookingTimeUtils.formatDateShort(_date),
+                onTap: _canChangeDate && !_isSubmitting ? _pickDate : null,
+              ),
+              BookingPickerRow(
+                icon: CupertinoIcons.clock_fill,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                label: 'Начало',
+                value: BookingTimeUtils.formatHm(
+                  _timeChanged ? slots[_startSlotIndex] : detail.datetimeStart,
+                ),
+                onTap: _isSubmitting ? null : _pickStart,
+              ),
+              BookingPickerRow(
+                icon: CupertinoIcons.clock,
+                color: CupertinoColors.systemOrange.resolveFrom(context),
+                label: 'Окончание',
+                value: BookingTimeUtils.formatHm(
+                  _timeChanged ? slots[_endSlotIndex] : detail.datetimeEnd,
+                ),
+                onTap: _isSubmitting ? null : _pickEnd,
+              ),
+            ],
             if (days != null)
               BookingPickerRow(
                 icon: CupertinoIcons.repeat,
@@ -198,7 +324,11 @@ class _EditBookingScreenState extends State<EditBookingScreen> {
         ),
         BookingFootnote(
           [
-            'Дату, время и повтор пока нельзя изменить.',
+            if (!canReschedule)
+              'Бронь объекта нельзя перенести: удалите её и забронируйте '
+                  'заново на новое время.'
+            else if (!_canChangeDate)
+              'У всей серии меняется только время, дни повтора остаются.',
             if (detail.isRecurring)
               widget.updateAll
                   ? 'Изменения применятся ко всей серии.'

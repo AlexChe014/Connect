@@ -230,7 +230,7 @@ class DocumentsRepository {
     required int serviceId,
     required List<String> guids,
     String? comment,
-    List<String>? numbers,
+    Map<String, String>? numbersByGuid,
   }) async {
     if (guids.isEmpty) {
       throw ApiException(400, 'Не указаны документы для согласования');
@@ -243,11 +243,14 @@ class DocumentsRepository {
     if (c != null && c.isNotEmpty) {
       fields.add(MapEntry('comment', c));
     }
-    if (numbers != null) {
-      for (final number in numbers) {
-        final n = number.trim();
+    // Номер — по ключу guid (`numbers[<guid>]`): бэкенд сначала ищет
+    // `$documentNumbers[$guid]`, а позиционный список сдвигается, если у
+    // одного из документов номера нет, и в журнал уходят чужие номера.
+    if (numbersByGuid != null) {
+      for (final entry in numbersByGuid.entries) {
+        final n = entry.value.trim();
         if (n.isNotEmpty) {
-          fields.add(MapEntry('numbers[]', n));
+          fields.add(MapEntry('numbers[${entry.key.trim()}]', n));
         }
       }
     }

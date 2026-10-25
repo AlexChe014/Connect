@@ -28,6 +28,7 @@ import 'compose_mail_screen.dart';
 import 'mail_folders_screen.dart';
 import 'mail_message_screen.dart';
 import 'mail_screen.dart';
+import '../services/haptics_service.dart';
 
 class MailInboxScreen extends StatefulWidget {
   const MailInboxScreen({
@@ -229,6 +230,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   Future<void> _loadFolders() async {
     final connectionId = _connection.id;
     setState(() => _isLoadingFolders = true);
+    await _showCachedFolders(connectionId);
     try {
       final folders = await MailRepository.instance.getMailboxes(connectionId);
       if (!mounted || connectionId != _connection.id) return;
@@ -245,6 +247,45 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       setState(() => _isLoadingFolders = false);
       await _loadMessages();
     }
+  }
+
+  /// Папки и письма с прошлого раза — на экран сразу, пока идут запросы.
+  Future<void> _showCachedFolders(int connectionId) async {
+    final folders = await MailRepository.instance.cachedMailboxes(connectionId);
+    if (folders == null || !mounted || connectionId != _connection.id) return;
+    if (_folders.isNotEmpty) return;
+    setState(() {
+      _folders = folders;
+      _selectedFolder =
+          folders.where((f) => f.isInbox).firstOrNull ??
+          folders.where((f) => f.id > 0).firstOrNull;
+    });
+    await _showCachedMessages(connectionId, _selectedFolder, _requestVersion);
+  }
+
+  /// Первая страница папки из кэша, пока список пуст (первое открытие,
+  /// смена папки). Подгрузку следующих страниц не включаем — она начнётся
+  /// от свежей первой страницы.
+  Future<void> _showCachedMessages(
+    int connectionId,
+    MailFolder? folder,
+    int version,
+  ) async {
+    final page = await MailRepository.instance.cachedMessages(
+      connectionId,
+      folderId: folder?.id,
+    );
+    if (page == null || page.messages.isEmpty || !mounted) return;
+    if (version != _requestVersion ||
+        connectionId != _connection.id ||
+        _selectedFolder?.id != folder?.id ||
+        _messages.isNotEmpty) {
+      return;
+    }
+    setState(() {
+      _messages = page.messages;
+      _hasMoreMessages = false;
+    });
   }
 
   List<MailFolder> get _browsableFolders =>
@@ -266,6 +307,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       _isLoadingMessages = true;
       _isLoadingMore = false;
     });
+    if (_messages.isEmpty) {
+      unawaited(_showCachedMessages(connectionId, folder, version));
+    }
     try {
       if (forceSync) {
         await MailRepository.instance.fetchMessages(connectionId);
@@ -303,6 +347,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     } catch (_) {
       if (!mounted || version != _requestVersion) return;
       setState(() => _isLoadingMessages = false);
+      // Без сети на экране остаётся список из кэша — фоновое обновление
+      // не ругается, ошибку показываем только на явное действие.
+      if (_messages.isNotEmpty && !forceSync) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
@@ -1136,7 +1183,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: () => _loadMessages(forceSync: true),
+                  onRefresh: AppHaptics.onRefresh(
+                    () => _loadMessages(forceSync: true),
+                  ),
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
                       final metrics = notification.metrics;

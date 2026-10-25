@@ -14,6 +14,7 @@ import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
 import 'survey_form_screen.dart';
+import '../services/haptics_service.dart';
 
 /// «Мои опросы»: приглашения, ожидающие ответа, и уже пройденные.
 class SurveysScreen extends StatefulWidget {
@@ -130,7 +131,9 @@ class _SurveysScreenState extends State<SurveysScreen> {
                       ),
                       blur: blur,
                     ),
-                    CupertinoSliverRefreshControl(onRefresh: _load),
+                    CupertinoSliverRefreshControl(
+                      onRefresh: AppHaptics.onRefresh(_load),
+                    ),
                     ..._buildBody(),
                     SliverToBoxAdapter(
                       child: SizedBox(

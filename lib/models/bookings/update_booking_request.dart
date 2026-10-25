@@ -1,5 +1,7 @@
 /// Тело запроса `POST /booking/update/{id}` (form-data).
 class UpdateBookingRequest {
+  final DateTime? datetimeStart;
+  final DateTime? datetimeEnd;
   final String? theme;
   final String? description;
   final String? link;
@@ -12,6 +14,8 @@ class UpdateBookingRequest {
   final Map<int, int>? additions;
 
   const UpdateBookingRequest({
+    this.datetimeStart,
+    this.datetimeEnd,
     this.theme,
     this.description,
     this.link,
@@ -22,6 +26,19 @@ class UpdateBookingRequest {
 
   List<MapEntry<String, String>> toFormEntries() {
     final entries = <MapEntry<String, String>>[];
+
+    // Бэкенд ждёт unix-секунды (`date_format:U`). Для серии с `update_all`
+    // он сам переносит остальные встречи на то же время суток.
+    if (datetimeStart case final start?) {
+      entries.add(
+        MapEntry('datetime_start', '${start.millisecondsSinceEpoch ~/ 1000}'),
+      );
+    }
+    if (datetimeEnd case final end?) {
+      entries.add(
+        MapEntry('datetime_end', '${end.millisecondsSinceEpoch ~/ 1000}'),
+      );
+    }
 
     final themeValue = theme?.trim();
     if (themeValue != null) {

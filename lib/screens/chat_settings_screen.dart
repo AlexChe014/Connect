@@ -54,6 +54,13 @@ class ChatSettingsScreen extends StatefulWidget {
 }
 
 class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
+  /// Вся история чата для вкладок медиа/файлы/ссылки: сервер не умеет
+  /// фильтровать по вложениям, и выкачивать сотни страниц при каждом
+  /// открытии настроек слишком долго — держим её 5 минут в памяти.
+  static final Map<String, ({DateTime loadedAt, List<ChatMessage> all})>
+  _historyCache = {};
+  static const _historyCacheTtl = Duration(minutes: 5);
+
   final _service = ChatService.instance;
   late Chat _chat;
   bool _busy = false;
@@ -306,61 +313,85 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       });
       return;
     }
-    setState(() {
-      _galleryLoading = true;
-      _galleryError = null;
-    });
+    // С пользователем в ключе: после смены аккаунта чужой кэш не всплывёт.
+    final cacheKey = '$userId:${_chat.id}';
+    final cached = _historyCache[cacheKey];
+    if (cached != null) {
+      _applyGallery(cached.all);
+      if (DateTime.now().difference(cached.loadedAt) < _historyCacheTtl) {
+        return;
+      }
+    } else {
+      setState(() {
+        _galleryLoading = true;
+        _galleryError = null;
+      });
+    }
     try {
       final all = await ChatRepository.instance.getAllMessages(
         int.parse(_chat.id),
         currentUserId: userId,
       );
-      final media =
-          all
-              .where(
-                (m) =>
-                    m.files.any((f) => f.isImage || f.isVideo) ||
-                    (m.hasMedia &&
-                        (m.attachmentKind == ChatAttachmentKind.image ||
-                            m.attachmentKind == ChatAttachmentKind.video)),
-              )
-              .toList()
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      final files =
-          all
-              .where(
-                (m) =>
-                    m.files.any((f) => !f.isImage && !f.isVideo) ||
-                    (m.hasMedia &&
-                        m.attachmentKind == ChatAttachmentKind.file &&
-                        m.files.isEmpty),
-              )
-              .toList()
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      final links = <_LinkEntry>[];
-      for (final m in all) {
-        final text = m.text;
-        if (text == null || text.isEmpty) continue;
-        for (final match in _urlRegExp.allMatches(text)) {
-          final url = match.group(0)!.replaceAll(RegExp(r'[.,;:!?)]+$'), '');
-          links.add(_LinkEntry(url: url, createdAt: m.createdAt));
-        }
-      }
-      links.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      _historyCache[cacheKey] = (loadedAt: DateTime.now(), all: all);
       if (!mounted) return;
-      setState(() {
-        _media = media;
-        _files = files;
-        _links = links;
-        _galleryLoading = false;
-      });
+      _applyGallery(all);
     } catch (_) {
-      if (!mounted) return;
+      // Уже показан кэш — устаревший лучше ошибки.
+      if (!mounted || cached != null) return;
       setState(() {
         _galleryError = 'Не удалось загрузить данные';
         _galleryLoading = false;
       });
     }
+  }
+
+  /// Раскладывает историю по вкладкам. Свежие сообщения из открытой ленты
+  /// важнее кэша: в них новые вложения и пометки об удалении.
+  void _applyGallery(List<ChatMessage> history) {
+    final byId = {for (final m in history) m.id: m};
+    for (final m in _service.messagesFor(_chat.id)) {
+      if (int.tryParse(m.id) != null) byId[m.id] = m;
+    }
+    final all = byId.values.where((m) => !m.isDeleted).toList();
+    final media =
+        all
+            .where(
+              (m) =>
+                  m.files.any((f) => f.isImage || f.isVideo) ||
+                  (m.hasMedia &&
+                      (m.attachmentKind == ChatAttachmentKind.image ||
+                          m.attachmentKind == ChatAttachmentKind.video)),
+            )
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final files =
+        all
+            .where(
+              (m) =>
+                  m.files.any((f) => !f.isImage && !f.isVideo) ||
+                  (m.hasMedia &&
+                      m.attachmentKind == ChatAttachmentKind.file &&
+                      m.files.isEmpty),
+            )
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final links = <_LinkEntry>[];
+    for (final m in all) {
+      final text = m.text;
+      if (text == null || text.isEmpty) continue;
+      for (final match in _urlRegExp.allMatches(text)) {
+        final url = match.group(0)!.replaceAll(RegExp(r'[.,;:!?)]+$'), '');
+        links.add(_LinkEntry(url: url, createdAt: m.createdAt));
+      }
+    }
+    links.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    setState(() {
+      _media = media;
+      _files = files;
+      _links = links;
+      _galleryLoading = false;
+      _galleryError = null;
+    });
   }
 
   void _openViewer(int index) {

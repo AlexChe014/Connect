@@ -19,12 +19,32 @@ import '../widgets/news_people_sheet.dart';
 import '../widgets/news_reactions.dart';
 import 'news_create_screen.dart';
 import 'news_detail_screen.dart';
+import '../services/haptics_service.dart';
 
 class NewsFeedScreen extends StatefulWidget {
-  const NewsFeedScreen({super.key, this.showAppBar = true, this.openNewsId});
+  const NewsFeedScreen({
+    super.key,
+    this.showAppBar = true,
+    this.openNewsId,
+    this.title = 'Лента',
+    this.trailing,
+    this.headerSlivers = const [],
+    this.onRefresh,
+  });
 
   final bool showAppBar;
   final String? openNewsId;
+  final String title;
+
+  /// Кнопки шапки; без них — «написать пост».
+  final Widget? trailing;
+
+  /// Блоки над лентой (экран «Сегодня»). Если они есть, «написать пост»
+  /// переезжает в подпись «Лента» над постами.
+  final List<Widget> headerSlivers;
+
+  /// Что ещё обновить жестом «потянуть вниз», кроме самой ленты.
+  final Future<void> Function()? onRefresh;
 
   @override
   State<NewsFeedScreen> createState() => _NewsFeedScreenState();
@@ -47,8 +67,23 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFirstPage();
+    _loadInitial();
     _scrollController.addListener(_onScroll);
+  }
+
+  /// Лента с прошлого раза — сразу, свежая подменяет её, когда придёт.
+  Future<void> _loadInitial() async {
+    final fresh = _loadFirstPage(quiet: true);
+    final cached = await NewsRepository.instance.cachedFirstPage();
+    if (cached != null && mounted && _news.isEmpty && cached.data.isNotEmpty) {
+      setState(() {
+        _news = cached.data;
+        // Подгрузка следующих страниц — только от свежей первой.
+        _nextPageUrl = null;
+        _isInitialLoading = false;
+      });
+    }
+    await fresh;
   }
 
   @override
@@ -70,13 +105,13 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
   }
 
-  Future<void> _loadFirstPage() async {
+  /// [quiet] — без снекбара об ошибке, если на экране уже есть лента
+  /// (из кэша при открытии): без сети работаем с ней молча.
+  Future<void> _loadFirstPage({bool quiet = false}) async {
+    // Лента на экране (обновление, кэш) остаётся до ответа — без скелетона.
     setState(() {
-      _isInitialLoading = true;
+      _isInitialLoading = _news.isEmpty;
       _isLoadingMore = false;
-      _nextPageUrl = null;
-      _news = [];
-      _fullyVisibleIds.clear();
     });
 
     try {
@@ -86,11 +121,13 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
         _news = page.data;
         _nextPageUrl = page.nextPageUrl;
         _isInitialLoading = false;
+        _fullyVisibleIds.clear();
       });
       await _maybeOpenNewsFromPush();
     } catch (e) {
       if (!mounted) return;
       setState(() => _isInitialLoading = false);
+      if (quiet && _news.isNotEmpty) return;
       AppFeedback.showSnackBar(
         context,
         e,
@@ -274,6 +311,10 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     }
 
     if (_news.isEmpty) {
+      // Под блоками «Сегодня» пустая лента — просто ничего.
+      if (widget.headerSlivers.isNotEmpty) {
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
+      }
       return SliverAppEmptyState(
         icon: CupertinoIcons.news,
         message: 'Пока нет новостей',
@@ -320,9 +361,44 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     );
   }
 
+  Future<void> _refresh() async {
+    final extra = widget.onRefresh;
+    await Future.wait([_loadFirstPage(), if (extra != null) extra()]);
+  }
+
+  Widget _createButton(Color color) {
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: _openCreate,
+      child: Icon(
+        CupertinoIcons.square_pencil,
+        size: AppSliverTitleBar.iconSize,
+        color: color,
+      ),
+    );
+  }
+
+  /// Подпись «ЛЕНТА» с карандашом справа — над постами под блоками.
+  Widget _feedLabel() {
+    return SliverToBoxAdapter(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Expanded(child: AppGlassSectionLabel('Лента')),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 20, 2),
+            child: _createButton(AppColors.primary),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final label = CupertinoColors.label.resolveFrom(context);
+    final hasHeader = widget.headerSlivers.isNotEmpty;
     return AppGlassBarBlur(
       builder: (context, blur) => CupertinoPageScaffold(
         backgroundColor: AppColors.groupedBackground.resolveFrom(context),
@@ -340,24 +416,19 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: _loadFirstPage,
+                  onRefresh: AppHaptics.onRefresh(_refresh),
                   child: CustomScrollView(
                     controller: _scrollController,
                     slivers: [
                       AppSliverTitleBar(
-                        title: const Text('Лента'),
+                        title: Text(widget.title),
                         blur: blur,
-                        trailing: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          onPressed: _openCreate,
-                          child: Icon(
-                            CupertinoIcons.square_pencil,
-                            size: AppSliverTitleBar.iconSize,
-                            color: label,
-                          ),
-                        ),
+                        trailing:
+                            widget.trailing ??
+                            (hasHeader ? null : _createButton(label)),
                       ),
+                      ...widget.headerSlivers,
+                      if (hasHeader) _feedLabel(),
                       _buildSliverBody(),
                     ],
                   ),

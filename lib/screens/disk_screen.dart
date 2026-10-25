@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show Colors, RefreshIndicator, ScaffoldMessenger, SnackBar;
-import 'package:flutter/services.dart' show HapticFeedback;
+import '../services/haptics_service.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
@@ -778,7 +778,7 @@ class _DiskScreenState extends State<DiskScreen> {
   }
 
   Future<void> _showFolderActions(DiskFolder folder) async {
-    HapticFeedback.mediumImpact();
+    AppHaptics.medium();
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (context) => CupertinoActionSheet(
@@ -809,7 +809,7 @@ class _DiskScreenState extends State<DiskScreen> {
   }
 
   Future<void> _showFileActions(DiskFile file, BuildContext rowContext) async {
-    HapticFeedback.mediumImpact();
+    AppHaptics.medium();
     // Окно «Поделиться» на iPad привязывается к строке.
     final box = rowContext.findRenderObject() as RenderBox?;
     final origin = box == null
@@ -883,7 +883,7 @@ class _DiskScreenState extends State<DiskScreen> {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: () => _load(silent: true),
+                  onRefresh: AppHaptics.onRefresh(() => _load(silent: true)),
                   child: CustomScrollView(
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),

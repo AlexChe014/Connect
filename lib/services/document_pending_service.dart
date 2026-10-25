@@ -102,21 +102,7 @@ class DocumentPendingService extends ChangeNotifier {
       try {
         final documents = await _load(id);
         if (generation != _generation) return;
-        final pending = documents.where(documentNeedsAction).toList();
-        counts[id] = pending.length;
-        DateTime? latest;
-        for (final d in pending) {
-          final date = DocumentPayloadUtils.listDate(d);
-          if (date != null && (latest == null || date.isAfter(latest))) {
-            latest = date;
-          }
-        }
-        if (latest != null) {
-          _latest[id] = latest;
-        } else {
-          _latest.remove(id);
-        }
-        errors.remove(id);
+        _apply(id, documents);
       } catch (_) {
         if (generation != _generation) return;
         errors.add(id);
@@ -124,6 +110,34 @@ class DocumentPendingService extends ChangeNotifier {
       loading.remove(id);
       notifyListeners();
     }
+  }
+
+  /// Экран списка только что получил свежую очередь сервиса — без этого
+  /// бейдж «Согласование» держал старое число до возврата приложения из
+  /// фона, и согласованные документы будто «возвращались».
+  void updateService(int serviceId, List<Map<String, dynamic>> documents) {
+    if (!_services.any((s) => s.id == serviceId)) return;
+    _apply(serviceId, documents);
+    loading.remove(serviceId);
+    notifyListeners();
+  }
+
+  void _apply(int id, List<Map<String, dynamic>> documents) {
+    final pending = documents.where(documentNeedsAction).toList();
+    counts[id] = pending.length;
+    DateTime? latest;
+    for (final d in pending) {
+      final date = DocumentPayloadUtils.listDate(d);
+      if (date != null && (latest == null || date.isAfter(latest))) {
+        latest = date;
+      }
+    }
+    if (latest != null) {
+      _latest[id] = latest;
+    } else {
+      _latest.remove(id);
+    }
+    errors.remove(id);
   }
 
   void reset() {

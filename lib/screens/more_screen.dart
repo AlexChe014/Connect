@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
@@ -6,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_theme.dart';
 import '../repositories/profile_repository.dart';
+import '../services/app_lock_service.dart';
 import '../services/auth_service.dart';
 import '../services/document_pending_service.dart';
+import '../services/haptics_service.dart';
 import '../services/notification_unread_service.dart';
 import '../services/survey_pending_service.dart';
 import '../services/theme_mode_service.dart';
@@ -54,6 +57,7 @@ class _MoreScreenState extends State<MoreScreen> {
     _pending.addListener(_onPendingChanged);
     _surveys.addListener(_onPendingChanged);
     _notifications.addListener(_onPendingChanged);
+    AppLockService.instance.enabled.addListener(_onPendingChanged);
     _loadProfile();
   }
 
@@ -62,6 +66,7 @@ class _MoreScreenState extends State<MoreScreen> {
     _pending.removeListener(_onPendingChanged);
     _surveys.removeListener(_onPendingChanged);
     _notifications.removeListener(_onPendingChanged);
+    AppLockService.instance.enabled.removeListener(_onPendingChanged);
     super.dispose();
   }
 
@@ -226,6 +231,93 @@ class _MoreScreenState extends State<MoreScreen> {
     );
   }
 
+  Widget _hapticsItem(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppHaptics.enabled,
+      builder: (context, enabled, _) => CupertinoListTile(
+        leading: AppIconBadge(
+          icon: CupertinoIcons.hand_point_right_fill,
+          color: CupertinoColors.systemPink.resolveFrom(context),
+        ),
+        title: const Text('Тактильный отклик'),
+        trailing: CupertinoSwitch(
+          value: enabled,
+          onChanged: AppHaptics.setEnabled,
+        ),
+        onTap: () => AppHaptics.setEnabled(!enabled),
+      ),
+    );
+  }
+
+  String get _appLockTitle => switch (AppLockService.instance.methodName) {
+    'Face ID' => 'Вход по Face ID',
+    'Touch ID' => 'Вход по Touch ID',
+    _ => 'Блокировка приложения',
+  };
+
+  Future<void> _toggleAppLock(bool value) async {
+    final lock = AppLockService.instance;
+    if (!value) return lock.disable();
+    if (!await lock.enable()) unawaited(AppHaptics.error());
+  }
+
+  Future<void> _pickAppLockDelay() async {
+    final current = AppLockService.instance.delay.value;
+    final choice = await showCupertinoModalPopup<AppLockDelay>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Запрашивать разблокировку'),
+        message: const Text('После того как приложение ушло в фон'),
+        actions: [
+          for (final delay in AppLockDelay.values)
+            CupertinoActionSheetAction(
+              isDefaultAction: delay == current,
+              onPressed: () => Navigator.pop(context, delay),
+              child: Text(delay.label),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+      ),
+    );
+    if (choice != null) await AppLockService.instance.setDelay(choice);
+  }
+
+  /// Строка задержки есть только при включённом замке; экран слушает
+  /// [AppLockService.enabled] — пустой виджет вместо неё оставил бы в
+  /// секции лишний разделитель.
+  List<Widget> _appLockItems(BuildContext context) {
+    final lock = AppLockService.instance;
+    final enabled = lock.enabled.value;
+    return [
+      CupertinoListTile(
+        leading: AppIconBadge(
+          icon: CupertinoIcons.lock_fill,
+          color: CupertinoColors.systemGreen.resolveFrom(context),
+        ),
+        title: Text(_appLockTitle),
+        trailing: CupertinoSwitch(value: enabled, onChanged: _toggleAppLock),
+        onTap: () => _toggleAppLock(!enabled),
+      ),
+      if (enabled)
+        ValueListenableBuilder<AppLockDelay>(
+          valueListenable: lock.delay,
+          builder: (context, delay, _) => CupertinoListTile(
+            leading: AppIconBadge(
+              icon: CupertinoIcons.timer,
+              color: CupertinoColors.systemGreen.resolveFrom(context),
+            ),
+            title: const Text('Запрашивать'),
+            additionalInfo: Text(delay.label),
+            trailing: const CupertinoListTileChevron(),
+            onTap: _pickAppLockDelay,
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppGlassBarBlur(
@@ -354,6 +446,9 @@ class _MoreScreenState extends State<MoreScreen> {
                       ),
                       children: [
                         _themeModeItem(context),
+                        _hapticsItem(context),
+                        if (AppLockService.instance.supported)
+                          ..._appLockItems(context),
                         _item(
                           icon: CupertinoIcons.book_fill,
                           color: CupertinoColors.systemGrey.resolveFrom(

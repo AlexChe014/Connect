@@ -6,6 +6,9 @@ import '../config/app_theme.dart';
 import '../models/bookings/booking_detail.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
+import '../utils/app_feedback.dart';
 import '../utils/booking_time_utils.dart';
 import '../utils/connector_link_join.dart';
 import '../widgets/app_empty_state.dart';
@@ -55,6 +58,10 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
   bool _isLoading = true;
   String? _error;
   bool _isDeleting = false;
+  int? _userId;
+
+  /// `true`/`false` — какой ответ на приглашение сейчас отправляется.
+  bool? _responding;
 
   @override
   void initState() {
@@ -69,18 +76,20 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     });
 
     try {
-      final detail = await BookingsRepository.instance.getBookingById(
-        widget.bookingId,
-      );
+      final (detail, userId) = await (
+        BookingsRepository.instance.getBookingById(widget.bookingId),
+        AuthService.instance.getStoredUserId(),
+      ).wait;
       if (!mounted) return;
       setState(() {
         _detail = detail;
+        _userId = userId;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = AppFeedback.messageOf(e);
         _isLoading = false;
       });
     }
@@ -166,10 +175,130 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      ).showSnackBar(SnackBar(content: Text(AppFeedback.messageOf(e))));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
+  }
+
+  Future<void> _respond(bool accept) async {
+    final detail = _detail;
+    if (detail == null || _responding != null) return;
+
+    if (!accept) {
+      final ok =
+          await showCupertinoDialog<bool>(
+            context: context,
+            builder: (context) => CupertinoAlertDialog(
+              title: const Text('Отклонить приглашение?'),
+              content: Text(
+                detail.isRecurring
+                    ? 'Встречи серии пропадут из вашего календаря.'
+                    : 'Встреча пропадёт из вашего календаря.',
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Отмена'),
+                ),
+                CupertinoDialogAction(
+                  isDestructiveAction: true,
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Отклонить'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!ok || !mounted) return;
+    }
+
+    setState(() => _responding = accept);
+    try {
+      await BookingsRepository.instance.respondToInvitation(
+        bookingId: detail.id,
+        accept: accept,
+      );
+      if (!mounted) return;
+      // Отклонённые брони бэкенд в календарь больше не отдаёт.
+      if (!accept) {
+        Navigator.pop(context, true);
+        return;
+      }
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : 'Не удалось отправить ответ',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _responding = null);
+    }
+  }
+
+  /// Карточка «Вас пригласили» с ответом — только пока ответа не было.
+  List<Widget> _buildInvitation(BookingDetail detail) {
+    if (detail.isPassed || !detail.isPendingFor(_userId)) return const [];
+
+    Widget button({required bool accept}) {
+      final busy = _responding == accept;
+      return Expanded(
+        child: CupertinoButton(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          color: accept
+              ? AppColors.primary
+              : CupertinoColors.tertiarySystemFill.resolveFrom(context),
+          borderRadius: BorderRadius.circular(14),
+          onPressed: _responding == null ? () => _respond(accept) : null,
+          child: busy
+              ? CupertinoActivityIndicator(
+                  color: accept ? CupertinoColors.white : null,
+                )
+              : Text(
+                  accept ? 'Принять' : 'Отклонить',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: accept
+                        ? CupertinoColors.white
+                        : CupertinoColors.systemRed.resolveFrom(context),
+                  ),
+                ),
+        ),
+      );
+    }
+
+    return [
+      const SizedBox(height: 18),
+      BookingGlassCard(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Вас пригласили на встречу',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                button(accept: false),
+                const SizedBox(width: 10),
+                button(accept: true),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 
   String _formatWhen(BookingDetail d) {
@@ -249,7 +378,28 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
     );
   }
 
-  List<Widget> _participantsSection(List<StaffUser> users) {
+  /// Подпись справа у участника: организатор или ответ на приглашение.
+  Widget? _participantStatus(BookingDetail detail, StaffUser user) {
+    final id = user.idAsInt;
+    if (id == null) return null;
+    final (text, color) = switch (id == detail.ownerId
+        ? 'owner'
+        : detail.statusOf(id)) {
+      'owner' => ('Организатор', CupertinoColors.secondaryLabel),
+      'accepted' => ('Придёт', CupertinoColors.systemGreen),
+      'pending' => ('Нет ответа', CupertinoColors.tertiaryLabel),
+      'rejected' => ('Отказ', CupertinoColors.systemRed),
+      _ => (null, CupertinoColors.secondaryLabel),
+    };
+    if (text == null) return null;
+    return Text(
+      text,
+      style: TextStyle(fontSize: 13, color: color.resolveFrom(context)),
+    );
+  }
+
+  List<Widget> _participantsSection(BookingDetail detail) {
+    final users = detail.participants;
     if (users.isEmpty) return const [];
 
     return [
@@ -273,6 +423,7 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
             subtitle: (user.email ?? '').isNotEmpty
                 ? Text(user.email!, style: const TextStyle(fontSize: 12))
                 : null,
+            additionalInfo: _participantStatus(detail, user),
           );
         }).toList(),
       ),
@@ -329,8 +480,8 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
             ),
           ),
           // Прошедшую бронь менять нельзя — кнопку не показываем вовсе,
-          // а не выводим серой.
-          if (!detail.isPassed) ...[
+          // а не выводим серой. Участнику тоже: менять может организатор.
+          if (!detail.isPassed && detail.canManage(_userId)) ...[
             const SizedBox(width: 12),
             CupertinoButton(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -503,10 +654,11 @@ class _BookingDetailSheetState extends State<BookingDetailSheet> {
                       )
                     else if (detail != null) ...[
                       _buildHeader(detail),
+                      ..._buildInvitation(detail),
                       ..._buildJoinButton(detail, _meetingLink(detail)),
                       ..._buildDetails(detail),
-                      ..._participantsSection(detail.participants),
-                      if (!detail.isPassed)
+                      ..._participantsSection(detail),
+                      if (!detail.isPassed && detail.canManage(_userId))
                         AppGlassSection(
                           margin: const EdgeInsets.fromLTRB(16, 28, 16, 0),
                           children: [

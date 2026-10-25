@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 
 import '../config/app_theme.dart';
 import '../models/call_conference.dart';
+import '../services/haptics_service.dart';
 import 'chat_avatar.dart';
 
 /// Фон экрана звонка: тёмный градиент и медленно плывущие пятна света.
@@ -224,9 +224,9 @@ class _CallRoundButtonState extends State<CallRoundButton> {
         onTap: enabled
             ? () {
                 if (widget.destructive) {
-                  HapticFeedback.mediumImpact();
+                  AppHaptics.medium();
                 } else {
-                  HapticFeedback.selectionClick();
+                  AppHaptics.selection();
                 }
                 widget.onPressed!();
               }
@@ -329,7 +329,7 @@ class CallIconButton extends StatelessWidget {
         onPressed: onPressed == null
             ? null
             : () {
-                HapticFeedback.selectionClick();
+                AppHaptics.selection();
                 onPressed!();
               },
         child: Container(
@@ -396,7 +396,7 @@ class CallPill extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () {
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
         onTap!();
       },
       child: pill,

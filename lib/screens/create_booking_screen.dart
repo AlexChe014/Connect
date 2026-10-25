@@ -7,6 +7,7 @@ import '../models/bookings/create_booking_request.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/connector_repository.dart';
+import '../utils/app_feedback.dart';
 import '../utils/booking_time_utils.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/bookable_object_preview.dart';
@@ -128,7 +129,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _additionsError = e.toString();
+        _additionsError = AppFeedback.messageOf(e);
         _additionsLoading = false;
       });
     }
@@ -227,7 +228,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      _showMessage(e.toString());
+      _showMessage(AppFeedback.messageOf(e));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

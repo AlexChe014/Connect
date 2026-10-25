@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../repositories/connector_repository.dart';
 import '../services/api_client.dart';
+import 'app_logger.dart';
 import 'connector_launch.dart';
 import 'connector_url_utils.dart';
 
@@ -28,6 +29,7 @@ Future<void> joinMeetingLink(BuildContext context, String url) async {
     final session = await ConnectorRepository.instance.join(room);
     await openConnectorSession(session);
   } catch (e) {
+    AppLogger.d('connector join $room failed: $e', name: 'meeting');
     if (!context.mounted) return;
     if (e is ApiException && e.statusCode == 403) {
       await _offerPortal(context, url, e.message);

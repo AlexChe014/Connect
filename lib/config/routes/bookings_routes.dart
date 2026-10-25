@@ -13,9 +13,16 @@ class BookingsRoutes {
 
   static const String _deletePrefix = '/booking/delete/';
 
+  static const String _acceptPrefix = '/booking/accept/';
+
+  static const String _declinePrefix = '/booking/decline/';
+
   static String get createUrl => '${ApiConfig.baseUrl}$create';
 
   static String get getFreeUrl => '${ApiConfig.baseUrl}$getFree';
+
+  /// `GET /booking/filter?q=` — поиск по своим броням (тема, участники).
+  static String get filterUrl => '${ApiConfig.baseUrl}/booking/filter';
 
   static String getByIdUrl(int bookingId) =>
       '${ApiConfig.baseUrl}$_getPrefix$bookingId';
@@ -28,4 +35,10 @@ class BookingsRoutes {
 
   static String deleteUrl(int bookingId) =>
       '${ApiConfig.baseUrl}$_deletePrefix$bookingId';
+
+  static String acceptUrl(int bookingId) =>
+      '${ApiConfig.baseUrl}$_acceptPrefix$bookingId';
+
+  static String declineUrl(int bookingId) =>
+      '${ApiConfig.baseUrl}$_declinePrefix$bookingId';
 }

@@ -7,22 +7,39 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0E0FEB3EBA773EBB65415152 /* CallActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AFD7D56E398857F4607A110 /* CallActivityAttributes.swift */; };
 		1325C0D52765BE9926643284 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = C82FB87662DAF8212185AEEB /* GoogleService-Info.plist */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		22D55F6918C90D1F490E7546 /* ConnectWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB9864DE8D6013ED5C2FD66D /* ConnectWidgetsBundle.swift */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3A451BDA29A25209ACAC45E9 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 151C20BE2DC50955B46D1F43 /* Pods_RunnerTests.framework */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		4AA65C1AB7CA0DF50E44FA12 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0C3088B2D322DAB4C8B7F5F4 /* Pods_Runner.framework */; };
+		52A814BC2B6E3BE6F424225E /* WidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17A5648DAD034F27D2FD2EF3 /* WidgetBridge.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		952173A116A87DF253FAFA02 /* CallActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291FE7955EC5E8238B97262A /* CallActivityIntents.swift */; };
+		96918DC084F24CCC94CB2765 /* CallLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C1DB3D32E173BFDB61B14 /* CallLiveActivity.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A1B2C3D41E5F60718293A4B5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E5F60718293A4B4 /* PrivacyInfo.xcprivacy */; };
+		AF92430F099E54BF9A55EFBB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DEB76952C1277067CB2571B3 /* Foundation.framework */; };
+		B2CB83FE5FE5985798882052 /* ConnectWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 93E78986747CC129D633A97C /* ConnectWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C98DC93F1179B949CB71E5C5 /* CallActivityIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291FE7955EC5E8238B97262A /* CallActivityIntents.swift */; };
+		CB8CBCA881B213F61DA639BE /* CallActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AFD7D56E398857F4607A110 /* CallActivityAttributes.swift */; };
+		EED9AB45391CF0B9E4616F6C /* TodayWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0E9C50C1B56AEC1AC6199C /* TodayWidget.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		1673C8BA46006E2947B9F24C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4C133579B4F4BDF2627E9EDE;
+			remoteInfo = ConnectWidgets;
+		};
 		331C8085294A63A400263BE5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
@@ -33,6 +50,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		8AEC939F8BD299B7DA094F28 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B2CB83FE5FE5985798882052 /* ConnectWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -52,6 +80,9 @@
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		151C20BE2DC50955B46D1F43 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		1746824160C92B0B0C455FF0 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
+		17A5648DAD034F27D2FD2EF3 /* WidgetBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetBridge.swift; sourceTree = "<group>"; };
+		291FE7955EC5E8238B97262A /* CallActivityIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallActivityIntents.swift; sourceTree = "<group>"; };
+		2A8C1DB3D32E173BFDB61B14 /* CallLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallLiveActivity.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -60,7 +91,9 @@
 		7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		8AFD7D56E398857F4607A110 /* CallActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallActivityAttributes.swift; sourceTree = "<group>"; };
 		915AAF49B53D364EEB46B4BA /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		93E78986747CC129D633A97C /* ConnectWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ConnectWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -72,9 +105,15 @@
 		A1B2C3D41E5F60718293A4B4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A1B2C3D41E5F60718293A4B6 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		A1B2C3D41E5F60718293A4B7 /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
+		A2AC3BB52582BD42836D0AC8 /* ConnectWidgets.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = ConnectWidgets.xcconfig; sourceTree = "<group>"; };
+		AB0E9C50C1B56AEC1AC6199C /* TodayWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TodayWidget.swift; sourceTree = "<group>"; };
+		BA12377E250E3B2A123A43C6 /* ConnectWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ConnectWidgets.entitlements; sourceTree = "<group>"; };
 		C82FB87662DAF8212185AEEB /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		C84CB38B0BFE14A7A143795F /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 		D80648209A5226BC5281D9FD /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
+		DEB76952C1277067CB2571B3 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		E383E7D55E837371294D2E44 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		EB9864DE8D6013ED5C2FD66D /* ConnectWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectWidgetsBundle.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +131,14 @@
 			files = (
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				4AA65C1AB7CA0DF50E44FA12 /* Pods_Runner.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1EBED215E01E2327C3EFF9A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AF92430F099E54BF9A55EFBB /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,6 +163,7 @@
 			children = (
 				0C3088B2D322DAB4C8B7F5F4 /* Pods_Runner.framework */,
 				151C20BE2DC50955B46D1F43 /* Pods_RunnerTests.framework */,
+				BB8F413EAEF1CD36B4F88ACB /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -150,6 +198,8 @@
 				11C7B83FEC63375D6DFB5680 /* Pods */,
 				2A8C0EBCA55B9599B557C716 /* Frameworks */,
 				C82FB87662DAF8212185AEEB /* GoogleService-Info.plist */,
+				BB02B223ECFB964692750416 /* ConnectWidgets */,
+				E8A8C6AF2E900AA0D8070596 /* Shared */,
 			);
 			sourceTree = "<group>";
 		};
@@ -158,6 +208,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				93E78986747CC129D633A97C /* ConnectWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -177,8 +228,41 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				17A5648DAD034F27D2FD2EF3 /* WidgetBridge.swift */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		BB02B223ECFB964692750416 /* ConnectWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				A2AC3BB52582BD42836D0AC8 /* ConnectWidgets.xcconfig */,
+				E383E7D55E837371294D2E44 /* Info.plist */,
+				BA12377E250E3B2A123A43C6 /* ConnectWidgets.entitlements */,
+				EB9864DE8D6013ED5C2FD66D /* ConnectWidgetsBundle.swift */,
+				2A8C1DB3D32E173BFDB61B14 /* CallLiveActivity.swift */,
+				AB0E9C50C1B56AEC1AC6199C /* TodayWidget.swift */,
+			);
+			name = ConnectWidgets;
+			path = ConnectWidgets;
+			sourceTree = "<group>";
+		};
+		BB8F413EAEF1CD36B4F88ACB /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				DEB76952C1277067CB2571B3 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		E8A8C6AF2E900AA0D8070596 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				8AFD7D56E398857F4607A110 /* CallActivityAttributes.swift */,
+				291FE7955EC5E8238B97262A /* CallActivityIntents.swift */,
+			);
+			name = Shared;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -203,6 +287,23 @@
 			productReference = 331C8081294A63A400263BE5 /* RunnerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		4C133579B4F4BDF2627E9EDE /* ConnectWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1D09C55507504C55F2E821B6 /* Build configuration list for PBXNativeTarget "ConnectWidgets" */;
+			buildPhases = (
+				9B9C0315DDFB2A796DEF5412 /* Sources */,
+				E1EBED215E01E2327C3EFF9A /* Frameworks */,
+				C83F884A866AAEAAA07C48B4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ConnectWidgets;
+			productName = ConnectWidgets;
+			productReference = 93E78986747CC129D633A97C /* ConnectWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -213,12 +314,14 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				8AEC939F8BD299B7DA094F28 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				00014C40F186E9E44FA08D72 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				794B5083EFBD9358EEE193C1 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			packageProductDependencies = (
@@ -241,6 +344,11 @@
 					331C8080294A63A400263BE5 = {
 						CreatedOnToolsVersion = 14.0;
 						TestTargetID = 97C146ED1CF9000F007C117D;
+					};
+					4C133579B4F4BDF2627E9EDE = {
+						CreatedOnToolsVersion = 26.0;
+						DevelopmentTeam = A6JF948ZTC;
+						ProvisioningStyle = Automatic;
 					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
@@ -266,6 +374,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				4C133579B4F4BDF2627E9EDE /* ConnectWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -288,6 +397,13 @@
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				A1B2C3D41E5F60718293A4B5 /* PrivacyInfo.xcprivacy in Resources */,
 				1325C0D52765BE9926643284 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C83F884A866AAEAAA07C48B4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,6 +520,21 @@
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
+				0E0FEB3EBA773EBB65415152 /* CallActivityAttributes.swift in Sources */,
+				C98DC93F1179B949CB71E5C5 /* CallActivityIntents.swift in Sources */,
+				52A814BC2B6E3BE6F424225E /* WidgetBridge.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9B9C0315DDFB2A796DEF5412 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22D55F6918C90D1F490E7546 /* ConnectWidgetsBundle.swift in Sources */,
+				96918DC084F24CCC94CB2765 /* CallLiveActivity.swift in Sources */,
+				EED9AB45391CF0B9E4616F6C /* TodayWidget.swift in Sources */,
+				CB8CBCA881B213F61DA639BE /* CallActivityAttributes.swift in Sources */,
+				952173A116A87DF253FAFA02 /* CallActivityIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -414,6 +545,12 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		794B5083EFBD9358EEE193C1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ConnectWidgets;
+			target = 4C133579B4F4BDF2627E9EDE /* ConnectWidgets */;
+			targetProxy = 1673C8BA46006E2947B9F24C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -437,6 +574,36 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		19BF78394F7A1974B5BE0B91 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A2AC3BB52582BD42836D0AC8 /* ConnectWidgets.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ConnectWidgets/ConnectWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = A6JF948ZTC;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ConnectWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikson.connect.ConnectWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
+		};
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -564,6 +731,65 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Runner.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Runner";
 			};
 			name = Profile;
+		};
+		467BD457D71E50DF0021D805 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A2AC3BB52582BD42836D0AC8 /* ConnectWidgets.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ConnectWidgets/ConnectWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = A6JF948ZTC;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ConnectWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikson.connect.ConnectWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6948FFCC8E4A129780BE5017 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A2AC3BB52582BD42836D0AC8 /* ConnectWidgets.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ConnectWidgets/ConnectWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = A6JF948ZTC;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ConnectWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikson.connect.ConnectWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -726,6 +952,16 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1D09C55507504C55F2E821B6 /* Build configuration list for PBXNativeTarget "ConnectWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				467BD457D71E50DF0021D805 /* Release */,
+				6948FFCC8E4A129780BE5017 /* Debug */,
+				19BF78394F7A1974B5BE0B91 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		331C8087294A63A400263BE5 /* Build configuration list for PBXNativeTarget "RunnerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

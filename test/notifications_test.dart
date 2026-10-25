@@ -123,4 +123,24 @@ void main() {
       expect(service.unreadCount, 3);
     });
   });
+
+  group('NotificationTopics.canonicalType', () {
+    test('maps backend client types to stored types', () {
+      expect(NotificationTopics.canonicalType('news'), 'news_created');
+      expect(NotificationTopics.canonicalType('document'), 'new_documents');
+      expect(NotificationTopics.canonicalType('email'), 'mail');
+      expect(NotificationTopics.canonicalType('new_emails'), 'mail');
+      expect(NotificationTopics.canonicalType('chat_message'), 'chat_message');
+      expect(NotificationTopics.canonicalType(null), '');
+    });
+
+    test('byType resolves short names', () {
+      expect(NotificationTopics.byType('news'), NotificationTopics.feedPost);
+      expect(
+        NotificationTopics.byType('document'),
+        NotificationTopics.documentApproval,
+      );
+      expect(NotificationTopics.byType('email'), NotificationTopics.mailNew);
+    });
+  });
 }

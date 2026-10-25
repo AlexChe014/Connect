@@ -17,6 +17,7 @@ import '../widgets/mail_recipient_field.dart';
 import '../widgets/staff_user_picker_sheet.dart';
 import 'mail_provider_picker_screen.dart';
 import 'mail_screen.dart';
+import '../services/haptics_service.dart';
 
 class _PendingAttachment {
   final String filename;
@@ -141,6 +142,10 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   late final String _initialCc;
 
   static const _labelWidth = 72.0;
+
+  /// SendEmailRequest: `attachments_files.*` — `max:10240` (КБ). Больше —
+  /// сервер отвечает 422 уже после нажатия «Отправить».
+  static const _maxAttachmentBytes = 10240 * 1024;
   late final String _initialSubject;
   late final String _initialBody;
 
@@ -184,6 +189,22 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         .where((a) => !_isOwn(a))
         .where((a) => seen.add(mailEmailOnly(a).toLowerCase()))
         .toList();
+  }
+
+  /// `/mail/smtp/reply` игнорирует `to` и `subject` из запроса: шлёт всегда
+  /// на `from` исходного письма с темой «Re: …» (копию учитывает). Ответ на
+  /// своё письмо из «Отправленных» уходил самому себе, а в «Ответить всем»
+  /// терялись все из «Кому», кроме отправителя. Поэтому reply используем,
+  /// только когда сервер отправит то же, что видно на экране, иначе — обычная
+  /// отправка (без связи с перепиской). См. docs/BACKEND_MAIL_FIXES.md, п. 14.
+  bool _replyMatchesServer(MailMessage replyTo) {
+    final from = mailEmailOnly(replyTo.from).toLowerCase();
+    final to = _toController.emails.map((e) => e.toLowerCase()).toList();
+    return from.isNotEmpty &&
+        !_isOwn(replyTo.from) &&
+        to.length == 1 &&
+        to.single == from &&
+        _subjectController.text.trim() == _initialSubject.trim();
   }
 
   @override
@@ -294,12 +315,29 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     if (result == null) return;
 
     final picked = <_PendingAttachment>[];
+    final tooLarge = <String>[];
     for (final file in result.files) {
       final bytes = file.bytes;
       if (bytes == null) continue;
+      if (bytes.length > _maxAttachmentBytes) {
+        tooLarge.add(file.name);
+        continue;
+      }
       picked.add(_PendingAttachment(filename: file.name, bytes: bytes));
     }
-    if (picked.isEmpty || !mounted) return;
+    if (!mounted) return;
+    if (tooLarge.isNotEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            tooLarge.length == 1
+                ? 'Файл «${tooLarge.single}» больше 10 МБ — такие сервер не принимает'
+                : 'Файлы больше 10 МБ не добавлены: ${tooLarge.join(', ')}',
+          ),
+        ),
+      );
+    }
+    if (picked.isEmpty) return;
     setState(() => _attachments.addAll(picked));
   }
 
@@ -388,9 +426,9 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           .toList();
       final cc = _ccController.emails;
       final bcc = _bccController.emails;
-      // /mail/smtp/reply/{email} и /mail/smtp/forward/{email} отправляют с
-      // ящика исходного письма и связывают ответ с перепиской.
-      if (replyTo != null) {
+      // /mail/smtp/reply/{email} отправляет с ящика исходного письма и
+      // связывает ответ с перепиской, но адресатов и тему берёт сам.
+      if (replyTo != null && _replyMatchesServer(replyTo)) {
         await MailRepository.instance.replyMail(
           ReplyMailRequest(
             messageId: replyTo.id,
@@ -416,6 +454,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           ),
         );
       } else {
+        // Новое письмо — и ответ, который сервер отправил бы не тем людям
+        // (см. [_replyMatchesServer]).
         await MailRepository.instance.sendMail(
           SendMailRequest(
             connectionId: widget.connection.id,
@@ -428,9 +468,11 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           ),
         );
       }
+      AppHaptics.success();
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
+      AppHaptics.error();
       if (!mounted) return;
       final message = e is ApiException
           ? e.message

@@ -5,7 +5,7 @@
 `laravel-core-dev`. Подробности и история находок — в
 [BACKEND_MAIL_FIXES.md](BACKEND_MAIL_FIXES.md).
 
-Порядок по важности: 1 → 2 → 3 → 4 → 5.
+Порядок по важности: 1 → 6 (безопасность) → 2 → 3 → 4 → 5.
 
 Сверено с кодом `laravel-core-dev` от 2026-10-23 (архив `laravel-core-dev (4).zip`).
 
@@ -184,3 +184,37 @@ HTML и без вложений исходного. После выкладки 
    оставить для совместимости.
 5. /mail/search принимает connection_id.
 ```
+
+---
+
+## 6. Почта: `connection_id` в отправке и проверка владельца
+
+```text
+Репозиторий laravel-core-dev, app/Modules/MailServices:
+Http/Controllers/Api/SmtpController.php, Http/Controllers/Api/EmailController.php,
+Services/ImapService.php.
+
+1. SmtpController::sendEmail передаёт в SmtpService::sendEmail
+   $data['connection_id'] ?? null, но $data в методе не объявлена — значение
+   всегда null, письмо уходит с ящика по умолчанию. Объявить
+   $data = $request->validated() и передавать $data['connection_id'] ?? null.
+   Feature-тест: у пользователя два ящика, отправка с connection_id второго
+   (не по умолчанию) уходит с адреса второго.
+
+2. Безопасность. EmailController::massDelete и massMarkAsRead выбирают письма
+   по Email::whereIn('id', $request->input('emails')) без проверки владельца и
+   без проверки, что {connection} принадлежит пользователю. Сделай:
+   - валидация: 'emails' => 'required|array', 'emails.*' => 'integer';
+   - ->where('user_id', Auth::id())->where('connection_id', $connection->id);
+   - во всех методах EmailController с {connection}: Auth::id() === $connection->user_id,
+     иначе 403; в методах с {email} ещё и $email->connection_id === $connection->id.
+   Feature-тесты: чужие id писем и чужой connection → 403, IMAP не вызывается.
+
+3. ImapService::deleteMessage/moveMessage/markAsRead/markAsUnread при ошибке
+   возвращают false, и контроллер отдаёт {"success": true, "data": false}.
+   При false (или исключении) отдавать sendError с причиной. downloadAttachment
+   при ошибке — sendError с кодом 404/502, а не 200.
+
+Контракт успешных ответов не меняй — приложение их уже разбирает.
+```
+

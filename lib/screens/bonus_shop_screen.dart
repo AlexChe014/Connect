@@ -6,6 +6,7 @@ import '../repositories/bonus_program_repository.dart';
 import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/bonus_glass.dart';
+import '../services/haptics_service.dart';
 
 /// Магазин: витрина товаров за баллы и заявка на получение.
 /// За один раз можно купить только один товар — без корзины и количества.
@@ -116,7 +117,7 @@ class _BonusShopScreenState extends State<BonusShopScreen> {
   Widget build(BuildContext context) {
     return BonusGlassScaffold(
       title: 'Магазин',
-      onRefresh: _load,
+      onRefresh: AppHaptics.onRefresh(_load),
       trailing: _isBusy ? const CupertinoActivityIndicator() : null,
       slivers: [_buildBody()],
     );

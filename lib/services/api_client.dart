@@ -251,6 +251,7 @@ class ApiClient {
           'len=${bytes.length} first-bytes=$preview',
           name: 'network.http.download',
         );
+        _throwIfJsonError(response);
         return bytes;
       }
       _noteResponseAuthOutcome(
@@ -314,6 +315,29 @@ class ApiClient {
     } finally {
       client.close();
     }
+  }
+
+  /// Laravel отдаёт ошибку кодом 200 с `{"success": false, "data": {"error"}}`
+  /// — без проверки такой JSON сохранялся бы как скачанный файл. Настоящий
+  /// .json-файл не трогаем: ошибкой считается только `success: false`.
+  void _throwIfJsonError(http.Response response) {
+    final contentType = response.headers['content-type'] ?? '';
+    if (!contentType.contains('json')) return;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    } catch (_) {
+      return;
+    }
+    if (decoded is! Map || decoded['success'] != false) return;
+    final data = decoded['data'];
+    final error = data is Map ? data['error'] : null;
+    throw ApiException(
+      response.statusCode,
+      error is String && error.trim().isNotEmpty
+          ? error
+          : 'Не удалось скачать файл',
+    );
   }
 
   Never _mapAndLog(String label, Object e, StackTrace st) {

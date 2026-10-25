@@ -14,6 +14,7 @@ import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
 import '../widgets/employee_row.dart';
 import 'employee_detail_screen.dart';
+import '../services/haptics_service.dart';
 
 class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({super.key});
@@ -36,6 +37,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   String _appliedQ = '';
 
   Timer? _debounce;
+
+  /// Растёт на каждый новый поиск: ответ на устаревший запрос (медленная
+  /// первая страница или подгрузка по прошлому тексту) отбрасывается.
+  int _generation = 0;
 
   bool get _hasMore {
     if (_nextPageUrl != null) return true;
@@ -106,6 +111,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Future<void> _loadFirstPage() async {
+    final gen = ++_generation;
     setState(() {
       _isInitialLoading = true;
       _isLoadingMore = false;
@@ -119,7 +125,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       final page = await UsersRepository.instance.getPage(
         q: _appliedQ.isEmpty ? null : _appliedQ,
       );
-      if (!mounted) return;
+      if (!mounted || gen != _generation) return;
       setState(() {
         _items = page.data;
         _nextPageUrl = page.nextPageUrl;
@@ -129,7 +135,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       });
       _scheduleFillViewport();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || gen != _generation) return;
       setState(() => _isInitialLoading = false);
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось загрузить сотрудников')),
@@ -140,6 +146,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   Future<void> _loadMore() async {
     if (_isLoadingMore || !_hasMore) return;
     final url = _nextPageUrl;
+    final gen = _generation;
 
     setState(() => _isLoadingMore = true);
     try {
@@ -149,7 +156,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               q: _appliedQ.isEmpty ? null : _appliedQ,
               page: _currentPage + 1,
             );
-      if (!mounted) return;
+      if (!mounted || gen != _generation) return;
       final previousLength = _items.length;
       final merged = _appendUnique(_items, page.data);
       setState(() {
@@ -165,7 +172,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       });
       _scheduleFillViewport();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || gen != _generation) return;
       setState(() => _isLoadingMore = false);
     }
   }
@@ -273,6 +280,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 bottom: false,
                 child: RefreshIndicator.adaptive(
                   onRefresh: () async {
+                    AppHaptics.medium();
                     _debounce?.cancel();
                     _appliedQ = _qController.text.trim();
                     await _loadFirstPage();

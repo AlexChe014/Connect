@@ -247,6 +247,7 @@ class ChatMapper {
     final items = rawList
         .map(_asJsonMap)
         .whereType<Map<String, dynamic>>()
+        .where((json) => !isServerCallEndedLine(json))
         .map(
           (json) =>
               mapMessage(json, chatId: chatIdStr, currentUserId: currentUserId),
@@ -375,7 +376,7 @@ class ChatMapper {
     ChatMessage? latest;
     for (final item in rawMessages) {
       final map = _asJsonMap(item);
-      if (map == null) continue;
+      if (map == null || isServerCallEndedLine(map)) continue;
       final chatId = _parseInt(map['chat_id'])?.toString() ?? '';
       final message = mapMessage(
         map,
@@ -434,6 +435,24 @@ class ChatMapper {
       if (member.userId != currentUserId) return member;
     }
     return members.isNotEmpty ? members.first : null;
+  }
+
+  static final _serverCallEndedLine = RegExp(
+    r'^Звонок завершён\s*\(\s*-?\d+\s*сек\.?\s*\)$',
+  );
+
+  /// Серверная строка «Звонок завершён (-55 сек)»: бэкенд добавляет её
+  /// рядом с сообщением `CALL`, в том числе к неотвеченным звонкам и с
+  /// отрицательной длительностью (docs/BACKEND_CALL_MESSAGES.md, «Проверка 23.10»).
+  /// Звонок уже показан самим `CALL`, поэтому строку не показываем.
+  static bool isServerCallEndedLine(Map<String, dynamic> json) {
+    final type = (json['type'] as String?)?.trim().toUpperCase();
+    if (type != 'SYSTEM') return false;
+    final text = _readMessageText(json);
+    if (text == null) return false;
+    return _serverCallEndedLine.hasMatch(
+      HtmlTextUtils.toPlainText(text).trim(),
+    );
   }
 
   static String? _readMessageText(Map<String, dynamic> json) {

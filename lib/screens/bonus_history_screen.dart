@@ -8,6 +8,7 @@ import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/bonus_glass.dart';
+import '../services/haptics_service.dart';
 
 /// История операций по баллам текущего сотрудника.
 class BonusHistoryScreen extends StatefulWidget {
@@ -116,7 +117,7 @@ class _BonusHistoryScreenState extends State<BonusHistoryScreen> {
     return BonusGlassScaffold(
       title: 'История баллов',
       controller: _scrollController,
-      onRefresh: _loadFirstPage,
+      onRefresh: AppHaptics.onRefresh(_loadFirstPage),
       slivers: _buildSlivers(),
     );
   }

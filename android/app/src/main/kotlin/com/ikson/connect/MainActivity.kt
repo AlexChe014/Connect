@@ -1,10 +1,13 @@
 package com.ikson.connect
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.facebook.react.modules.core.PermissionListener
 import io.flutter.embedding.android.FlutterFragmentActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 import org.jitsi.meet.sdk.JitsiMeetActivityDelegate
 import org.jitsi.meet.sdk.JitsiMeetActivityInterface
 
@@ -19,6 +22,25 @@ class MainActivity : FlutterFragmentActivity(), JitsiMeetActivityInterface {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        // Замок приложения: Android снимает превью для «Недавних» раньше,
+        // чем Flutter успевает закрыть экран заставкой, — прячем его
+        // системно. FLAG_SECURE не берём: он запретил бы и скриншоты.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "connect/app_lock")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setRecentsHidden" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            setRecentsScreenshotEnabled(call.arguments != true)
+                        }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     override fun requestPermissions(

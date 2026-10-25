@@ -450,6 +450,70 @@ $fromEmail = $from['email'] ?? '';
 починят, можно вернуть `MailRepository.forwardMail` на `/mail/smtp/forward`
 (передавать `message` без цитаты, сервер добавит её сам).
 
+## 16. `smtp/send` теряет `connection_id` — письмо уходит с ящика по умолчанию
+
+Клиент передаёт `connection_id`, `SendEmailRequest` его валидирует, но
+`SmtpController::sendEmail` берёт значение из несуществующей переменной:
+
+```php
+$this->smtpService->sendEmail($request->validated(), $request->file('attachments'), $data['connection_id'] ?? null)
+```
+
+`$data` в методе не объявлена, `??` подавляет предупреждение, поэтому
+`connectionId` всегда `null` и используется ящик по умолчанию. Из-за этого
+клиент до сих пор вынужден переключать ящик по умолчанию перед отправкой
+(п. 1).
+
+**Исправление:**
+
+```php
+$data = $request->validated();
+return $this->sendResponse(
+    $this->smtpService->sendEmail($data, $request->file('attachments'), $data['connection_id'] ?? null)
+);
+```
+
+После выкладки убрать из `MailRepository.sendMail` чтение `get/sendable` и
+переключение `smtp/set` до и после отправки.
+
+## 17. Безопасность: массовые операции без проверки владельца
+
+`EmailController::massDelete` и `massMarkAsRead` берут письма по
+`Email::whereIn('id', $request->input('emails'))` без `Gate::authorize` и
+без проверки, что `{connection}` принадлежит текущему пользователю (в
+отличие от `getByService`/`getByFolder`). Любой авторизованный пользователь
+может передать чужие id писем и чужой `connection` — команды уйдут на чужой
+IMAP-ящик с его учётными данными.
+
+Там же `move`, `getMessage`, `markAsRead/Unread`, `delete`,
+`downloadAttachment` проверяют только владельца письма, но не то, что письмо
+относится к `{connection}` из URL.
+
+**Нужно:**
+- Во всех методах `EmailController` с `{connection}`: `Auth::id() === $connection->user_id`
+  (или policy), иначе 403.
+- В массовых методах — `->where('user_id', Auth::id())->where('connection_id', $connection->id)`
+  и валидация `emails` как `required|array`, `emails.*` — `integer`.
+- В одиночных — `$email->connection_id === $connection->id`.
+
+## 18. Ошибки отдаются кодом 200, неудача IMAP — как `success: true`
+
+`ApiBaseController::sendError` по умолчанию отвечает HTTP 200 с
+`success: false`. А `ImapService::deleteMessage/moveMessage/markAsRead`
+при исключении возвращают `false`, и контроллер отдаёт
+`{"success": true, "data": false}` — неудача выглядит как успех.
+`downloadAttachment` при ошибке тоже отдаёт 200 с JSON вместо файла.
+
+Клиент с 2026-10-23 это обходит (проверяет `data == false`, а скачивание —
+по `Content-Type: application/json` с `success: false`), но правильно:
+- при неудаче IMAP-операции — `sendError` с текстом причины;
+- `sendError` в этих местах с кодом 4xx/5xx, особенно для
+  `downloadAttachment` — тогда любой клиент поймёт, что файла нет.
+
+Для справки: `massMarkAsRead` читает список из `emails` — клиент слал `ids`,
+из-за чего массовая отметка «прочитано» не работала (исправлено в клиенте
+2026-10-23).
+
 ## Чеклист
 
 - [ ] `POST /mail/smtp/send` принимает `connection_id` и шлёт именно с этого ящика
@@ -471,3 +535,6 @@ $fromEmail = $from['email'] ?? '';
 - [ ] `forward` принимает несколько адресатов, прикладывает вложения исходного письма, при неудаче отдаёт ошибку
 - [ ] Файлы в `reply`/`forward` не конфликтуют с правилом base64-`attachments`
 - [ ] `forward` не падает с 500: дата-строка и массив `from` (п. 15), ящик берётся из письма, `catch (\Throwable)`
+- [ ] `smtp/send` реально использует `connection_id` (п. 16) → убрать переключение ящика по умолчанию в клиенте
+- [ ] Массовые и одиночные операции проверяют владельца ящика и принадлежность письма ящику (п. 17)
+- [ ] Неудача IMAP-операции и отсутствие вложения отдаются ошибкой, а не `success: true, data: false` / JSON с кодом 200 (п. 18)

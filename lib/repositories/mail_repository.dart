@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../models/mail/mail_payload_utils.dart';
@@ -6,6 +7,7 @@ import 'package:connect/models/mail/mail_connection.dart';
 import 'package:connect/models/mail/mail_folder.dart';
 import 'package:connect/models/mail/mail_message.dart';
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/api_response_cache.dart';
 import 'package:http/http.dart' as http;
 
 class MailMessagePage {
@@ -228,12 +230,71 @@ class MailRepository {
   MailRepository._();
   static final MailRepository instance = MailRepository._();
 
+  /// Ящики, папки, первые страницы списков и последние открытые письма —
+  /// экраны почты показывают их сразу, пока идёт запрос (см. `cached*`).
+  final _cache = ApiResponseCache(
+    'mail',
+    maxEntriesPerPrefix: const {'message_': 30, 'list_': 20},
+  );
+
+  static String _listKey(int connectionId, int? folderId) =>
+      'list_${connectionId}_${folderId ?? 'all'}';
+
+  static String _messageKey(int connectionId, int messageId) =>
+      'message_${connectionId}_$messageId';
+
+  /// Прочитанный кэш, разобранный тем же кодом, что и живой ответ; `null` —
+  /// кэша нет или он не разбирается (сменился формат).
+  Future<T?> _fromCache<T>(
+    String key,
+    T Function(Map<String, dynamic>) parse,
+  ) async {
+    final decoded = await _cache.read(key);
+    if (decoded == null) return null;
+    try {
+      return parse(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<MailConnection>?> cachedConnectionsByUser(int userId) =>
+      _fromCache('connections_$userId', _parseConnections);
+
+  Future<List<MailFolder>?> cachedMailboxes(int connectionId) =>
+      _fromCache('folders_$connectionId', (d) => _parseMailboxList(d, ''));
+
+  /// Первая страница писем папки ([folderId] `null` — весь ящик).
+  Future<MailMessagePage?> cachedMessages(int connectionId, {int? folderId}) =>
+      _fromCache(
+        _listKey(connectionId, folderId),
+        (d) => _parseMessagePage(d, ''),
+      );
+
+  Future<MailMessage?> cachedMessage({
+    required int connectionId,
+    required int messageId,
+  }) => _fromCache(
+    _messageKey(connectionId, messageId),
+    (d) => _parseMessage(d, messageId),
+  );
+
+  /// Письмо удалено или перенесено — его копия не должна всплыть офлайн.
+  void _forgetMessage(int connectionId, int messageId) =>
+      unawaited(_cache.remove(_messageKey(connectionId, messageId)));
+
   // --- Connections ---
 
   Future<List<MailConnection>> getConnectionsByUser(int userId) async {
     final decoded = await ApiClient.instance.get(
       MailRoutes.connectionsByUserUrl(userId),
     );
+    final connections = _parseConnections(decoded);
+    unawaited(_cache.write('connections_$userId', decoded));
+    return connections;
+  }
+
+  List<MailConnection> _parseConnections(Map<String, dynamic> decoded) {
     final items = _unwrapMailList(
       decoded,
       'Не удалось получить почтовые подключения',
@@ -318,7 +379,9 @@ class MailRepository {
     final decoded = await ApiClient.instance.get(
       MailRoutes.getMailboxesUrl(connectionId),
     );
-    return _parseMailboxList(decoded, 'Не удалось получить папки');
+    final folders = _parseMailboxList(decoded, 'Не удалось получить папки');
+    unawaited(_cache.write('folders_$connectionId', decoded));
+    return folders;
   }
 
   // --- Messages ---
@@ -338,7 +401,11 @@ class MailRepository {
       MailRoutes.getByServiceUrl(connectionId),
       queryParameters: {'page': '$page'},
     );
-    return _parseMessagePage(decoded, 'Не удалось получить письма');
+    final result = _parseMessagePage(decoded, 'Не удалось получить письма');
+    if (page == 1) {
+      unawaited(_cache.write(_listKey(connectionId, null), decoded));
+    }
+    return result;
   }
 
   Future<MailMessagePage> getMessagesByFolder({
@@ -350,7 +417,11 @@ class MailRepository {
       MailRoutes.getByFolderUrl(connectionId, folderId),
       queryParameters: {'page': '$page'},
     );
-    return _parseMessagePage(decoded, 'Не удалось получить письма');
+    final result = _parseMessagePage(decoded, 'Не удалось получить письма');
+    if (page == 1) {
+      unawaited(_cache.write(_listKey(connectionId, folderId), decoded));
+    }
+    return result;
   }
 
   Future<MailMessage> getMessage({
@@ -360,6 +431,12 @@ class MailRepository {
     final decoded = await ApiClient.instance.get(
       MailRoutes.getMessageUrl(connectionId, messageId),
     );
+    final message = _parseMessage(decoded, messageId);
+    unawaited(_cache.write(_messageKey(connectionId, messageId), decoded));
+    return message;
+  }
+
+  MailMessage _parseMessage(Map<String, dynamic> decoded, int messageId) {
     final data = _unwrapMailMessagePayload(
       decoded,
       messageId: messageId,
@@ -446,7 +523,7 @@ class MailRepository {
       MailRoutes.markReadUrl(connectionId, messageId),
       body: {'is_read': true},
     );
-    _unwrapMailData(decoded, 'Не удалось отметить письмо прочитанным');
+    _requireDone(decoded, 'Не удалось отметить письмо прочитанным');
   }
 
   Future<void> markUnread({
@@ -457,29 +534,35 @@ class MailRepository {
       MailRoutes.markUnreadUrl(connectionId, messageId),
       body: {'is_read': false},
     );
-    _unwrapMailData(decoded, 'Не удалось отметить письмо непрочитанным');
+    _requireDone(decoded, 'Не удалось отметить письмо непрочитанным');
   }
 
   Future<void> markFewRead({
     required int connectionId,
     required List<int> ids,
   }) async {
+    // EmailController::massMarkAsRead читает список из `emails`; с `ids`
+    // сервер получал пустой список и ничего не отмечал.
     final decoded = await ApiClient.instance.post(
       MailRoutes.markFewReadUrl(connectionId),
-      body: {'ids': ids},
+      body: {'emails': ids},
     );
-    _unwrapMailData(decoded, 'Не удалось изменить статус писем');
+    _requireDone(decoded, 'Не удалось изменить статус писем');
   }
 
   // --- Delete ---
 
+  /// Сервер переносит письмо в «Корзину», а из самой корзины удаляет
+  /// окончательно.
   Future<void> deleteMessage({
     required int connectionId,
     required int messageId,
   }) async {
-    await ApiClient.instance.get(
+    final decoded = await ApiClient.instance.get(
       MailRoutes.deleteMessageUrl(connectionId, messageId),
     );
+    _requireDone(decoded, 'Не удалось удалить письмо');
+    _forgetMessage(connectionId, messageId);
   }
 
   Future<void> deleteFewMessages({required int connectionId}) async {
@@ -493,9 +576,10 @@ class MailRepository {
     required int messageId,
     required int folderId,
   }) async {
-    await ApiClient.instance.get(
+    final decoded = await ApiClient.instance.get(
       MailRoutes.moveMessageUrl(connectionId, messageId, folderId),
     );
+    _requireDone(decoded, 'Не удалось переместить письмо');
   }
 
   // --- Attachments ---
@@ -845,6 +929,16 @@ class MailRepository {
       throw ApiException(200, message);
     }
     return decoded['data'] ?? decoded;
+  }
+
+  /// Для операций над письмом на IMAP-сервере (удаление, перенос, отметки):
+  /// сервер отвечает 200 и при ошибке — `success: false`, а если IMAP-команда
+  /// не прошла, то `success: true, data: false`. Раньше ответ не проверялся,
+  /// и неудача выглядела как успех: письмо пропадало и возвращалось при
+  /// следующем обновлении.
+  void _requireDone(Map<String, dynamic> decoded, String errorMessage) {
+    final data = _unwrapMailData(decoded, errorMessage);
+    if (data == false) throw ApiException(200, errorMessage);
   }
 
   List<Map<String, dynamic>> _unwrapMailList(

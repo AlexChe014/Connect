@@ -19,8 +19,24 @@ class BookingJson {
     }
 
     final iso = raw.contains('T') ? raw : raw.replaceFirst(' ', 'T');
-    return DateTime.tryParse(iso) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return DateTime.fromMillisecondsSinceEpoch(0);
+    if (_hasZone.hasMatch(iso)) return parsed.toLocal();
+    // Бэкенд отдаёт `datetime_start/end` строкой из БД без пояса — это время
+    // сервера (APP_TIMEZONE=Europe/Moscow, UTC+3 без перехода на летнее).
+    // Без пересчёта у сотрудника не в МСК встреча съезжает на разницу поясов.
+    return DateTime.utc(
+      parsed.year,
+      parsed.month,
+      parsed.day,
+      parsed.hour,
+      parsed.minute,
+      parsed.second,
+    ).subtract(_serverUtcOffset).toLocal();
   }
+
+  static const _serverUtcOffset = Duration(hours: 3);
+  static final _hasZone = RegExp(r'(Z|[+-]\d{2}:?\d{2})$');
 
   static int? parseInt(dynamic value) {
     if (value == null) return null;
