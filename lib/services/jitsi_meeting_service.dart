@@ -8,7 +8,7 @@ import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/utils/app_logger.dart';
-import 'package:connect/widgets/home_shortcut_button.dart';
+import 'package:connect/widgets/app_title_bar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -67,7 +67,6 @@ class JitsiMeetingService extends ChangeNotifier {
   /// chatMessageReceived — со своим id участника, который нам неизвестен).
   final List<({String text, DateTime sentAt})> _chatEchoes = [];
   JitsiLeaveCallback? _onLeave;
-  VoidCallback? _releaseHomeSuppress;
   CallConference? _conference;
 
   /// Текущая конференция для экрана звонка; `null` — звонка нет.
@@ -141,10 +140,8 @@ class JitsiMeetingService extends ChangeNotifier {
       _closeTimer?.cancel();
       _chatEchoes.clear();
 
-      // Кнопка "на главный экран" скрыта всё время звонка: под свёрнутым
-      // окошком звонка ей не место, а полноэкранный звонок её перекрывает.
-      _releaseHomeSuppress?.call();
-      _releaseHomeSuppress = HomeShortcutButton.suppress();
+      // Домик «на главный экран» скрыт всё время звонка (см. AppTitleBar).
+      AppTitleBar.homeHidden.value = true;
 
       // Снимаем фокус с полей ввода Flutter (обычно — поле сообщения в чате):
       // иначе клавиатура всплывает поверх звонка (в т.ч. при возврате из
@@ -236,8 +233,7 @@ class JitsiMeetingService extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      _releaseHomeSuppress?.call();
-      _releaseHomeSuppress = null;
+      AppTitleBar.homeHidden.value = false;
       rethrow;
     } finally {
       _joining = false;
@@ -545,8 +541,7 @@ class JitsiMeetingService extends ChangeNotifier {
     _peerJoinTimer = null;
     _peerRejoinTimer?.cancel();
     _peerRejoinTimer = null;
-    _releaseHomeSuppress?.call();
-    _releaseHomeSuppress = null;
+    AppTitleBar.homeHidden.value = false;
     final callId = _activeCallId;
     final cb = _onLeave;
     _activeCallId = null;

@@ -1,11 +1,10 @@
 import 'package:flutter/widgets.dart';
 
-/// Считает глубину page-route стека корневого [Navigator], чтобы показать
-/// быструю кнопку возврата в [MainNavigationScreen] из любого раздела,
-/// открытого через `Navigator.push` поверх него (Почта, Диск, Бонусы,
-/// Сотрудники и т.д.) — без неё приходится жать «назад» по разу на каждый
-/// вложенный экран. Модальные шторки и диалоги (`PopupRoute`) не считаются,
-/// т.к. их не нужно перекрывать этой кнопкой.
+/// Считает глубину page-route стека корневого [Navigator], чтобы шапка
+/// ([AppTitleBar]) показала домик возврата в [MainNavigationScreen] на
+/// экранах в 2+ уровнях от него — без него приходится жать «назад» по разу
+/// на каждый вложенный экран. Модальные шторки и диалоги (`PopupRoute`) не
+/// считаются.
 class RootStackObserver extends NavigatorObserver {
   RootStackObserver._();
 
@@ -15,6 +14,10 @@ class RootStackObserver extends NavigatorObserver {
   final List<Route<dynamic>> _stack = [];
 
   void _sync() => depth.value = _stack.length;
+
+  /// Позиция [route] в стеке с 1 (корень); 0 — маршрут не из корневого
+  /// Navigator или уже снят.
+  int positionOf(Route<dynamic> route) => _stack.indexOf(route) + 1;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {

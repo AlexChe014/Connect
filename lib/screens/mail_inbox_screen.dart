@@ -19,7 +19,6 @@ import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_title_bar.dart';
-import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/mail_glass.dart';
@@ -97,7 +96,6 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   bool _isEditing = false;
   final Set<int> _selectedIds = {};
   bool _isBulkActing = false;
-  VoidCallback? _releaseHomeSuppress;
 
   /// Поиск: совпадения среди загруженных писем (в т.ч. по тексту) плюс
   /// найденное сервером во всём ящике — раньше искали только по первым
@@ -126,11 +124,6 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Нижняя стеклянная панель занимает всю ширину — плавающая кнопка
-    // «Домой» легла бы поверх поиска (см. HomeShortcutButton).
-    if (!widget.isTab) {
-      _releaseHomeSuppress = HomeShortcutButton.suppress();
-    }
     MailUnreadService.instance.mailChanges.addListener(_refreshVisible);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
@@ -200,7 +193,6 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     MailUnreadService.instance.mailChanges.removeListener(_refreshVisible);
@@ -627,6 +619,10 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     messenger
         .showSnackBar(
           SnackBar(
+            // С action Flutter по умолчанию держит снекбар вечно
+            // (persist), а письмо удаляется только после его закрытия.
+            persist: false,
+            duration: const Duration(seconds: 4),
             content: const Text('Письмо удалено'),
             action: SnackBarAction(label: 'Вернуть', onPressed: () {}),
           ),
@@ -956,6 +952,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     return AppSliverTitleBar(
       title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
       blur: blur,
+      home: !_isEditing,
       leading: _isEditing
           ? CupertinoButton(
               padding: EdgeInsets.zero,

@@ -22,7 +22,6 @@ import '../widgets/app_glass.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
-import '../widgets/home_shortcut_button.dart';
 import '../widgets/mail_glass.dart';
 import '../widgets/swipe_actions_row.dart';
 
@@ -110,10 +109,6 @@ class _DiskScreenState extends State<DiskScreen> {
   bool _highlightDone = false;
   Timer? _highlightTimer;
 
-  /// Кнопка «на главный» легла бы на поле поиска внизу; к корню «Диска»
-  /// ведут «хлебные крошки», как в «Почте».
-  VoidCallback? _releaseHomeSuppress;
-
   String get _currentPath => widget.path;
 
   List<String> get _segments => DiskRepository.toApiPath(
@@ -151,7 +146,6 @@ class _DiskScreenState extends State<DiskScreen> {
   @override
   void initState() {
     super.initState();
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     final cached = DiskRepository.instance.cachedListing(_currentPath);
     if (cached != null) {
       _listing = cached;
@@ -165,7 +159,6 @@ class _DiskScreenState extends State<DiskScreen> {
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     _highlightTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();

@@ -4,6 +4,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import '../config/app_theme.dart';
+import '../services/app_navigation_service.dart';
+import '../services/root_stack_observer.dart';
 import 'app_glass.dart';
 
 /// Шапка экрана одной строкой: «назад», заголовок слева и кнопки справа.
@@ -25,6 +27,7 @@ class AppTitleBar extends StatelessWidget
     this.trailing,
     this.blur = false,
     this.backgroundColor,
+    this.home = true,
   });
 
   /// Высота строки без статус-бара.
@@ -32,6 +35,10 @@ class AppTitleBar extends StatelessWidget
 
   /// Единый размер иконок в шапках.
   static const iconSize = 24.0;
+
+  /// Прячет домик «на главный экран» во всех шапках — на время звонка:
+  /// `popUntil` до корня из-под свёрнутого звонка не раз ломал сам звонок.
+  static final ValueNotifier<bool> homeHidden = ValueNotifier<bool>(false);
 
   static const titleStyle = TextStyle(
     inherit: false,
@@ -51,6 +58,11 @@ class AppTitleBar extends StatelessWidget
 
   /// По умолчанию прозрачная: заливка дала бы на цветном пятне границу.
   final Color? backgroundColor;
+
+  /// Домик «на главный экран» рядом с «назад», когда экран открыт на 2+
+  /// уровня вглубь раздела. `false` — когда в [leading] не «назад»
+  /// (например, «Отмена» в режиме выбора).
+  final bool home;
 
   @override
   Size get preferredSize => const Size.fromHeight(height);
@@ -76,6 +88,7 @@ class AppSliverTitleBar extends StatelessWidget {
     this.trailing,
     this.blur = false,
     this.backgroundColor,
+    this.home = true,
   });
 
   static const iconSize = AppTitleBar.iconSize;
@@ -85,6 +98,7 @@ class AppSliverTitleBar extends StatelessWidget {
   final Widget? trailing;
   final bool blur;
   final Color? backgroundColor;
+  final bool home;
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +112,7 @@ class AppSliverTitleBar extends StatelessWidget {
           trailing: trailing,
           blur: blur,
           backgroundColor: backgroundColor,
+          home: home,
         ),
       ),
     );
@@ -166,6 +181,8 @@ class _TitleBar extends StatelessWidget {
               IconTheme.merge(data: iconTheme, child: leading),
               const SizedBox(width: 8),
             ],
+            if (bar.home && leading != null)
+              IconTheme.merge(data: iconTheme, child: const _HomeButton()),
             Expanded(
               child: DefaultTextStyle(
                 style: AppTitleBar.titleStyle.copyWith(color: label),
@@ -241,6 +258,57 @@ class _TitleBar extends StatelessWidget {
         FadeTransition(opacity: ReverseAnimation(curved), child: bottom),
         FadeTransition(opacity: curved, child: top),
       ],
+    );
+  }
+}
+
+/// «На главный экран» одним тапом вместо серии «назад». Только на экранах
+/// корневого Navigator с 3-й позиции стека: на первом вложенном «назад» и
+/// так ведёт домой.
+class _HomeButton extends StatefulWidget {
+  const _HomeButton();
+
+  @override
+  State<_HomeButton> createState() => _HomeButtonState();
+}
+
+class _HomeButtonState extends State<_HomeButton> {
+  static const int _visibleFromPosition = 3;
+
+  /// Уходящий по «назад» экран уже снят со стека, но ещё виден в анимации —
+  /// домик на нём не должен пропадать и сдвигать заголовок.
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final route = ModalRoute.of(context);
+    if (route == null) return const SizedBox.shrink();
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        RootStackObserver.instance.depth,
+        AppTitleBar.homeHidden,
+      ]),
+      builder: (context, _) {
+        final position = RootStackObserver.instance.positionOf(route);
+        if (position > 0) _visible = position >= _visibleFromPosition;
+        if (!_visible || AppTitleBar.homeHidden.value) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => AppNavigationService.navigatorKey.currentState
+                ?.popUntil((route) => route.isFirst),
+            child: Icon(
+              CupertinoIcons.house,
+              size: 22,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
+        );
+      },
     );
   }
 }

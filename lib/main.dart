@@ -43,7 +43,6 @@ import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
 import 'widgets/app_lock_overlay.dart';
 import 'widgets/call_overlay.dart';
-import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
 
 Future<void> main() async {
@@ -183,7 +182,6 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
                       resizeToAvoidBottomInset: false,
                       body: DefaultTextStyle(style: textStyle, child: child!),
                     ),
-                    const HomeShortcutButton(),
                     const VpnBanner(),
                     const AppLockOverlay(),
                     // Экран звонка — над всем, в т.ч. над Navigator: при
@@ -247,7 +245,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   /// Вкладки, которые уже открывали. Создаём их лениво, а потом держим
   /// смонтированными: при переключении сохраняются прокрутка и данные.
   final Set<int> _loadedTabs = {};
-  VoidCallback? _releaseHomeSuppress;
   Timer? _mailRefreshTimer;
 
   @override
@@ -255,7 +252,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, HomeTabs.more);
     _loadedTabs.add(_currentIndex);
-    _syncHomeSuppress();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppNavigationService.processPendingNavigation();
     });
@@ -287,7 +283,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _releaseHomeSuppress?.call();
     ChatService.instance.removeListener(_onBadgesChanged);
     MailUnreadService.instance.removeListener(_onBadgesChanged);
     DocumentPendingService.instance.removeListener(_onBadgesChanged);
@@ -330,19 +325,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     }
   }
 
-  /// В Чатах и Почте кнопка «Домой» не нужна (и в почте легла бы поверх
-  /// нижней панели поиска) — прячем её, пока активна одна из этих вкладок.
-  void _syncHomeSuppress() {
-    final suppress =
-        _currentIndex == HomeTabs.chats || _currentIndex == HomeTabs.mail;
-    if (suppress) {
-      _releaseHomeSuppress ??= HomeShortcutButton.suppress();
-    } else {
-      _releaseHomeSuppress?.call();
-      _releaseHomeSuppress = null;
-    }
-  }
-
   void _selectTab(int index) {
     AppHaptics.selection();
     if (index == _currentIndex) return;
@@ -350,7 +332,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       _currentIndex = index;
       _loadedTabs.add(index);
     });
-    _syncHomeSuppress();
     if (index == HomeTabs.mail) {
       MailUnreadService.instance.refresh();
     }

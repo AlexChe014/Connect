@@ -27,7 +27,6 @@ import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
-import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:connect/widgets/message_context_menu.dart';
 import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
@@ -121,7 +120,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   Timer? _liveRefresh;
   DateTime _lastLiveRefresh = DateTime.now();
   Timer? _draftSaveTimer;
-  VoidCallback? _releaseHomeSuppress;
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
@@ -153,10 +151,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void initState() {
     super.initState();
-    // Кнопке «на главный экран» тут не место: попытка ей воспользоваться
-    // молча оставила бы активный звонок/навигацию из чата, поэтому она
-    // скрыта весь срок жизни этого экрана — не только на время самого звонка.
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     WidgetsBinding.instance.addObserver(this);
     _service.addListener(_onMsg);
     _callService.addListener(_onCallState);
@@ -236,7 +230,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     WidgetsBinding.instance.removeObserver(this);
     _liveRefresh?.cancel();
     _service.removeListener(_onMsg);

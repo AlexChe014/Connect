@@ -8,7 +8,6 @@ import 'package:connect/models/chat/chat_call_status.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/widgets/call_glass.dart';
 import 'package:connect/widgets/chat_avatar.dart';
-import 'package:connect/widgets/home_shortcut_button.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
@@ -68,7 +67,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
   bool _ringing = false;
   bool _resolved = false;
   bool _closing = false;
-  VoidCallback? _releaseHomeSuppress;
 
   @override
   void initState() {
@@ -77,8 +75,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
 
     final failure = widget.initialFailure;
     final callId = widget.callId;
@@ -127,7 +123,6 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     _timeoutTimer?.cancel();
     _pollTimer?.cancel();
     ChatCallService.instance.removeListener(_onCallServiceChanged);

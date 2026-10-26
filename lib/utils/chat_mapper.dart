@@ -443,7 +443,7 @@ class ChatMapper {
 
   /// Серверная строка «Звонок завершён (-55 сек)»: бэкенд добавляет её
   /// рядом с сообщением `CALL`, в том числе к неотвеченным звонкам и с
-  /// отрицательной длительностью (docs/BACKEND_CALL_MESSAGES.md, «Проверка 23.10»).
+  /// отрицательной длительностью (docs/BACKEND_CALLS.md, §0).
   /// Звонок уже показан самим `CALL`, поэтому строку не показываем.
   static bool isServerCallEndedLine(Map<String, dynamic> json) {
     final type = (json['type'] as String?)?.trim().toUpperCase();

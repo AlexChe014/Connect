@@ -733,7 +733,7 @@ class MailRepository {
       // получателю уходит своё письмо; копия и скрытая копия — только с
       // первым, иначе каждый из них получил бы по экземпляру на каждого
       // адресата. Убрать, когда сервер начнёт принимать список
-      // (docs/BACKEND_PROMPTS.md, задача 2).
+      // (docs/BACKEND_MAIL_FIXES.md, §19).
       final recipients = MailMessage.splitAddresses(
         request.to,
       ).map(_bareAddress).where((a) => a.isNotEmpty).toList();

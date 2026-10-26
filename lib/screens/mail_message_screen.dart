@@ -23,7 +23,6 @@ import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_title_bar.dart';
-import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
@@ -79,21 +78,13 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
 
   /// В тёмной теме письмо показывается в исходных цветах, на белом.
   bool _originalMailColors = false;
-  VoidCallback? _releaseHomeSuppress;
 
   @override
   void initState() {
     super.initState();
-    // Плавающая кнопка «Домой» легла бы поверх «Удалить» в нижней панели.
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     _loadMessage();
   }
 
-  @override
-  void dispose() {
-    _releaseHomeSuppress?.call();
-    super.dispose();
-  }
 
   /// Письмо, открытое раньше, — сразу из кэша, пока идёт запрос.
   Future<void> _showCachedMessage() async {
@@ -101,13 +92,27 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       connectionId: widget.connection.id,
       messageId: widget.messageId,
     );
-    _markReadOnOpen(cached);
-    if (cached == null || !mounted || _message != null) return;
-    if (!cached.hasBody) return;
+    final trusted = cached == null ? null : _withListReadState(cached);
+    _markReadOnOpen(trusted);
+    if (trusted == null || !mounted || _message != null) return;
+    if (!trusted.hasBody) return;
     setState(() {
-      _message = cached;
+      _message = trusted;
       _isLoading = false;
     });
+  }
+
+  /// Статус прочтения берём из списка: `get/message` сервер собирает прямо
+  /// с IMAP и из-за ошибки в проверке флага всегда отдаёт `is_seen: false`
+  /// (BACKEND_TODO п. 15). Иначе каждое открытие уже прочитанного письма
+  /// снова отправляло «прочитано» в ящик.
+  MailMessage _withListReadState(MailMessage message) {
+    final initial = widget.initialMessage;
+    if (initial == null) return message;
+    return MailRepository.instance.withLocalReadState(
+      widget.connection.id,
+      message.withRead(initial.isRead),
+    );
   }
 
   Future<void> _loadMessage() async {
@@ -140,6 +145,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
 
       // До проверки mounted: письмо из кэша читают сразу и успевают уйти
       // назад раньше, чем пришёл ответ, — отметка всё равно должна уйти.
+      resolved = _withListReadState(resolved);
       _markReadOnOpen(resolved);
       if (resolved.from.isNotEmpty && !_isOwn(resolved.from)) {
         unawaited(

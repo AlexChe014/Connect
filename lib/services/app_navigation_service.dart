@@ -76,9 +76,7 @@ class AppNavigationService {
   /// доставка push (обычное дело для FCM — например, эхо системного
   /// сообщения о завершённом звонке тому же устройству) иначе запускает
   /// второй параллельный вызов, который пушит ещё один экземпляр
-  /// `ChatConversationScreen` поверх уже открытого: стек ветвится, и кнопка
-  /// «на главный экран» (`HomeShortcutButton`) залипает видимой, потому что
-  /// её счётчик глубины стека считает и этот лишний route.
+  /// `ChatConversationScreen` поверх уже открытого: стек ветвится.
   static String? _openingChatId;
 
   static void storePendingChat(String chatId) => _pendingChatId = chatId;

@@ -162,6 +162,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
     messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(
       SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 4),
         content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
         action: SnackBarAction(
           label: 'Вернуть',
