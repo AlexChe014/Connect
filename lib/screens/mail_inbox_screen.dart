@@ -8,7 +8,6 @@ import 'package:flutter/material.dart'
         SnackBar,
         SnackBarAction,
         SnackBarClosedReason;
-import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
@@ -24,6 +23,7 @@ import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/mail_glass.dart';
+import '../widgets/swipe_actions_row.dart';
 import 'compose_mail_screen.dart';
 import 'mail_folders_screen.dart';
 import 'mail_message_screen.dart';
@@ -93,6 +93,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  final _swipeGroup = SwipeGroupController();
   bool _isEditing = false;
   final Set<int> _selectedIds = {};
   bool _isBulkActing = false;
@@ -206,6 +207,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     _searchController.dispose();
     _searchDebounce?.cancel();
     _scrollController.dispose();
+    _swipeGroup.dispose();
     super.dispose();
   }
 
@@ -542,12 +544,26 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         ),
       ),
     );
+    if (!mounted) return;
+    // Статус меняем сразу, не дожидаясь списка с сервера: письмо открыто —
+    // значит прочитано (или его вручную вернули в непрочитанные).
+    final connectionId = _connection.id;
+    setState(
+      () => _replaceMessage(
+        message.id,
+        (m) => MailRepository.instance.withLocalReadState(connectionId, m),
+      ),
+    );
     // MailMessageScreen помечает письмо прочитанным на сервере при открытии,
     // но возвращает `true` только когда пользователь явно что-то изменил
     // (удалил/переместил/ответил) — обычный возврат назад приходит с `null`.
-    // Перезагружаем список и в этом случае, иначе точка-индикатор
-    // «непрочитано» не исчезнет сама по себе.
-    if (mounted && (changed == true || wasUnread)) {
+    // Перезагружаем список и в этом случае, чтобы сверить статус с сервером.
+    final readChanged =
+        MailRepository.instance
+            .withLocalReadState(connectionId, message)
+            .isRead !=
+        message.isRead;
+    if (changed == true || wasUnread || readChanged) {
       await _loadMessages(keepLoaded: true);
     }
   }
@@ -1130,6 +1146,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                 : () => _openMessage(message),
             onToggleRead: () => _toggleRead(message),
             onDelete: () => _deleteMessage(message),
+            swipeGroup: _swipeGroup,
           );
         },
       ),
@@ -1270,6 +1287,7 @@ class _MessageTile extends StatelessWidget {
     required this.onTap,
     required this.onToggleRead,
     required this.onDelete,
+    required this.swipeGroup,
   });
 
   static const double _dotSlot = 18;
@@ -1290,6 +1308,7 @@ class _MessageTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onToggleRead;
   final VoidCallback onDelete;
+  final SwipeGroupController swipeGroup;
 
   @override
   Widget build(BuildContext context) {
@@ -1438,36 +1457,28 @@ class _MessageTile extends StatelessWidget {
 
     if (isEditing) return row;
 
-    return Slidable(
-      key: ValueKey(message.id),
-      startActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.3,
-        children: [
-          SlidableAction(
-            onPressed: (_) => onToggleRead(),
-            backgroundColor: AppColors.primary,
-            foregroundColor: CupertinoColors.white,
-            icon: isUnread
-                ? CupertinoIcons.envelope_open
-                : CupertinoIcons.envelope_badge,
-            label: isUnread ? 'Прочитано' : 'Непрочит.',
-          ),
-        ],
-      ),
-      endActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.3,
-        children: [
-          SlidableAction(
-            onPressed: (_) => onDelete(),
-            backgroundColor: CupertinoColors.systemRed.resolveFrom(context),
-            foregroundColor: CupertinoColors.white,
-            icon: CupertinoIcons.trash,
-            label: 'Удалить',
-          ),
-        ],
-      ),
+    return SwipeActionsRow(
+      id: '${message.id}',
+      groupController: swipeGroup,
+      borderRadius: BorderRadius.zero,
+      startActions: [
+        SwipeAction(
+          icon: isUnread
+              ? CupertinoIcons.envelope_open
+              : CupertinoIcons.envelope_badge,
+          label: isUnread ? 'Прочитано' : 'Непрочит.',
+          color: AppColors.primary,
+          onTap: onToggleRead,
+        ),
+      ],
+      actions: [
+        SwipeAction(
+          icon: CupertinoIcons.trash,
+          label: 'Удалить',
+          color: CupertinoColors.systemRed.resolveFrom(context),
+          onTap: onDelete,
+        ),
+      ],
       child: row,
     );
   }

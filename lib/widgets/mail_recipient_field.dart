@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 
 import '../models/mail/mail_message.dart';
 import '../models/staff_user.dart';
 import '../repositories/users_repository.dart';
+import '../services/mail_contacts_service.dart';
 import 'mail_glass.dart';
 
 /// Получатель письма: адрес и, если известно, ФИО — как в Outlook/«Почте»
@@ -177,20 +180,84 @@ class _MailRecipientFieldState extends State<MailRecipientField> {
   /// Получатели, у которых раскрыт адрес.
   final Set<String> _expanded = {};
 
+  /// Подсказки под строкой ввода: сначала те, с кем уже переписывались,
+  /// затем сотрудники из справочника.
+  List<MailRecipient> _suggestions = const [];
+  int _suggestVersion = 0;
+  Timer? _staffSearch;
+
+  static const _maxSuggestions = 6;
+
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
     _focusNode.addListener(() {
-      if (!_focusNode.hasFocus) widget.controller.commitInput();
+      if (!_focusNode.hasFocus) {
+        widget.controller.commitInput();
+        _clearSuggestions();
+      }
     });
   }
 
   @override
   void dispose() {
+    _staffSearch?.cancel();
     widget.controller.removeListener(_onControllerChanged);
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _clearSuggestions() {
+    _suggestVersion++;
+    _staffSearch?.cancel();
+    if (_suggestions.isNotEmpty && mounted) {
+      setState(() => _suggestions = const []);
+    }
+  }
+
+  Future<void> _updateSuggestions() async {
+    final query = widget.controller.input.text.trim();
+    if (query.isEmpty || !_focusNode.hasFocus) {
+      _clearSuggestions();
+      return;
+    }
+    final version = ++_suggestVersion;
+    _staffSearch?.cancel();
+    final taken = widget.controller.recipients.map((r) => r.key).toSet();
+    final recent = await MailContactsService.instance.suggest(
+      query,
+      exclude: taken,
+    );
+    if (!mounted || version != _suggestVersion) return;
+    setState(() => _suggestions = recent);
+    if (query.length < 2 || recent.length >= _maxSuggestions) return;
+    _staffSearch = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final page = await UsersRepository.instance.getPage(q: query);
+        if (!mounted || version != _suggestVersion) return;
+        final seen = {...taken, ...recent.map((r) => r.key)};
+        final staff = page.data
+            .where((u) => (u.email ?? '').trim().isNotEmpty)
+            .map(MailRecipient.fromStaff)
+            .where((r) => seen.add(r.key));
+        setState(
+          () => _suggestions = [
+            ...recent,
+            ...staff,
+          ].take(_maxSuggestions).toList(),
+        );
+      } catch (_) {
+        // Без справочника остаются подсказки из переписки.
+      }
+    });
+  }
+
+  void _pickSuggestion(MailRecipient recipient) {
+    widget.controller.input.clear();
+    widget.controller.add(recipient);
+    _clearSuggestions();
+    widget.onChanged?.call();
   }
 
   void _onControllerChanged() {
@@ -202,6 +269,7 @@ class _MailRecipientFieldState extends State<MailRecipientField> {
     if (RegExp(r'[,;]|@\S+\s').hasMatch(text)) {
       widget.controller.commitInput();
     }
+    _updateSuggestions();
     widget.onChanged?.call();
   }
 
@@ -243,8 +311,23 @@ class _MailRecipientFieldState extends State<MailRecipientField> {
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   style: TextStyle(fontSize: 15, color: label),
                   onChanged: _onInputChanged,
-                  onSubmitted: (_) => widget.controller.commitInput(),
+                  onSubmitted: (_) {
+                    widget.controller.commitInput();
+                    _clearSuggestions();
+                  },
                 ),
+                // Нажатие на подсказку — «внутри» поля: фокус и набранный
+                // текст не теряются до выбора.
+                if (_suggestions.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final r in _suggestions)
+                          _suggestionRow(context, r),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -259,6 +342,47 @@ class _MailRecipientFieldState extends State<MailRecipientField> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _suggestionRow(BuildContext context, MailRecipient r) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _pickSuggestion(r),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+              color: CupertinoColors.separator.resolveFrom(context),
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              r.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            if (r.name.isNotEmpty)
+              Text(
+                r.email,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: secondary),
+              ),
+          ],
+        ),
       ),
     );
   }

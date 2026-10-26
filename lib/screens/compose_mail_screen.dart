@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
@@ -8,6 +10,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
+import '../services/mail_contacts_service.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/booking_glass_form.dart';
@@ -469,6 +472,13 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         );
       }
       AppHaptics.success();
+      unawaited(
+        MailContactsService.instance.rememberSent([
+          ..._toController.recipients,
+          ..._ccController.recipients,
+          ..._bccController.recipients,
+        ]),
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {

@@ -426,7 +426,11 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
           margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           children: [
             for (final b in rest.take(_scheduleLimit))
-              _ScheduleRow(booking: b, onTap: () => _openBooking(b)),
+              _ScheduleRow(
+                booking: b,
+                hasLink: _meetingLink(b) != null,
+                onTap: () => _openBooking(b),
+              ),
             if (hidden > 0)
               CupertinoListTile(
                 title: Text(
@@ -781,31 +785,48 @@ class _NoMeetingsCard extends StatelessWidget {
   }
 }
 
-/// Строка «дальше сегодня»: время слева, тема и место.
+/// Строка «дальше сегодня» — уменьшенная копия [_FeaturedEventCard]:
+/// та же иконка, тема и «начало–конец · место», чтобы блоки читались
+/// как одно целое.
 class _ScheduleRow extends StatelessWidget {
-  const _ScheduleRow({required this.booking, required this.onTap});
+  const _ScheduleRow({
+    required this.booking,
+    required this.hasLink,
+    required this.onTap,
+  });
 
   final UserBooking booking;
+  final bool hasLink;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final objectName = (booking.objectName ?? '').trim();
+    final details = [
+      '${BookingTimeUtils.formatHm(booking.datetimeStart)}'
+          '–${BookingTimeUtils.formatHm(booking.datetimeEnd)}',
+      if (objectName.isNotEmpty) objectName,
+    ].join(' · ');
     return CupertinoListTile(
-      leadingSize: 44,
-      leading: Text(
-        BookingTimeUtils.formatHm(booking.datetimeStart),
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w600,
-          color: AppColors.primary,
-          fontFeatures: [FontFeature.tabularFigures()],
-        ),
+      // Отступы как у карточки сверху — иконки и темы в одну вертикаль.
+      padding: const EdgeInsetsDirectional.only(start: 16, end: 14),
+      leadingSize: 29,
+      leadingToTitle: 12,
+      leading: AppIconBadge(
+        icon: hasLink
+            ? CupertinoIcons.video_camera_solid
+            : CupertinoIcons.calendar,
+        color: AppColors.primary,
       ),
       title: Text(booking.theme),
-      subtitle: objectName.isNotEmpty
-          ? Text(objectName, maxLines: 1, overflow: TextOverflow.ellipsis)
-          : null,
+      subtitle: Text(
+        details,
+        style: TextStyle(
+          fontSize: 14,
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
       trailing: const CupertinoListTileChevron(),
       onTap: onTap,
     );

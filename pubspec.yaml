@@ -58,7 +58,6 @@ dependencies:
   # Форк 13.1.1: экран конференции встраивается во Flutter (свой UI звонка).
   jitsi_meet_flutter_sdk:
     path: packages/jitsi_meet_flutter_sdk
-  flutter_slidable: ^4.0.0
   flutter_callkit_incoming: ^3.1.5
   share_plus: 12.0.2
   path_provider: ^2.1.6

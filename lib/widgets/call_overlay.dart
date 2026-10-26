@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:jitsi_meet_flutter_sdk/jitsi_meet_flutter_sdk.dart';
 
 import '../config/app_theme.dart';
-import '../config/connect_icons.dart';
 import '../models/call_conference.dart';
 import '../services/app_navigation_service.dart';
 import '../services/haptics_service.dart';
@@ -602,9 +601,8 @@ class _Controls extends StatelessWidget {
       onPressed: enabled ? service.toggleMicrophone : null,
     );
     final camera = CallRoundButton(
-      icon: c.videoMuted
-          ? ConnectIcons.icon14CameraOff
-          : ConnectIcons.icon14CameraOn,
+      icon: CupertinoIcons.video_camera_solid,
+      slashed: c.videoMuted,
       label: 'Камера',
       active: !c.videoMuted,
       onPressed: enabled ? service.toggleCamera : null,

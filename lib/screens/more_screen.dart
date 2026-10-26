@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -255,6 +257,26 @@ class _MoreScreenState extends State<MoreScreen> {
     _ => 'Блокировка приложения',
   };
 
+  bool get _showAppLockHint =>
+      AppLockService.instance.supported && _appLockHint != null;
+
+  /// В iOS 18 есть свой замок на иконке («Требовать Face ID»); с ним вместе
+  /// разблокировку спросят дважды — подсказываем, что он не нужен.
+  String? get _appLockHint {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return null;
+    final major = int.tryParse(
+      RegExp(r'\d+').firstMatch(Platform.operatingSystemVersion)?.group(0) ??
+          '',
+    );
+    if (major == null || major < 18) return null;
+    final method = AppLockService.instance.methodName;
+    if (method != 'Face ID' && method != 'Touch ID') return null;
+    return '$method доступен на всех версиях iOS. На iOS 18 и новее '
+        'включите что-то одно: «Требовать $method» (долгое нажатие на '
+        'иконку приложения) или «Вход по $method» здесь, — чтобы избежать '
+        'двойного запроса $method.';
+  }
+
   Future<void> _toggleAppLock(bool value) async {
     final lock = AppLockService.instance;
     if (!value) return lock.disable();
@@ -442,13 +464,13 @@ class _MoreScreenState extends State<MoreScreen> {
                         16,
                         20,
                         16,
-                        MediaQuery.paddingOf(context).bottom + 32,
+                        _showAppLockHint
+                            ? 0
+                            : MediaQuery.paddingOf(context).bottom + 32,
                       ),
                       children: [
                         _themeModeItem(context),
                         _hapticsItem(context),
-                        if (AppLockService.instance.supported)
-                          ..._appLockItems(context),
                         _item(
                           icon: CupertinoIcons.book_fill,
                           color: CupertinoColors.systemGrey.resolveFrom(
@@ -461,9 +483,31 @@ class _MoreScreenState extends State<MoreScreen> {
                             mode: LaunchMode.externalApplication,
                           ),
                         ),
+                        if (AppLockService.instance.supported)
+                          ..._appLockItems(context),
                       ],
                     ),
                   ),
+                  if (_showAppLockHint)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          32,
+                          8,
+                          32,
+                          MediaQuery.paddingOf(context).bottom + 32,
+                        ),
+                        child: Text(
+                          _appLockHint!,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: CupertinoColors.secondaryLabel.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
               // Шапки нет — под статус-баром размываем уехавший контент,

@@ -28,6 +28,7 @@ import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_message_text.dart';
 import 'package:connect/widgets/home_shortcut_button.dart';
+import 'package:connect/widgets/message_context_menu.dart';
 import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -1357,6 +1358,45 @@ const bool _kReactionsEnabled = false;
 /// Фиксированный набор быстрых реакций, как в iMessage/Telegram.
 const List<String> _kQuickReactions = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 
+/// Полоска быстрых реакций над пузырём в меню долгого нажатия.
+class _ReactionsBar extends StatelessWidget {
+  const _ReactionsBar({required this.active, required this.onReact});
+
+  final List<String> active;
+  final ValueChanged<String> onReact;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppGlass(
+      borderRadius: BorderRadius.circular(26),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final emoji in _kQuickReactions)
+              GestureDetector(
+                onTap: () => onReact(emoji),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: active.contains(emoji)
+                        ? CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          )
+                        : null,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ForwardTargetTile extends StatelessWidget {
   const _ForwardTargetTile({required this.chat, required this.onTap});
 
@@ -1954,8 +1994,13 @@ class _MessageTile extends StatelessWidget {
     );
   }
 
-  Future<void> _showActions(BuildContext context) async {
+  /// [context] — контекст пузыря (или значка реакций): от него меню
+  /// берёт прямоугольник, а [preview] рисуется поверх размытого фона.
+  Future<void> _showActions(BuildContext context, {Widget? preview}) async {
     if (m.isSending) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final anchor = box.localToGlobal(Offset.zero) & box.size;
     final canEdit =
         m.isOutgoing &&
         m.attachmentKind == ChatAttachmentKind.none &&
@@ -1963,97 +2008,58 @@ class _MessageTile extends StatelessWidget {
         m.canStillEdit;
     final canDelete = m.isOutgoing && m.canStillDelete;
 
-    await showCupertinoModalPopup<void>(
+    await showMessageContextMenu(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        message: !_kReactionsEnabled
-            ? null
-            : Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: _kQuickReactions.map((emoji) {
-                    final active = m.reactions.contains(emoji);
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                        onReact(emoji);
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: active
-                              ? CupertinoColors.tertiarySystemFill.resolveFrom(
-                                  context,
-                                )
-                              : null,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 26),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              onLongMenu(_MsgAction.reply);
-            },
-            child: const Text('Ответить'),
-          ),
-          if (!m.isSticker && (m.text?.trim().isNotEmpty ?? false))
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.copy);
+      anchor: anchor,
+      preview: preview,
+      alignEnd: m.isOutgoing,
+      reactions: !_kReactionsEnabled
+          ? null
+          : _ReactionsBar(
+              active: m.reactions,
+              onReact: (emoji) {
+                Navigator.of(context, rootNavigator: true).pop();
+                onReact(emoji);
               },
-              child: const Text('Копировать'),
             ),
-          if (!m.isCall)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.forward);
-              },
-              child: const Text('Переслать'),
-            ),
-          if (!m.isSystem)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.pin);
-              },
-              child: Text(m.isPinned ? 'Открепить' : 'Закрепить'),
-            ),
-          if (canEdit)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.edit);
-              },
-              child: const Text('Редактировать'),
-            ),
-          if (canDelete)
-            CupertinoActionSheetAction(
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.delete);
-              },
-              child: const Text('Удалить'),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
+      items: [
+        MessageMenuItem(
+          label: 'Ответить',
+          icon: CupertinoIcons.arrowshape_turn_up_left,
+          onTap: () => onLongMenu(_MsgAction.reply),
         ),
-      ),
+        if (!m.isSticker && (m.text?.trim().isNotEmpty ?? false))
+          MessageMenuItem(
+            label: 'Копировать',
+            icon: CupertinoIcons.doc_on_doc,
+            onTap: () => onLongMenu(_MsgAction.copy),
+          ),
+        if (!m.isCall)
+          MessageMenuItem(
+            label: 'Переслать',
+            icon: CupertinoIcons.arrowshape_turn_up_right,
+            onTap: () => onLongMenu(_MsgAction.forward),
+          ),
+        if (!m.isSystem)
+          MessageMenuItem(
+            label: m.isPinned ? 'Открепить' : 'Закрепить',
+            icon: m.isPinned ? CupertinoIcons.pin_slash : CupertinoIcons.pin,
+            onTap: () => onLongMenu(_MsgAction.pin),
+          ),
+        if (canEdit)
+          MessageMenuItem(
+            label: 'Редактировать',
+            icon: CupertinoIcons.pencil,
+            onTap: () => onLongMenu(_MsgAction.edit),
+          ),
+        if (canDelete)
+          MessageMenuItem(
+            label: 'Удалить',
+            icon: CupertinoIcons.trash,
+            isDestructive: true,
+            onTap: () => onLongMenu(_MsgAction.delete),
+          ),
+      ],
     );
   }
 
@@ -2130,6 +2136,79 @@ class _MessageTile extends StatelessWidget {
         m.isPinned ||
         attachments.isNotEmpty;
 
+    // Тот же пузырь показывается поверх размытого фона в меню долгого нажатия.
+    final bubbleBox = Container(
+      width: m.isSticker ? _ChatSticker.bubbleSize : null,
+      padding: m.isSticker
+          ? EdgeInsets.zero
+          : _isMediaOnly
+          ? const EdgeInsets.all(3)
+          : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: m.isSticker
+          ? null
+          : BoxDecoration(
+              color: bubble,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(18),
+                topRight: const Radius.circular(18),
+                bottomLeft: Radius.circular(m.isOutgoing ? 18 : 6),
+                bottomRight: Radius.circular(m.isOutgoing ? 6 : 18),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: CupertinoColors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: onBubble),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (m.forwardOf != null)
+              _ForwardBlock(ref: m.forwardOf!, onBubble: onBubble),
+            if (m.replyTo != null)
+              _ReplyBlock(
+                ref: m.replyTo!,
+                isOutgoing: m.isOutgoing && !m.isSticker,
+              ),
+            if (m.isPinned)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.pin_fill,
+                      size: 12,
+                      color: onBubble.withValues(alpha: 0.8),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Закреплено',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: onBubble.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ...attachments,
+            if (m.text != null && m.text!.trim().isNotEmpty)
+              Padding(
+                // Отступ только под цитатой/вложением —
+                // иначе над текстом поле больше, чем под ним.
+                padding: EdgeInsets.only(top: hasAboveText ? 4 : 0),
+                child: ChatMessageText(text: m.text!, color: onBubble),
+              ),
+          ],
+        ),
+      ),
+    );
+
     return _wrapHighlight(
       context,
       Align(
@@ -2176,100 +2255,13 @@ class _MessageTile extends StatelessWidget {
                       if (m.isSending) return;
                       onLongMenu(_MsgAction.reply);
                     },
-                    child: GestureDetector(
-                      onLongPress: () {
-                        AppHaptics.medium();
-                        _showActions(context);
-                      },
-                      child: Container(
-                        width: m.isSticker ? _ChatSticker.bubbleSize : null,
-                        padding: m.isSticker
-                            ? EdgeInsets.zero
-                            : _isMediaOnly
-                            ? const EdgeInsets.all(3)
-                            : const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                        decoration: m.isSticker
-                            ? null
-                            : BoxDecoration(
-                                color: bubble,
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(18),
-                                  topRight: const Radius.circular(18),
-                                  bottomLeft: Radius.circular(
-                                    m.isOutgoing ? 18 : 6,
-                                  ),
-                                  bottomRight: Radius.circular(
-                                    m.isOutgoing ? 6 : 18,
-                                  ),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: CupertinoColors.black.withValues(
-                                      alpha: 0.04,
-                                    ),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                        child: DefaultTextStyle.merge(
-                          style: TextStyle(color: onBubble),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (m.forwardOf != null)
-                                _ForwardBlock(
-                                  ref: m.forwardOf!,
-                                  onBubble: onBubble,
-                                ),
-                              if (m.replyTo != null)
-                                _ReplyBlock(
-                                  ref: m.replyTo!,
-                                  isOutgoing: m.isOutgoing && !m.isSticker,
-                                ),
-                              if (m.isPinned)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        CupertinoIcons.pin_fill,
-                                        size: 12,
-                                        color: onBubble.withValues(alpha: 0.8),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Закреплено',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: onBubble.withValues(
-                                            alpha: 0.8,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ...attachments,
-                              if (m.text != null && m.text!.trim().isNotEmpty)
-                                Padding(
-                                  // Отступ только под цитатой/вложением —
-                                  // иначе над текстом поле больше, чем под ним.
-                                  padding: EdgeInsets.only(
-                                    top: hasAboveText ? 4 : 0,
-                                  ),
-                                  child: ChatMessageText(
-                                    text: m.text!,
-                                    color: onBubble,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
+                    child: Builder(
+                      builder: (bubbleContext) => GestureDetector(
+                        onLongPress: () {
+                          AppHaptics.medium();
+                          _showActions(bubbleContext, preview: bubbleBox);
+                        },
+                        child: bubbleBox,
                       ),
                     ),
                   ),

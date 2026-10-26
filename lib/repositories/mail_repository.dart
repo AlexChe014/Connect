@@ -268,7 +268,7 @@ class MailRepository {
   Future<MailMessagePage?> cachedMessages(int connectionId, {int? folderId}) =>
       _fromCache(
         _listKey(connectionId, folderId),
-        (d) => _parseMessagePage(d, ''),
+        (d) => _withLocalPage(connectionId, _parseMessagePage(d, '')),
       );
 
   Future<MailMessage?> cachedMessage({
@@ -276,8 +276,68 @@ class MailRepository {
     required int messageId,
   }) => _fromCache(
     _messageKey(connectionId, messageId),
-    (d) => _parseMessage(d, messageId),
+    (d) => withLocalReadState(connectionId, _parseMessage(d, messageId)),
   );
+
+  /// Прочитано/непрочитано, отмеченное в приложении, пока сервер этого не
+  /// подтвердил: список, запрошенный сразу после возврата из письма (или
+  /// взятый из кэша), ещё приходит со старым статусом, и письмо снова
+  /// казалось непрочитанным. Отметка снимается, как только сервер вернёт
+  /// тот же статус, или если запрос не удался.
+  final Map<String, bool> _readOverrides = {};
+
+  static String _readKey(int connectionId, int messageId) =>
+      '$connectionId:$messageId';
+
+  /// Статус прочтения с учётом ещё не подтверждённых сервером отметок.
+  MailMessage withLocalReadState(int connectionId, MailMessage message) {
+    final key = _readKey(connectionId, message.id);
+    final override = _readOverrides[key];
+    if (override == null) return message;
+    return message.isRead == override ? message : message.withRead(override);
+  }
+
+  List<MailMessage> withLocalReadStates(
+    int connectionId,
+    List<MailMessage> messages,
+  ) => _readOverrides.isEmpty
+      ? messages
+      : [for (final m in messages) withLocalReadState(connectionId, m)];
+
+  /// Свежий ответ сервера: совпавшие отметки больше не нужны.
+  MailMessagePage _applyServerPage(int connectionId, MailMessagePage page) {
+    if (_readOverrides.isEmpty) return page;
+    for (final m in page.messages) {
+      final key = _readKey(connectionId, m.id);
+      if (_readOverrides[key] == m.isRead) _readOverrides.remove(key);
+    }
+    return _withLocalPage(connectionId, page);
+  }
+
+  MailMessagePage _withLocalPage(int connectionId, MailMessagePage page) =>
+      _readOverrides.isEmpty
+      ? page
+      : MailMessagePage(
+          messages: withLocalReadStates(connectionId, page.messages),
+          hasMore: page.hasMore,
+          nextPage: page.nextPage,
+        );
+
+  Future<void> _setRead(
+    int connectionId,
+    int messageId,
+    bool read,
+    Future<void> Function() request,
+  ) async {
+    final key = _readKey(connectionId, messageId);
+    _readOverrides[key] = read;
+    try {
+      await request();
+    } catch (_) {
+      if (_readOverrides[key] == read) _readOverrides.remove(key);
+      rethrow;
+    }
+  }
 
   /// Письмо удалено или перенесено — его копия не должна всплыть офлайн.
   void _forgetMessage(int connectionId, int messageId) =>
@@ -401,7 +461,10 @@ class MailRepository {
       MailRoutes.getByServiceUrl(connectionId),
       queryParameters: {'page': '$page'},
     );
-    final result = _parseMessagePage(decoded, 'Не удалось получить письма');
+    final result = _applyServerPage(
+      connectionId,
+      _parseMessagePage(decoded, 'Не удалось получить письма'),
+    );
     if (page == 1) {
       unawaited(_cache.write(_listKey(connectionId, null), decoded));
     }
@@ -417,7 +480,10 @@ class MailRepository {
       MailRoutes.getByFolderUrl(connectionId, folderId),
       queryParameters: {'page': '$page'},
     );
-    final result = _parseMessagePage(decoded, 'Не удалось получить письма');
+    final result = _applyServerPage(
+      connectionId,
+      _parseMessagePage(decoded, 'Не удалось получить письма'),
+    );
     if (page == 1) {
       unawaited(_cache.write(_listKey(connectionId, folderId), decoded));
     }
@@ -433,7 +499,7 @@ class MailRepository {
     );
     final message = _parseMessage(decoded, messageId);
     unawaited(_cache.write(_messageKey(connectionId, messageId), decoded));
-    return message;
+    return withLocalReadState(connectionId, message);
   }
 
   MailMessage _parseMessage(Map<String, dynamic> decoded, int messageId) {
@@ -515,39 +581,48 @@ class MailRepository {
 
   // --- Mark read/unread ---
 
-  Future<void> markRead({
-    required int connectionId,
-    required int messageId,
-  }) async {
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.markReadUrl(connectionId, messageId),
-      body: {'is_read': true},
-    );
-    _requireDone(decoded, 'Не удалось отметить письмо прочитанным');
-  }
+  Future<void> markRead({required int connectionId, required int messageId}) =>
+      _setRead(connectionId, messageId, true, () async {
+        final decoded = await ApiClient.instance.post(
+          MailRoutes.markReadUrl(connectionId, messageId),
+          body: {'is_read': true},
+        );
+        _requireDone(decoded, 'Не удалось отметить письмо прочитанным');
+      });
 
   Future<void> markUnread({
     required int connectionId,
     required int messageId,
-  }) async {
+  }) => _setRead(connectionId, messageId, false, () async {
     final decoded = await ApiClient.instance.post(
       MailRoutes.markUnreadUrl(connectionId, messageId),
       body: {'is_read': false},
     );
     _requireDone(decoded, 'Не удалось отметить письмо непрочитанным');
-  }
+  });
 
   Future<void> markFewRead({
     required int connectionId,
     required List<int> ids,
   }) async {
-    // EmailController::massMarkAsRead читает список из `emails`; с `ids`
-    // сервер получал пустой список и ничего не отмечал.
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.markFewReadUrl(connectionId),
-      body: {'emails': ids},
-    );
-    _requireDone(decoded, 'Не удалось изменить статус писем');
+    final keys = [for (final id in ids) _readKey(connectionId, id)];
+    for (final key in keys) {
+      _readOverrides[key] = true;
+    }
+    try {
+      // EmailController::massMarkAsRead читает список из `emails`; с `ids`
+      // сервер получал пустой список и ничего не отмечал.
+      final decoded = await ApiClient.instance.post(
+        MailRoutes.markFewReadUrl(connectionId),
+        body: {'emails': ids},
+      );
+      _requireDone(decoded, 'Не удалось изменить статус писем');
+    } catch (_) {
+      for (final key in keys) {
+        if (_readOverrides[key] == true) _readOverrides.remove(key);
+      }
+      rethrow;
+    }
   }
 
   // --- Delete ---

@@ -132,9 +132,14 @@ class CallRoundButton extends StatefulWidget {
     this.destructive = false,
     this.size = 64,
     this.badge = 0,
+    this.slashed = false,
   });
 
   final IconData icon;
+
+  /// Перечеркнуть иконку (в CupertinoIcons нет, например, камеры со
+  /// слэшем — рисуем черту с прорезью сами, как у mic_slash_fill).
+  final bool slashed;
   final String? label;
   final VoidCallback? onPressed;
 
@@ -203,12 +208,18 @@ class _CallRoundButtonState extends State<CallRoundButton> {
           scale: Tween(begin: 0.7, end: 1.0).animate(animation),
           child: FadeTransition(opacity: animation, child: child),
         ),
-        child: Icon(
-          widget.icon,
-          key: ValueKey(widget.icon),
-          size: widget.size * 0.42,
-          color: iconColor,
-        ),
+        child: widget.slashed
+            ? CustomPaint(
+                key: ValueKey(('slashed', widget.icon)),
+                size: Size.square(widget.size * 0.42),
+                painter: _SlashedIconPainter(widget.icon, iconColor),
+              )
+            : Icon(
+                widget.icon,
+                key: ValueKey(widget.icon),
+                size: widget.size * 0.42,
+                color: iconColor,
+              ),
       ),
     );
 
@@ -643,4 +654,60 @@ class _RingsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RingsPainter old) =>
       old.progress != progress || old.strength != strength;
+}
+
+/// Иконка с диагональной чертой: под чертой прорезь (BlendMode.clear),
+/// чтобы черта читалась поверх сплошного глифа на любом фоне кнопки.
+class _SlashedIconPainter extends CustomPainter {
+  _SlashedIconPainter(this.icon, this.color);
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    final glyph = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(icon.codePoint),
+        style: TextStyle(
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          fontSize: s,
+          height: 1,
+          color: color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final a = Offset(s * 0.12, s * 0.08);
+    final b = Offset(s * 0.88, s * 0.92);
+    canvas.saveLayer(Offset.zero & size, Paint());
+    glyph.paint(
+      canvas,
+      Offset((s - glyph.width) / 2, (s - glyph.height) / 2),
+    );
+    canvas.drawLine(
+      a,
+      b,
+      Paint()
+        ..blendMode = BlendMode.clear
+        ..strokeWidth = s * 0.19
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawLine(
+      a,
+      b,
+      Paint()
+        ..color = color
+        ..strokeWidth = s * 0.075
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_SlashedIconPainter old) =>
+      old.icon != icon || old.color != color;
 }
