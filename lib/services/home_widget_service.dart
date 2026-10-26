@@ -107,13 +107,9 @@ class HomeWidgetService {
   }
 
   Map<String, Object?> _snapshot() {
-    final chatsUnread = ChatService.instance.chats.fold<int>(
-      0,
-      (sum, c) => sum + c.unreadCount,
-    );
     return {
       'loggedIn': true,
-      'chatsUnread': chatsUnread,
+      'chatsUnread': ChatService.instance.unreadChatsCount,
       'mailUnread': MailUnreadService.instance.unreadCount,
       'documentsPending': DocumentPendingService.instance.totalCount,
       'meetings': [

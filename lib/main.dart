@@ -340,11 +340,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   static String? _countBadge(int count) =>
       count <= 0 ? null : (count > 99 ? '99+' : '$count');
 
-  int get _unreadChatsCount =>
-      ChatService.instance.chats.fold<int>(0, (sum, c) => sum + c.unreadCount);
-
+  /// Сколько строк в списке чатов ждут внимания. Строка «Согласование» —
+  /// одна, сколько бы документов в ней ни было.
   int get _chatsTabCount =>
-      _unreadChatsCount + DocumentPendingService.instance.totalCount;
+      ChatService.instance.unreadChatsCount +
+      (DocumentPendingService.instance.totalCount > 0 ? 1 : 0);
 
   Widget _buildTab(int index) {
     return switch (index) {

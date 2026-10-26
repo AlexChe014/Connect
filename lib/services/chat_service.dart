@@ -106,6 +106,11 @@ class ChatService extends ChangeNotifier {
   String? _error;
 
   List<Chat> get chats => List.unmodifiable(_chats);
+
+  /// Сколько чатов с непрочитанными — не сообщений: 50 непрочитанных
+  /// в одном общем чате считаются за один. Единый счёт для вкладки
+  /// «Чаты» и виджета.
+  int get unreadChatsCount => _chats.where((c) => c.unreadCount > 0).length;
   bool get isLoading => _isLoading;
   bool get isContactsLoading => _isContactsLoading;
   String? get error => _error;

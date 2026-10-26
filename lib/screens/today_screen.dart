@@ -12,7 +12,6 @@ import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../services/document_pending_service.dart';
-import '../services/notification_unread_service.dart';
 import '../services/survey_pending_service.dart';
 import '../utils/booking_time_utils.dart';
 import '../utils/connector_link_join.dart';
@@ -31,7 +30,6 @@ import 'create_booking_screen.dart';
 import 'documents_signing_screen.dart';
 import 'global_search_screen.dart';
 import 'news_feed_screen.dart';
-import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'surveys_screen.dart';
 
@@ -108,7 +106,6 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   List<Listenable> get _badgeSources => [
     DocumentPendingService.instance,
     SurveyPendingService.instance,
-    NotificationUnreadService.instance,
   ];
 
   void _onBadgesChanged() {
@@ -121,7 +118,6 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   /// Лента обновляется сама — здесь только блоки над ней.
   Future<void> _refresh() async {
     unawaited(SurveyPendingService.instance.refreshQuietly());
-    unawaited(NotificationUnreadService.instance.refresh());
     unawaited(DocumentPendingService.instance.refreshKnownServices());
     await _loadAll();
   }
@@ -447,7 +443,8 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
 
   /// «Ждут вас» — капсулы в одну строку, только непустые. Опросы первыми:
   /// бывают редко, но у них есть срок. Чатов и почты нет — их счётчики
-  /// и так на вкладках нижнего меню. Баллы — справа от приветствия.
+  /// и так на вкладках нижнего меню. Уведомлений тоже: непрочитанные есть
+  /// почти всегда, капсула висела бы постоянно и ничего не сообщала. Баллы — справа от приветствия.
   List<Widget> _buildPendingBlock(BuildContext context) {
     _PendingChip? counter(
       IconData icon,
@@ -480,13 +477,6 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
         'Подпись',
         DocumentPendingService.instance.totalCount,
         const DocumentsSigningScreen(),
-      ),
-      counter(
-        CupertinoIcons.bell_fill,
-        CupertinoColors.systemRed.resolveFrom(context),
-        'Уведомления',
-        NotificationUnreadService.instance.unreadCount,
-        const NotificationsScreen(),
       ),
     ].nonNulls.toList();
 
