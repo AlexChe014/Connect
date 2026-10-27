@@ -18,7 +18,9 @@ import 'package:connect/services/api_client.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_cache_service.dart';
 import 'package:connect/services/chat_draft_service.dart';
+import 'package:connect/services/chat_file_downloads.dart';
 import 'package:connect/services/chat_preferences_service.dart';
+import 'package:connect/services/chat_user_names.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/chat_realtime_payload.dart';
 import 'package:flutter/foundation.dart';
@@ -204,6 +206,7 @@ class ChatService extends ChangeNotifier {
   /// пользователя — иначе после входа под другим аккаунтом мелькнут его
   /// чаты, а отложенные отметки «прочитано» уйдут от имени нового.
   void reset() {
+    ChatUserNames.instance.clear();
     _selfName = 'Я';
     _selfUserId = null;
     _chats.clear();
@@ -219,6 +222,7 @@ class ChatService extends ChangeNotifier {
     _cachedMessageIds.clear();
     _chatsReady = false;
     unawaited(ChatCacheService.instance.clear());
+    unawaited(ChatFileDownloads.instance.reset());
     _activeChatId = null;
     _contacts = const [];
     _isLoading = true;
@@ -1325,6 +1329,26 @@ class ChatService extends ChangeNotifier {
     );
   }
 
+  /// Копии сообщения, созданные сервером, или `null`, если на этом бэкенде
+  /// нет `POST /chat/messages/forward` — тогда пересылаем по-старому.
+  Future<List<ChatMessage>?> _forwardOnServer(
+    int chatId,
+    int messageId,
+    int userId,
+  ) async {
+    try {
+      final byChat = await ChatRepository.instance.forwardMessages(
+        chatIds: [chatId],
+        messageIds: [messageId],
+        currentUserId: userId,
+      );
+      return byChat[chatId] ?? const [];
+    } on ApiException catch (e) {
+      if (e.statusCode == 404 || e.statusCode == 405) return null;
+      rethrow;
+    }
+  }
+
   Future<bool> forwardMessage(
     String targetChatId,
     ChatMessage source, {
@@ -1348,6 +1372,14 @@ class ChatService extends ChangeNotifier {
 
     try {
       _lastActionError = null;
+      final copies = await _forwardOnServer(chatIntId, sourceMessageId, userId);
+      if (copies != null) {
+        for (final copy in copies) {
+          _appendMessage(targetChatId, copy.copyWith(isRead: true));
+        }
+        return true;
+      }
+
       final ChatMessage sent;
       if (stickerId != null) {
         sent = await ChatRepository.instance.sendSticker(

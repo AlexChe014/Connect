@@ -17,6 +17,7 @@ import '../models/mail/mail_message.dart';
 import '../models/staff_user.dart';
 import '../repositories/mail_repository.dart';
 import '../repositories/users_repository.dart';
+import '../services/api_client.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/mail_contacts_service.dart';
 import '../services/mail_unread_service.dart';
@@ -253,6 +254,32 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     }
   }
 
+  /// Флажок «важное» — ставится на самом ящике (IMAP `\Flagged`), виден
+  /// и в Outlook/веб-почте.
+  Future<void> _toggleFlag() async {
+    final current = _message;
+    if (current == null) return;
+    final flagged = !current.isFlagged;
+    setState(() => _message = current.withFlagged(flagged));
+    try {
+      await MailRepository.instance.setFlagged(
+        connectionId: widget.connection.id,
+        messageId: widget.messageId,
+        flagged: flagged,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _message = _message?.withFlagged(current.isFlagged));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : 'Не удалось изменить флажок',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<StaffUser?> _findStaff(String email) =>
       _staffByEmail.putIfAbsent(email.toLowerCase(), () async {
         try {
@@ -455,7 +482,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       final bytes = await MailRepository.instance.downloadAttachment(
         connectionId: widget.connection.id,
         messageId: widget.messageId,
-        filename: attachment.filename,
+        attachment: attachment,
       );
       if (kIsWeb) {
         await SharePlus.instance.share(
@@ -876,6 +903,25 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
   }
 
+  Widget? _buildFlagToggle(MailMessage? message, Color color) {
+    if (message == null) return null;
+    return Padding(
+      padding: const EdgeInsets.only(left: 18),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: _toggleFlag,
+        child: Icon(
+          message.isFlagged ? CupertinoIcons.flag_fill : CupertinoIcons.flag,
+          size: AppTitleBar.iconSize,
+          color: message.isFlagged
+              ? CupertinoColors.systemOrange.resolveFrom(context)
+              : color,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final message = _message;
@@ -904,6 +950,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                   children: [
                     ?_buildMailColorsToggle(context, message, label),
                     ?_buildReadToggle(message, label),
+                    ?_buildFlagToggle(message, label),
                   ],
                 ),
         ),
@@ -950,7 +997,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                               MailRepository.instance.downloadAttachment(
                                 connectionId: widget.connection.id,
                                 messageId: widget.messageId,
-                                filename: attachment.filename,
+                                attachment: attachment,
                               ),
                         ),
                       ),

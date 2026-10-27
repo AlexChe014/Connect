@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/repositories/chat_repository.dart';
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/chat_file_downloads.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 /// Скачивает файл чата и открывает системный шаринг.
@@ -17,13 +15,14 @@ class ChatFileShare {
     return headers.isEmpty ? null : headers;
   }
 
+  /// Скачивает через [ChatFileDownloads] — с прогрессом, отменой и кэшем.
+  /// Если скачивание отменили, шаринг не открывается.
   static Future<void> share(ChatFile file) async {
-    final bytes = await ChatRepository.instance.downloadFile(file.id);
-    final name = file.originalName.trim().isEmpty
-        ? (file.filename.trim().isEmpty ? 'file' : file.filename)
-        : file.originalName;
-
     if (kIsWeb) {
+      final bytes = await ChatRepository.instance.downloadFile(file.id);
+      final name = file.originalName.trim().isEmpty
+          ? (file.filename.trim().isEmpty ? 'file' : file.filename)
+          : file.originalName;
       await SharePlus.instance.share(
         ShareParams(
           files: [
@@ -38,9 +37,8 @@ class ChatFileShare {
       return;
     }
 
-    final tempDir = await getTemporaryDirectory();
-    final path = '${tempDir.path}/$name';
-    await File(path).writeAsBytes(bytes, flush: true);
-    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+    final local = await ChatFileDownloads.instance.download(file);
+    if (local == null) return;
+    await SharePlus.instance.share(ShareParams(files: [XFile(local.path)]));
   }
 }

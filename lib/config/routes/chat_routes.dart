@@ -12,6 +12,11 @@ class ChatRoutes {
   static String messagesUrl(int chatId) =>
       '${ApiConfig.baseUrl}$_prefix/$chatId/messages';
 
+  /// `POST /chat/messages/forward` — `chat_ids[]`, `message_ids[]`;
+  /// копии с теми же файлами сервер создаёт сам.
+  static String get forwardUrl =>
+      '${ApiConfig.baseUrl}$_prefix/messages/forward';
+
   static String readUrl(int chatId) =>
       '${ApiConfig.baseUrl}$_prefix/$chatId/read';
 

@@ -48,12 +48,14 @@ class ChatFile {
     ]);
   }
 
-  String get sizeLabel {
-    if (size < 1024) return '$size Б';
-    if (size < 1024 * 1024) {
-      return '${(size / 1024).toStringAsFixed(0)} КБ';
+  String get sizeLabel => formatBytes(size);
+
+  static String formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes Б';
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(0)} КБ';
     }
-    return '${(size / (1024 * 1024)).toStringAsFixed(1)} МБ';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1).replaceAll('.', ',')} МБ';
   }
 
   factory ChatFile.fromJson(Map<String, dynamic> json) {

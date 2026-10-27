@@ -41,6 +41,38 @@ void main() {
       ], 'Docs');
       expect(listing.folders.map((f) => f.name), ['child']);
     });
+
+    test('владелец запрошенной папки — folderOwner', () {
+      final listing = DiskListing.fromJson(
+        {
+          'folders': [
+            {
+              'path': '/remote.php/dav/files/prod_user_7/',
+              'name': 'prod_user_7',
+              'owner': 'prod_user_7',
+            },
+            {
+              'path': '/remote.php/dav/files/prod_user_7/Docs/',
+              'name': 'Docs',
+              'owner': 'prod_user_7',
+            },
+          ],
+          'files': [
+            {
+              'path': '/remote.php/dav/files/prod_user_7/Birdie.jpg',
+              'name': 'Birdie.jpg',
+              'owner': 'user_1',
+              'owner_name': ' ',
+            },
+          ],
+        },
+        folder: DiskRepository.toApiPath(''),
+        normalize: DiskRepository.toApiPath,
+      );
+      expect(listing.folderOwner, 'prod_user_7');
+      expect(listing.files.single.owner, 'user_1');
+      expect(listing.files.single.ownerName, isNull);
+    });
   });
 
   test('formatFileSize — десятичная запятая и ГБ', () {

@@ -24,7 +24,49 @@
 | Комната | `app/Models/Connector/ConnectorCall.php`, `app/Services/ConnectorService.php` |
 | Устройства | `device_tokens`, `voip_device_tokens`, `DeviceSessionService` |
 
-## 0. Что сломано сейчас (проверка 23.10)
+## 0. Что сломано сейчас
+
+### 27.10, `laravel-core-dev 3`: у собеседника звонок не звонит
+
+Сообщение «Входящий звонок» в чате появляется, но телефон собеседника не
+звонит: нет CallKit, нет экрана входящего звонка, нет мелодии.
+
+Почему, по коду `laravel-core-dev 3`:
+
+- `ChatCallService::startCall()` создаёт звонок и сообщение `CALL` в
+  транзакции. Поэтому сообщение в чате есть.
+- Сами пуши (`ChatCallNotifier::notifyRing`: VoIP APNs для iOS, FCM для
+  Android, вебхук в Node) отправляет только `BroadcastChatCallEventJob`.
+  `dispatchEvent()` ставит его в очередь (`->afterCommit()`).
+- `config/queue.php`: по умолчанию `QUEUE_CONNECTION=database`. В
+  `docker/Dockerfile` запускается только `CMD ["php-fpm"]`, воркера очереди
+  нет. Если на проде он тоже не запущен, задачи копятся в таблице `jobs`, и
+  ни один пуш о звонке не уходит. По той же причине не срабатывают
+  `ExpireRingingChatCallJob` (таймаут → `missed`) и `CheckChatCallRoomJob`.
+
+Как проверить на проде:
+
+1. `grep QUEUE_CONNECTION .env` и `SELECT COUNT(*), MIN(created_at) FROM jobs;`
+   Если задачи копятся, причина в этом.
+2. `php artisan queue:failed`: вдруг задачи выполняются, но падают (APNs/FCM
+   ключи, `module_enabled('Devices')`).
+
+Как исправить (одно из двух):
+
+- **Правильно:** запустить постоянный воркер `php artisan queue:work --tries=3`
+  (supervisor или отдельный контейнер с тем же образом) и cron
+  `* * * * * php artisan schedule:run` для `chats:sweep-stale-calls`.
+- **Быстро:** `QUEUE_CONNECTION=sync`, затем `php artisan config:clear`. Код
+  это поддерживает: при `sync` рассылка идёт `afterResponse()`. Но очередь
+  нужна и другим модулям, поэтому воркер всё равно стоит поднять.
+
+Если очередь в порядке, следующее, что нужно проверить: есть ли у
+собеседника токены в `voip_device_tokens` (iOS) и `device_tokens` (Android)
+на **новой** базе. `voip_token_ids` у звонка берётся при `ring`. Если токенов
+нет, пушу некуда идти. Приложение регистрирует токены при запуске, так что
+после перехода на новую базу достаточно открыть его на обоих телефонах.
+
+### Проверка 23.10
 
 Колонка `chat__messages.type` не принимала `CALL`, и `ring` падал: звонки 1:1
 не проходили совсем. Это **исправлено 23.10**, звонки работают. Осталось из

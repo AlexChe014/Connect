@@ -9,6 +9,10 @@ class UserRoutes {
   static String get getProfileUrl => '${ApiConfig.baseUrl}$getProfile';
   static String get getByFilterUrl => '${ApiConfig.baseUrl}$getByFilter';
 
+  /// `GET /user/get/{user}` — профиль сотрудника по id.
+  static String getUserUrl(int userId) =>
+      '${ApiConfig.baseUrl}$getProfile/$userId';
+
   /// `POST /user/request-deletion` — бэкенд пишет запрос в поддержку.
   static String get requestDeletionUrl =>
       '${ApiConfig.baseUrl}/user/request-deletion';

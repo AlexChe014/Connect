@@ -49,11 +49,37 @@ class DiskRepository {
     final isFirstCheck = _cacheGeneration == -1;
     _cacheGeneration = generation;
     _listingCache.clear();
+    _selfOwner = null;
     _downloads.clear();
+    _previews.clear();
+    _noPreview.clear();
     // Файлы с прошлых запусков оставляем — миниатюры не качаются заново.
     // Ключ кэша — полный WebDAV-путь с логином, чужие файлы другому
     // пользователю не попадутся; место в Caches при нехватке чистит iOS.
     if (!isFirstCheck) _clearing = _clearFileCache();
+  }
+
+  /// Логин Nextcloud самого пользователя — владелец корня диска.
+  String? _selfOwner;
+
+  /// Файлом или папкой с пользователем поделился кто-то другой: Nextcloud
+  /// не даёт делиться ими дальше.
+  bool isForeign(String? owner) =>
+      owner != null && _selfOwner != null && owner != _selfOwner;
+
+  /// Id сотрудника портала по логину Nextcloud (`<префикс>user_<id>`).
+  /// Только при том же префиксе, что у самого пользователя: у учёток
+  /// с другим префиксом (`user_1` при `prod_user_7`) число может означать
+  /// другого человека.
+  int? ownerUserId(String owner) {
+    final self = _selfOwner;
+    if (self == null) return null;
+    final pattern = RegExp(r'^(.*)user_(\d+)$');
+    final mine = pattern.firstMatch(self);
+    final theirs = pattern.firstMatch(owner);
+    if (mine == null || theirs == null) return null;
+    if (mine.group(1) != theirs.group(1)) return null;
+    return int.tryParse(theirs.group(2)!);
   }
 
   DiskListing? cachedListing(String folder) {
@@ -78,6 +104,9 @@ class DiskRepository {
       normalize: toApiPath,
     );
     _listingCache[apiPath] = listing;
+    if (apiPath.isEmpty && listing.folderOwner != null) {
+      _selfOwner = listing.folderOwner;
+    }
     return listing;
   }
 
@@ -172,6 +201,66 @@ class DiskRepository {
     } catch (_) {
       // Временная папка — не страшно, если что-то останется до очистки ОС.
     }
+  }
+
+  /// Сторона превью с сервера: миниатюра в списке — 36 pt, до 3x.
+  static const previewSize = 128;
+
+  final Map<String, Future<File?>> _previews = {};
+
+  /// Файлы, для которых сервер ответил «превью нет»: до смены сессии
+  /// не спрашиваем снова.
+  final Set<String> _noPreview = {};
+
+  /// Превью картинки с сервера (кэшируется рядом с файлами). `null` — сервер
+  /// превью не отдал (нет его для формата или нет эндпоинта на этом
+  /// бэкенде); тогда миниатюру можно сделать из самого файла. Сбой сети
+  /// пробрасывается.
+  Future<File?> fetchPreview(DiskFile file) {
+    _checkSession();
+    final key = _cacheKey(file);
+    if (_noPreview.contains(key)) return Future.value(null);
+    final pending = _previews[key];
+    if (pending != null) return pending;
+    final future = _fetchPreview(file, key).whenComplete(() {
+      _previews.remove(key);
+    });
+    _previews[key] = future;
+    return future;
+  }
+
+  Future<File?> _fetchPreview(DiskFile file, String key) async {
+    final local = File(
+      '${(await _fileCacheDir()).path}/previews/${_fnv1a(key)}_$previewSize',
+    );
+    if (await local.exists()) return local;
+    final List<int> bytes;
+    try {
+      bytes = await ApiClient.instance.downloadBytes(
+        Uri.parse(DiskRoutes.previewUrl)
+            .replace(
+              queryParameters: {
+                'path': toApiPath(file.path),
+                'size': '$previewSize',
+              },
+            )
+            .toString(),
+      );
+    } on ApiException catch (e) {
+      // 404 — превью нет; ошибка конвертом с HTTP 200 — тоже не превью.
+      if (e.statusCode == 404 || e.statusCode == 200) {
+        _noPreview.add(key);
+        return null;
+      }
+      rethrow;
+    }
+    if (bytes.isEmpty) {
+      _noPreview.add(key);
+      return null;
+    }
+    await local.parent.create(recursive: true);
+    await local.writeAsBytes(bytes, flush: true);
+    return local;
   }
 
   /// Уже скачанный файл без сети — для миниатюр в списке.

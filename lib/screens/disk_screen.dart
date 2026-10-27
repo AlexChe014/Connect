@@ -14,8 +14,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_theme.dart';
 import '../models/disk/disk_entry.dart';
+import '../models/staff_user.dart';
 import '../repositories/disk_repository.dart';
 import '../services/api_client.dart';
+import '../services/chat_service.dart';
+import '../services/chat_user_names.dart';
 import '../utils/file_size_format.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
@@ -23,6 +26,7 @@ import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import '../widgets/mail_glass.dart';
+import '../widgets/staff_user_picker_sheet.dart';
 import '../widgets/swipe_actions_row.dart';
 
 /// Раздел «Диск» — просмотр, загрузка и открытие файлов из Nextcloud
@@ -770,6 +774,44 @@ class _DiskScreenState extends State<DiskScreen> {
     }
   }
 
+  /// Доступ на чтение через Nextcloud (`shares/user`): учётку получателю
+  /// сервер создаёт сам, если её ещё нет.
+  Future<void> _shareWithEmployee(DiskFile file) async {
+    final selfId = ChatService.instance.selfUserId;
+    StaffUser? picked;
+    await StaffUserPickerSheet.show(
+      context,
+      selectedIds: const {},
+      title: 'С кем поделиться',
+      validateUser: (user) =>
+          selfId != null && user.idAsInt == selfId ? 'Это вы' : null,
+      onUserSelected: (user) {
+        picked = user;
+        Navigator.of(context).pop();
+      },
+    );
+    final user = picked;
+    final userId = user?.idAsInt;
+    if (user == null || userId == null || !mounted) return;
+    try {
+      await DiskRepository.instance.shareWithUser(file.path, userId);
+      if (!mounted) return;
+      _showMessage('«${file.name}» доступен: ${user.chatDisplayName}');
+      unawaited(_load(silent: true));
+    } catch (e) {
+      if (!mounted) return;
+      // Сервер пробрасывает сырой ответ Nextcloud (Guzzle) — не показываем его.
+      final raw = e is ApiException ? e.message : '';
+      if (raw.contains('not allowed to share')) {
+        _showMessage('Этим файлом поделились с вами — переслать его нельзя');
+      } else if (raw.contains('Client error') || raw.contains('Server error')) {
+        _showMessage('Не удалось поделиться файлом');
+      } else {
+        _showError('Не удалось поделиться файлом', e);
+      }
+    }
+  }
+
   Future<void> _showFolderActions(DiskFolder folder) async {
     AppHaptics.medium();
     await showCupertinoModalPopup<void>(
@@ -827,6 +869,15 @@ class _DiskScreenState extends State<DiskScreen> {
             },
             child: const Text('Отправить…'),
           ),
+          // Чужим файлом Nextcloud делиться дальше не даёт.
+          if (!DiskRepository.instance.isForeign(file.owner))
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _shareWithEmployee(file);
+              },
+              child: const Text('Поделиться с сотрудником'),
+            ),
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(context);
@@ -1254,6 +1305,22 @@ class _DiskTaskCapsule extends StatelessWidget {
   }
 }
 
+/// Подпись для того, чем поделились с пользователем; null — это его файл.
+/// Имя берётся из ответа сервера или по id сотрудника из логина Nextcloud.
+String? _sharedWithMeLabel(String? owner, String? ownerName) {
+  final repo = DiskRepository.instance;
+  if (owner == null || !repo.isForeign(owner)) return null;
+  var name = ownerName;
+  if (name == null) {
+    final id = repo.ownerUserId(owner);
+    if (id != null) {
+      name = ChatUserNames.instance.nameFor(id);
+      if (name == null) unawaited(ChatUserNames.instance.ensure(id));
+    }
+  }
+  return name == null ? 'С вами поделились' : 'Владелец: $name';
+}
+
 class _DiskFolderTile extends StatelessWidget {
   const _DiskFolderTile({
     required this.folder,
@@ -1267,6 +1334,13 @@ class _DiskFolderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ChatUserNames.instance,
+      builder: (context, _) => _buildRow(context),
+    );
+  }
+
+  Widget _buildRow(BuildContext context) {
     return _DiskRow(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1275,7 +1349,9 @@ class _DiskFolderTile extends StatelessWidget {
         color: CupertinoColors.systemBlue.resolveFrom(context),
       ),
       title: folder.name,
-      subtitle: folder.isShared ? 'Есть доступ у других' : null,
+      subtitle:
+          _sharedWithMeLabel(folder.owner, folder.ownerName) ??
+          (folder.isShared ? 'Есть доступ у других' : null),
       trailing: Icon(
         CupertinoIcons.chevron_forward,
         size: 16,
@@ -1300,6 +1376,7 @@ class _DiskFileTile extends StatelessWidget {
 
   String? get _subtitle {
     final parts = <String>[
+      ?_sharedWithMeLabel(file.owner, file.ownerName),
       if (file.size != null) formatFileSize(file.size!),
       if (file.lastModified != null)
         DateFormat(
@@ -1312,6 +1389,13 @@ class _DiskFileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ChatUserNames.instance,
+      builder: (context, _) => _buildRow(context),
+    );
+  }
+
+  Widget _buildRow(BuildContext context) {
     return _DiskRow(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1354,11 +1438,13 @@ class _DiskIconBadge extends StatelessWidget {
 }
 
 /// Миниатюры качаются по две за раз: на длинном списке фотографий иначе
-/// десятки скачиваний разом забили бы канал и задержали открытие файла.
+/// десятки запросов разом забили бы канал и задержали открытие файла.
+/// Сначала — маленькое превью с сервера, файл целиком — только если превью
+/// нет.
 abstract final class _ThumbnailLoader {
   static const _maxParallel = 2;
 
-  /// Крупнее — не качаем ради миниатюры: это уже трафик, а не превью.
+  /// Крупнее — не качаем целиком ради миниатюры, если сервер не дал превью.
   static const maxSize = 10 * 1024 * 1024;
 
   static int _active = 0;
@@ -1375,6 +1461,11 @@ abstract final class _ThumbnailLoader {
     try {
       // Строку успели пролистать, пока ждали очереди.
       if (!isWanted()) return null;
+      final preview = await DiskRepository.instance.fetchPreview(file);
+      if (preview != null) return preview;
+      // Превью сервер не отдал — делаем миниатюру из самого файла.
+      final size = file.size;
+      if (size == null || size > maxSize || !isWanted()) return null;
       return await DiskRepository.instance.fetchFile(file);
     } catch (_) {
       return null;
@@ -1416,8 +1507,6 @@ class _DiskThumbnailState extends State<_DiskThumbnail> {
       setState(() => _local = cached);
       return;
     }
-    final size = file.size;
-    if (size == null || size > _ThumbnailLoader.maxSize) return;
     final local = await _ThumbnailLoader.load(file, () => mounted);
     if (mounted && local != null) setState(() => _local = local);
   }

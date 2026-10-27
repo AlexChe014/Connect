@@ -60,6 +60,12 @@ class MailRoutes {
   static String markUnreadUrl(int connectionId, int messageId) =>
       '${ApiConfig.baseUrl}$_mailPrefix/mark/unread/$connectionId/$messageId';
 
+  static String markFlaggedUrl(int connectionId, int messageId) =>
+      '${ApiConfig.baseUrl}$_mailPrefix/mark/flagged/$connectionId/$messageId';
+
+  static String markUnflaggedUrl(int connectionId, int messageId) =>
+      '${ApiConfig.baseUrl}$_mailPrefix/mark/unflagged/$connectionId/$messageId';
+
   static String markFewReadUrl(int connectionId) =>
       '${ApiConfig.baseUrl}$_mailPrefix/mark/few/read/$connectionId';
 
@@ -89,6 +95,14 @@ class MailRoutes {
     final encoded = Uri.encodeComponent(filename);
     return '${ApiConfig.baseUrl}$_mailPrefix/attachments/$connectionId/$messageId/$encoded';
   }
+
+  /// Вложение по его id — однозначно, даже если имена файлов совпадают.
+  static String attachmentByIdUrl(
+    int connectionId,
+    int messageId,
+    int attachmentId,
+  ) =>
+      '${ApiConfig.baseUrl}$_mailPrefix/attachment/$connectionId/$messageId?id=$attachmentId';
 
   // --- SMTP ---
 

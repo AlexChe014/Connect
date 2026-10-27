@@ -13,8 +13,10 @@ import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/services/chat_file_downloads.dart';
 import 'package:connect/services/chat_realtime_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/chat_user_names.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/chat_mapper.dart';
@@ -26,6 +28,7 @@ import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
+import 'package:connect/widgets/chat_download_ring.dart';
 import 'package:connect/widgets/chat_message_text.dart';
 import 'package:connect/widgets/message_context_menu.dart';
 import 'package:connect/widgets/read_receipt.dart';
@@ -960,8 +963,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       },
     );
     if (id == null) return;
-    // Файлы перезагружаются в целевой чат — это небыстро.
-    if (m.files.isNotEmpty) _showSnack('Пересылаю…');
     final success = await _service.forwardMessage(
       id,
       m,
@@ -1937,6 +1938,7 @@ class _MessageTile extends StatelessWidget {
             )
           else
             _ChatFileCard(
+              file: m.files[i],
               name: m.files[i].originalName,
               subtitle: m.files[i].sizeLabel,
               isVideo: m.files[i].isVideo,
@@ -2459,6 +2461,15 @@ class _ForwardBlock extends StatelessWidget {
   final MessageReference ref;
   final Color onBubble;
 
+  String _authorName() {
+    final id = ref.authorId;
+    if (id == null) return ref.authorName;
+    final known = ChatUserNames.instance.nameFor(id);
+    if (known != null) return known;
+    ChatUserNames.instance.ensure(id);
+    return ref.authorName;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -2476,23 +2487,28 @@ class _ForwardBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              ref.sourceChatTitle != null
-                  ? 'Переслано из «${ref.sourceChatTitle!}»'
-                  : 'Переслано от ${ref.authorName}',
-              style: TextStyle(
-                fontSize: 11,
-                color: onBubble.withValues(alpha: 0.85),
-                fontWeight: FontWeight.w600,
+            ListenableBuilder(
+              listenable: ChatUserNames.instance,
+              builder: (context, _) => Text(
+                ref.sourceChatTitle != null
+                    ? 'Переслано из «${ref.sourceChatTitle!}»'
+                    : 'Переслано от ${_authorName()}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: onBubble.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              ref.textPreview,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13),
-            ),
+            if (ref.textPreview.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                ref.textPreview,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
           ],
         ),
       ),
@@ -2753,12 +2769,16 @@ class _ChatImage extends StatelessWidget {
 }
 
 /// Документ/видео в пузыре: плашка с иконкой-расширением, именем и размером.
-/// Пока файл скачивается для шаринга — вместо иконки крутится индикатор.
+///
+/// Если передан [file], скачивание идёт как в Telegram: стрелка «скачать»,
+/// во время загрузки — кольцо прогресса с крестиком и «X из Y» под именем,
+/// повторный тап останавливает. Скачанный файл открывается сразу из кэша.
 class _ChatFileCard extends StatefulWidget {
   const _ChatFileCard({
     required this.name,
     required this.isVideo,
     required this.onBubble,
+    this.file,
     this.subtitle,
     this.onTap,
   });
@@ -2767,6 +2787,7 @@ class _ChatFileCard extends StatefulWidget {
   final String? subtitle;
   final bool isVideo;
   final Color onBubble;
+  final ChatFile? file;
   final Future<void> Function()? onTap;
 
   @override
@@ -2774,7 +2795,25 @@ class _ChatFileCard extends StatefulWidget {
 }
 
 class _ChatFileCardState extends State<_ChatFileCard> {
+  final _downloads = ChatFileDownloads.instance;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCached();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatFileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file?.id != widget.file?.id) _checkCached();
+  }
+
+  void _checkCached() {
+    final file = widget.file;
+    if (file != null) unawaited(_downloads.checkCached(file));
+  }
 
   String get _extension {
     final dot = widget.name.lastIndexOf('.');
@@ -2784,25 +2823,92 @@ class _ChatFileCardState extends State<_ChatFileCard> {
   }
 
   Future<void> _handleTap() async {
+    final file = widget.file;
+    if (file != null && _downloads.isDownloading(file.id)) {
+      AppHaptics.selection();
+      _downloads.cancel(file.id);
+      return;
+    }
     final onTap = widget.onTap;
     if (onTap == null || _busy) return;
-    setState(() => _busy = true);
+    // С [file] ход загрузки рисует кольцо — свой индикатор не нужен.
+    if (file == null) setState(() => _busy = true);
     try {
       await onTap();
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _icon(bool downloaded) {
     final onBubble = widget.onBubble;
+    if (_busy) return CupertinoActivityIndicator(color: onBubble, radius: 9);
+    final IconData icon;
+    if (widget.file != null && !downloaded) {
+      icon = CupertinoIcons.arrow_down;
+    } else if (widget.isVideo) {
+      icon = CupertinoIcons.play_fill;
+    } else {
+      icon = CupertinoIcons.doc_text_fill;
+    }
+    return Icon(icon, size: 20, color: onBubble);
+  }
+
+  String _details(ChatFileDownloadProgress? progress) {
     final ext = _extension;
-    final details = [
+    if (progress != null) {
+      final received = ChatFile.formatBytes(progress.received);
+      final total = progress.total;
+      return total == null
+          ? received
+          : '$received из ${ChatFile.formatBytes(total)}';
+    }
+    return [
       if (ext.isNotEmpty) ext,
       if (widget.subtitle != null && widget.subtitle!.isNotEmpty)
         widget.subtitle!,
     ].join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final file = widget.file;
+    if (file == null) return _buildCard(context, null, true);
+    final progress = _downloads.progressOf(file.id);
+    return AnimatedBuilder(
+      animation: Listenable.merge([progress, _downloads.downloaded]),
+      builder: (context, _) => _buildCard(
+        context,
+        progress.value,
+        _downloads.downloaded.value.contains(file.id),
+      ),
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    ChatFileDownloadProgress? progress,
+    bool downloaded,
+  ) {
+    final onBubble = widget.onBubble;
+    final details = _details(progress);
+    final file = widget.file;
+    final iconCircle = Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: onBubble.withValues(alpha: 0.16),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: file == null
+          ? _icon(downloaded)
+          : ChatDownloadRing(
+              fileId: file.id,
+              color: onBubble,
+              idle: _icon(downloaded),
+            ),
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2817,24 +2923,7 @@ class _ChatFileCardState extends State<_ChatFileCard> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: onBubble.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: _busy
-                  ? CupertinoActivityIndicator(color: onBubble, radius: 9)
-                  : Icon(
-                      widget.isVideo
-                          ? CupertinoIcons.play_fill
-                          : CupertinoIcons.doc_text_fill,
-                      size: 20,
-                      color: onBubble,
-                    ),
-            ),
+            iconCircle,
             const SizedBox(width: 10),
             Flexible(
               child: Column(
@@ -2858,6 +2947,7 @@ class _ChatFileCardState extends State<_ChatFileCard> {
                       style: TextStyle(
                         fontSize: 12,
                         color: onBubble.withValues(alpha: 0.7),
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],

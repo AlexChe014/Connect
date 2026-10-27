@@ -8,6 +8,7 @@ import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
+import 'package:connect/services/chat_user_names.dart';
 import 'package:connect/services/paginated.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/utils/media_url_utils.dart';
@@ -148,6 +149,7 @@ class ChatMapper {
     final authorName = sender != null
         ? userDisplayNameFromJson(sender)
         : 'Пользователь';
+    if (senderId != null) ChatUserNames.instance.remember(senderId, authorName);
     final authorAvatarUrl = sender != null
         ? MediaUrlUtils.normalizeFirstUrl(sender['media'])
         : null;
@@ -178,8 +180,22 @@ class ChatMapper {
                 deletedMessageMarker);
 
     final forwardedMessageId = _parseInt(json['forwarded_message_id']);
+    final forwardedFromUserId = _parseInt(json['forwarded_from_user_id']);
     MessageReference? forwardOf;
-    if (forwardedMessageId != null) {
+    if (forwardedFromUserId != null) {
+      // `POST /chat/messages/forward`: содержимое скопировано в само
+      // сообщение, от оригинала остаётся только автор.
+      final forwardedFromUser = _asJsonMap(json['forwarded_from_user']);
+      forwardOf = MessageReference(
+        messageId: forwardedMessageId?.toString() ?? '',
+        authorId: forwardedFromUserId,
+        authorName: forwardedFromUser != null
+            ? userDisplayNameFromJson(forwardedFromUser)
+            : ChatUserNames.instance.nameFor(forwardedFromUserId) ??
+                  'Пользователь',
+        textPreview: '',
+      );
+    } else if (forwardedMessageId != null) {
       final forwardedFromUser = _asJsonMap(json['forwarded_from_user']);
       forwardOf = MessageReference(
         messageId: forwardedMessageId.toString(),

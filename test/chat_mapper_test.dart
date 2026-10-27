@@ -84,21 +84,24 @@ void main() {
       expect(message.text, isNull);
     });
 
-    test('resolves a MEDIA message where the URL is in the message field itself', () {
-      final message = ChatMapper.mapMessage(
-        {
-          'id': 7,
-          'sender_id': 20,
-          'type': 'MEDIA',
-          'message': 'http://cdn.example.com/img2.png',
-        },
-        chatId: '1',
-        currentUserId: 10,
-      );
+    test(
+      'resolves a MEDIA message where the URL is in the message field itself',
+      () {
+        final message = ChatMapper.mapMessage(
+          {
+            'id': 7,
+            'sender_id': 20,
+            'type': 'MEDIA',
+            'message': 'http://cdn.example.com/img2.png',
+          },
+          chatId: '1',
+          currentUserId: 10,
+        );
 
-      expect(message.remoteMediaUrl, 'http://cdn.example.com/img2.png');
-      expect(message.text, isNull);
-    });
+        expect(message.remoteMediaUrl, 'http://cdn.example.com/img2.png');
+        expect(message.text, isNull);
+      },
+    );
 
     test('maps files onto a MEDIA message and marks it as an image', () {
       final message = ChatMapper.mapMessage(
@@ -245,54 +248,57 @@ void main() {
         expect(message.isRead, isFalse);
       });
 
-      test('readByRecipients is true only when every recipient has read it', () {
-        final allRead = ChatMapper.mapMessage(
-          {
-            'id': 1,
-            'sender_id': 10,
-            'type': 'TEXT',
-            'message': 'hi',
-            'statuses': [
-              {'user_id': 20, 'read': true},
-              {'user_id': 30, 'read': true},
-            ],
-          },
-          chatId: '1',
-          currentUserId: 10,
-        );
-        expect(allRead.readByRecipients, isTrue);
+      test(
+        'readByRecipients is true only when every recipient has read it',
+        () {
+          final allRead = ChatMapper.mapMessage(
+            {
+              'id': 1,
+              'sender_id': 10,
+              'type': 'TEXT',
+              'message': 'hi',
+              'statuses': [
+                {'user_id': 20, 'read': true},
+                {'user_id': 30, 'read': true},
+              ],
+            },
+            chatId: '1',
+            currentUserId: 10,
+          );
+          expect(allRead.readByRecipients, isTrue);
 
-        final partiallyRead = ChatMapper.mapMessage(
-          {
-            'id': 1,
-            'sender_id': 10,
-            'type': 'TEXT',
-            'message': 'hi',
-            'statuses': [
-              {'user_id': 20, 'read': true},
-              {'user_id': 30, 'read': false},
-            ],
-          },
-          chatId: '1',
-          currentUserId: 10,
-        );
-        expect(partiallyRead.readByRecipients, isFalse);
+          final partiallyRead = ChatMapper.mapMessage(
+            {
+              'id': 1,
+              'sender_id': 10,
+              'type': 'TEXT',
+              'message': 'hi',
+              'statuses': [
+                {'user_id': 20, 'read': true},
+                {'user_id': 30, 'read': false},
+              ],
+            },
+            chatId: '1',
+            currentUserId: 10,
+          );
+          expect(partiallyRead.readByRecipients, isFalse);
 
-        final incoming = ChatMapper.mapMessage(
-          {
-            'id': 1,
-            'sender_id': 20,
-            'type': 'TEXT',
-            'message': 'hi',
-            'statuses': [
-              {'user_id': 20, 'read': true},
-            ],
-          },
-          chatId: '1',
-          currentUserId: 10,
-        );
-        expect(incoming.readByRecipients, isFalse);
-      });
+          final incoming = ChatMapper.mapMessage(
+            {
+              'id': 1,
+              'sender_id': 20,
+              'type': 'TEXT',
+              'message': 'hi',
+              'statuses': [
+                {'user_id': 20, 'read': true},
+              ],
+            },
+            chatId: '1',
+            currentUserId: 10,
+          );
+          expect(incoming.readByRecipients, isFalse);
+        },
+      );
     });
   });
 
@@ -364,16 +370,19 @@ void main() {
       expect(ChatMapper.snippet(m), 'Системное сообщение');
     });
 
-    test('a message with no text and no attachment falls back to a generic label', () {
-      final m = ChatMessage(
-        id: '1',
-        chatId: '1',
-        authorName: 'A',
-        isOutgoing: false,
-        createdAt: now(),
-      );
-      expect(ChatMapper.snippet(m), 'Сообщение');
-    });
+    test(
+      'a message with no text and no attachment falls back to a generic label',
+      () {
+        final m = ChatMessage(
+          id: '1',
+          chatId: '1',
+          authorName: 'A',
+          isOutgoing: false,
+          createdAt: now(),
+        );
+        expect(ChatMapper.snippet(m), 'Сообщение');
+      },
+    );
   });
 
   group('ChatMapper.attachReplyReferences', () {
@@ -427,194 +436,183 @@ void main() {
 
   group('ChatMapper.mapChat', () {
     test('a titled group chat keeps its title', () {
-      final chat = ChatMapper.mapChat(
-        {
-          'id': 1,
-          'is_group': true,
-          'title': '  Дизайн-команда  ',
-          'members': [],
-        },
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'title': '  Дизайн-команда  ',
+        'members': [],
+      }, currentUserId: 10);
       expect(chat.title, 'Дизайн-команда');
       expect(chat.isGroup, isTrue);
     });
 
     test('an untitled group chat falls back to a generic label', () {
-      final chat = ChatMapper.mapChat(
-        {'id': 1, 'is_group': true, 'members': []},
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'members': [],
+      }, currentUserId: 10);
       expect(chat.title, 'Группа');
     });
 
     test('an untitled direct chat uses the peer\'s display name', () {
-      final chat = ChatMapper.mapChat(
-        {
-          'id': 1,
-          'is_group': false,
-          'members': [
-            {
-              'user_id': 10,
-              'user': {'name': 'Me', 'surname': 'Myself'},
-            },
-            {
-              'user_id': 20,
-              'user': {'name': 'Иван', 'surname': 'Иванов'},
-            },
-          ],
-        },
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': false,
+        'members': [
+          {
+            'user_id': 10,
+            'user': {'name': 'Me', 'surname': 'Myself'},
+          },
+          {
+            'user_id': 20,
+            'user': {'name': 'Иван', 'surname': 'Иванов'},
+          },
+        ],
+      }, currentUserId: 10);
       expect(chat.title, 'Иванов Иван');
       expect(chat.peerUserId, 20);
     });
 
     test('unread_count from statuses; server unread_count used if higher', () {
-      final chat = ChatMapper.mapChat(
-        {
-          'id': 1,
-          'is_group': true,
-          'title': 'X',
-          'unread_count': 99,
-          'messages': [
-            {
-              'id': 1,
-              'sender_id': 20,
-              'type': 'TEXT',
-              'message': 'a',
-              'created_at': '2026-01-01T10:00:00Z',
-              'statuses': [
-                {'user_id': 10, 'read': false},
-              ],
-            },
-            {
-              'id': 2,
-              'sender_id': 20,
-              'type': 'TEXT',
-              'message': 'b',
-              'created_at': '2026-01-01T10:01:00Z',
-              'statuses': [
-                {'user_id': 10, 'read': false},
-              ],
-            },
-            {
-              'id': 3,
-              'sender_id': 10,
-              'type': 'TEXT',
-              'message': 'mine',
-              'created_at': '2026-01-01T10:02:00Z',
-              'statuses': [
-                {'user_id': 20, 'read': false},
-              ],
-            },
-          ],
-        },
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'title': 'X',
+        'unread_count': 99,
+        'messages': [
+          {
+            'id': 1,
+            'sender_id': 20,
+            'type': 'TEXT',
+            'message': 'a',
+            'created_at': '2026-01-01T10:00:00Z',
+            'statuses': [
+              {'user_id': 10, 'read': false},
+            ],
+          },
+          {
+            'id': 2,
+            'sender_id': 20,
+            'type': 'TEXT',
+            'message': 'b',
+            'created_at': '2026-01-01T10:01:00Z',
+            'statuses': [
+              {'user_id': 10, 'read': false},
+            ],
+          },
+          {
+            'id': 3,
+            'sender_id': 10,
+            'type': 'TEXT',
+            'message': 'mine',
+            'created_at': '2026-01-01T10:02:00Z',
+            'statuses': [
+              {'user_id': 20, 'read': false},
+            ],
+          },
+        ],
+      }, currentUserId: 10);
       expect(chat.unreadCount, 99);
     });
 
     test('statuses[].read=false are counted when unread_count is absent', () {
-      final chat = ChatMapper.mapChat(
-        {
-          'id': 1,
-          'is_group': true,
-          'title': 'X',
-          'messages': [
-            {
-              'id': 1,
-              'sender_id': 20,
-              'type': 'TEXT',
-              'message': 'a',
-              'created_at': '2026-01-01T10:00:00Z',
-              'statuses': [
-                {'user_id': 10, 'read': false},
-              ],
-            },
-            {
-              'id': 2,
-              'sender_id': 20,
-              'type': 'TEXT',
-              'message': 'b',
-              'created_at': '2026-01-01T10:01:00Z',
-              'statuses': [
-                {'user_id': 10, 'is_read': false},
-              ],
-            },
-          ],
-        },
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'title': 'X',
+        'messages': [
+          {
+            'id': 1,
+            'sender_id': 20,
+            'type': 'TEXT',
+            'message': 'a',
+            'created_at': '2026-01-01T10:00:00Z',
+            'statuses': [
+              {'user_id': 10, 'read': false},
+            ],
+          },
+          {
+            'id': 2,
+            'sender_id': 20,
+            'type': 'TEXT',
+            'message': 'b',
+            'created_at': '2026-01-01T10:01:00Z',
+            'statuses': [
+              {'user_id': 10, 'is_read': false},
+            ],
+          },
+        ],
+      }, currentUserId: 10);
       expect(chat.unreadCount, 2);
     });
 
     test('unread_count is used when latest messages are missing', () {
-      final chat = ChatMapper.mapChat(
-        {
-          'id': 1,
-          'is_group': true,
-          'title': 'X',
-          'unread_count': 4,
-        },
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'title': 'X',
+        'unread_count': 4,
+      }, currentUserId: 10);
       expect(chat.unreadCount, 4);
     });
 
     test('explicit read=true is not counted as unread', () {
-      final chat = ChatMapper.mapChat(
-        {
-          'id': 1,
-          'is_group': true,
-          'title': 'X',
-          'messages': [
-            {
-              'id': 1,
-              'sender_id': 20,
-              'type': 'TEXT',
-              'message': 'hi',
-              'statuses': [
-                {'user_id': 10, 'read': true},
-              ],
-            },
-          ],
-        },
-        currentUserId: 10,
-      );
+      final chat = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'title': 'X',
+        'messages': [
+          {
+            'id': 1,
+            'sender_id': 20,
+            'type': 'TEXT',
+            'message': 'hi',
+            'statuses': [
+              {'user_id': 10, 'read': true},
+            ],
+          },
+        ],
+      }, currentUserId: 10);
       expect(chat.unreadCount, 0);
     });
 
     test('is_pinned is mapped onto the chat', () {
-      final pinned = ChatMapper.mapChat(
-        {'id': 1, 'is_group': true, 'title': 'X', 'is_pinned': true},
-        currentUserId: 10,
-      );
-      final unpinned = ChatMapper.mapChat(
-        {'id': 2, 'is_group': true, 'title': 'Y'},
-        currentUserId: 10,
-      );
+      final pinned = ChatMapper.mapChat({
+        'id': 1,
+        'is_group': true,
+        'title': 'X',
+        'is_pinned': true,
+      }, currentUserId: 10);
+      final unpinned = ChatMapper.mapChat({
+        'id': 2,
+        'is_group': true,
+        'title': 'Y',
+      }, currentUserId: 10);
       expect(pinned.isPinned, isTrue);
       expect(unpinned.isPinned, isFalse);
     });
   });
 
   group('Chat.compareForList', () {
-    test('pinned chats come before unpinned regardless of last message time', () {
-      final olderPinned = Chat(
-        id: '1',
-        title: 'Pinned',
-        isPinned: true,
-        lastMessageAt: DateTime(2026, 1, 1),
-      );
-      final newer = Chat(
-        id: '2',
-        title: 'Recent',
-        lastMessageAt: DateTime(2026, 9, 1),
-      );
-      final chats = [newer, olderPinned]..sort(Chat.compareForList);
-      expect(chats.first.id, '1');
-    });
+    test(
+      'pinned chats come before unpinned regardless of last message time',
+      () {
+        final olderPinned = Chat(
+          id: '1',
+          title: 'Pinned',
+          isPinned: true,
+          lastMessageAt: DateTime(2026, 1, 1),
+        );
+        final newer = Chat(
+          id: '2',
+          title: 'Recent',
+          lastMessageAt: DateTime(2026, 9, 1),
+        );
+        final chats = [newer, olderPinned]..sort(Chat.compareForList);
+        expect(chats.first.id, '1');
+      },
+    );
   });
 
   group('Chat.unreadBadgeLabel', () {
@@ -722,6 +720,54 @@ void main() {
         ],
       }, currentUserId: 1);
       expect(chat.lastMessageAt, DateTime.parse('2026-10-19T12:00:00Z'));
+    });
+  });
+
+  group('ChatMapper.mapMessage forwarding', () {
+    test('server-side forward keeps only the author, no duplicate preview', () {
+      // Автор оригинала уже встречался отправителем — имя берётся из кэша.
+      ChatMapper.mapMessage(
+        {
+          'id': 1,
+          'sender_id': 7,
+          'message': 'оригинал',
+          'sender': {'name': 'Анна', 'surname': 'Смирнова'},
+        },
+        chatId: '1',
+        currentUserId: 3,
+      );
+
+      final m = ChatMapper.mapMessage(
+        {
+          'id': 2,
+          'sender_id': 3,
+          'message': 'оригинал',
+          'type': 'TEXT',
+          'forwarded_from_user_id': 7,
+        },
+        chatId: '2',
+        currentUserId: 3,
+      );
+
+      expect(m.text, 'оригинал');
+      expect(m.forwardOf, isNotNull);
+      expect(m.forwardOf!.authorId, 7);
+      expect(m.forwardOf!.authorName, 'Смирнова Анна');
+      expect(m.forwardOf!.textPreview, isEmpty);
+    });
+
+    test('plain message has no forward block', () {
+      final m = ChatMapper.mapMessage(
+        {
+          'id': 3,
+          'sender_id': 3,
+          'message': 'привет',
+          'forwarded_from_user_id': null,
+        },
+        chatId: '2',
+        currentUserId: 3,
+      );
+      expect(m.forwardOf, isNull);
     });
   });
 }

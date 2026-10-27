@@ -10,12 +10,18 @@ class MessageReference {
     required this.authorName,
     required this.textPreview,
     this.sourceChatTitle,
+    this.authorId,
   });
 
   final String messageId;
   final String authorName;
+
+  /// Пусто, когда содержимое пересланного уже лежит в самом сообщении.
   final String textPreview;
   final String? sourceChatTitle;
+
+  /// Автор оригинала: по нему имя догружается, если в ответе его не было.
+  final int? authorId;
 }
 
 /// Текст, изображение, видео или файл.

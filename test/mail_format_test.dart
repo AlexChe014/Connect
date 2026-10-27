@@ -5,6 +5,31 @@ import 'package:connect/widgets/mail_glass.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('plain text with addresses in angle brackets stays plain text', () {
+    final message = MailMessage.fromJson({
+      'id': 1,
+      'subject': 'Re: FW: Внедрение',
+      'body_text':
+          'Привет!\nВилка от 500 000\n\n'
+          'From: Vladimir Zakharov <v.zakharov@x.ru>\n'
+          'Sent: Monday <https://x.ru/a>',
+      'body_html': null,
+    });
+    expect(message.htmlContent, isNull);
+    expect(MailBodyContent.rendersHtml(message), isFalse);
+    expect(message.plainBody, contains('Привет!\nВилка'));
+    expect(message.plainBody, contains('<v.zakharov@x.ru>'));
+  });
+
+  test('real html is still detected', () {
+    final message = MailMessage.fromJson({
+      'id': 1,
+      'subject': 'S',
+      'body_html': '<div>Текст<br></div>',
+    });
+    expect(MailBodyContent.rendersHtml(message), isTrue);
+  });
+
   test('all recipients and cc are kept, not only the first one', () {
     final message = MailMessage.fromJson({
       'id': 1,

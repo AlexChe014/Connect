@@ -523,8 +523,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   }
 
   Future<void> _openMessage(MailMessage message) async {
-    final wasUnread = !message.isRead;
-    final changed = await Navigator.of(context).push<bool>(
+    await Navigator.of(context).push<bool>(
       CupertinoPageRoute<bool>(
         builder: (context) => MailMessageScreen(
           connection: _connection,
@@ -546,18 +545,10 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         (m) => MailRepository.instance.withLocalReadState(connectionId, m),
       ),
     );
-    // MailMessageScreen помечает письмо прочитанным на сервере при открытии,
-    // но возвращает `true` только когда пользователь явно что-то изменил
-    // (удалил/переместил/ответил) — обычный возврат назад приходит с `null`.
-    // Перезагружаем список и в этом случае, чтобы сверить статус с сервером.
-    final readChanged =
-        MailRepository.instance
-            .withLocalReadState(connectionId, message)
-            .isRead !=
-        message.isRead;
-    if (changed == true || wasUnread || readChanged) {
-      await _loadMessages(keepLoaded: true);
-    }
+    // Перечитываем список и при обычном возврате назад (`changed == null`):
+    // в письме могли поменять прочитанность или флажок, а сервер мог
+    // подтянуть новые флаги из других клиентов.
+    await _loadMessages(keepLoaded: true);
   }
 
   Future<void> _showFolderPicker() async {
@@ -1397,6 +1388,16 @@ class _MessageTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (message.isFlagged) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            CupertinoIcons.flag_fill,
+                            size: 13,
+                            color: CupertinoColors.systemOrange.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        ],
                         if (message.hasAttachments) ...[
                           const SizedBox(width: 6),
                           Icon(

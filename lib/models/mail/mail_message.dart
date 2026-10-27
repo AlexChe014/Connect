@@ -63,6 +63,13 @@ class MailMessage {
   final String? bodyHtml;
   final DateTime? date;
   final bool isRead;
+
+  /// Флажок «важное» (IMAP `\Flagged`).
+  final bool isFlagged;
+
+  /// Письмо помечено `\Deleted` (удалено из корзины, сервер его не стирает
+  /// сразу) — в списках не показываем.
+  final bool isDeleted;
   final bool hasAttachments;
   final List<MailAttachment> attachments;
 
@@ -76,6 +83,8 @@ class MailMessage {
     this.bodyHtml,
     this.date,
     this.isRead = true,
+    this.isFlagged = false,
+    this.isDeleted = false,
     this.hasAttachments = false,
     this.attachments = const [],
   });
@@ -88,6 +97,8 @@ class MailMessage {
 
   MailMessage withRead(bool value) => copyWith(isRead: value);
 
+  MailMessage withFlagged(bool value) => copyWith(isFlagged: value);
+
   MailMessage copyWith({
     int? id,
     String? subject,
@@ -98,6 +109,8 @@ class MailMessage {
     String? bodyHtml,
     DateTime? date,
     bool? isRead,
+    bool? isFlagged,
+    bool? isDeleted,
     bool? hasAttachments,
     List<MailAttachment>? attachments,
   }) => MailMessage(
@@ -110,6 +123,8 @@ class MailMessage {
     bodyHtml: bodyHtml ?? this.bodyHtml,
     date: date ?? this.date,
     isRead: isRead ?? this.isRead,
+    isFlagged: isFlagged ?? this.isFlagged,
+    isDeleted: isDeleted ?? this.isDeleted,
     hasAttachments: hasAttachments ?? this.hasAttachments,
     attachments: attachments ?? this.attachments,
   );
@@ -253,6 +268,11 @@ class MailMessage {
         json['is_read'] ?? json['seen'] ?? json['read'] ?? json['is_seen'],
         defaultValue: true,
       ),
+      isFlagged: _parseBool(
+        json['is_flagged'] ?? json['flagged'],
+        defaultValue: false,
+      ),
+      isDeleted: _parseBool(json['is_deleted'], defaultValue: false),
       hasAttachments: hasAttachments,
       attachments: attachments,
     );
@@ -594,15 +614,24 @@ class MailMessage {
     return null;
   }
 
+  /// Только настоящие HTML-теги. Раньше тегом считалось любое `<слово…>`, и
+  /// текстовое письмо с адресом в цитате (`From: Имя <a@x.ru>`) или ссылкой
+  /// `<https://…>` показывалось как HTML: переносы строк склеивались, а
+  /// адреса пропадали как неизвестные теги.
+  static final _htmlTagPattern = RegExp(
+    r'<\s*/?\s*(html|head|body|div|p|br|span|table|thead|tbody|tr|td|th|'
+    r'a|img|font|b|i|u|s|em|strong|ul|ol|li|h[1-6]|blockquote|pre|hr|'
+    r'center|meta|style|title|o:p|section|article|header|footer)'
+    r'(\s[^>]*)?/?\s*>',
+    caseSensitive: false,
+  );
+
   static bool _looksLikeHtml(String value) {
     final trimmed = value.trimLeft();
     if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<!doctype')) {
       return true;
     }
-    return RegExp(
-      r'<\s*\/?[a-zA-Z][^>]*>',
-      caseSensitive: false,
-    ).hasMatch(value);
+    return _htmlTagPattern.hasMatch(value);
   }
 
   static String _htmlToPlainText(String html) {

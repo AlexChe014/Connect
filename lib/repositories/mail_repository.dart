@@ -625,6 +625,24 @@ class MailRepository {
     }
   }
 
+  // --- Flags ---
+
+  Future<void> setFlagged({
+    required int connectionId,
+    required int messageId,
+    required bool flagged,
+  }) async {
+    final decoded = await ApiClient.instance.post(
+      flagged
+          ? MailRoutes.markFlaggedUrl(connectionId, messageId)
+          : MailRoutes.markUnflaggedUrl(connectionId, messageId),
+    );
+    _requireDone(
+      decoded,
+      flagged ? 'Не удалось поставить флажок' : 'Не удалось снять флажок',
+    );
+  }
+
   // --- Delete ---
 
   /// Сервер переносит письмо в «Корзину», а из самой корзины удаляет
@@ -659,13 +677,21 @@ class MailRepository {
 
   // --- Attachments ---
 
+  /// По id вложения, если сервер его отдал, — однозначно и для файлов с
+  /// одинаковыми именами; иначе по имени.
   Future<Uint8List> downloadAttachment({
     required int connectionId,
     required int messageId,
-    required String filename,
+    required MailAttachment attachment,
   }) async {
     final bytes = await ApiClient.instance.downloadBytes(
-      MailRoutes.attachmentUrl(connectionId, messageId, filename),
+      attachment.id > 0
+          ? MailRoutes.attachmentByIdUrl(connectionId, messageId, attachment.id)
+          : MailRoutes.attachmentUrl(
+              connectionId,
+              messageId,
+              attachment.filename,
+            ),
     );
     return Uint8List.fromList(bytes);
   }
@@ -707,132 +733,72 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось установить ящик по умолчанию');
   }
 
-  /// Принимают ли `/mail/smtp/reply` и `/mail/smtp/forward` вложения
-  /// (multipart `attachments[]`, как `/mail/smtp/send`). Пока сервер их не
-  /// поддерживает, в ответе/пересылке кнопка «Прикрепить» скрыта — см.
-  /// docs/BACKEND_MAIL_FIXES.md, п. 10. Включить после выкладки бэкенда.
-  static const bool replyAttachmentsSupported = false;
-
+  /// Одно письмо всем адресатам с ящика [SendMailRequest.connectionId]:
+  /// сервер принимает список в `to` и сам шлёт с ящика из `connection_id`.
+  /// Раньше (старый бэкенд) клиент слал по письму каждому адресату и перед
+  /// отправкой переключал ящик по умолчанию.
   Future<void> sendMail(SendMailRequest request) async {
-    // The current API sends from the user's default SMTP connection.
-    // Select it explicitly; an atomic per-message sender needs backend support.
-    // Afterwards the previous default is restored: otherwise sending once
-    // from a second mailbox silently changed which one opens first.
-    int? previousDefault;
-    try {
-      final sendable = await getSendableConnections();
-      previousDefault = sendable.where((c) => c.isDefault).firstOrNull?.id;
-    } catch (_) {
-      // Without the list we cannot restore — sending still matters more.
-    }
-    final switched = previousDefault != request.connectionId;
-    if (switched) await setDefaultConnection(request.connectionId);
-    try {
-      // SendEmailRequest валидирует `to` как 'required|email' — один адрес,
-      // список через запятую сервер отклоняет с 422. Поэтому каждому
-      // получателю уходит своё письмо; копия и скрытая копия — только с
-      // первым, иначе каждый из них получил бы по экземпляру на каждого
-      // адресата. Убрать, когда сервер начнёт принимать список
-      // (docs/BACKEND_MAIL_FIXES.md, §19).
-      final recipients = MailMessage.splitAddresses(
-        request.to,
-      ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
-      var first = true;
-      for (final to in recipients.isEmpty ? [request.to] : recipients) {
-        await _postSend(
-          SendMailRequest(
-            connectionId: request.connectionId,
-            to: to,
-            subject: request.subject,
-            body: request.body,
-            cc: first ? request.cc : const [],
-            bcc: first ? request.bcc : const [],
-            attachments: request.attachments,
-          ),
-        );
-        first = false;
-      }
-    } finally {
-      if (switched && previousDefault != null) {
-        try {
-          await setDefaultConnection(previousDefault);
-        } catch (_) {}
-      }
-    }
-  }
-
-  Future<void> _postSend(SendMailRequest request) async {
-    final fields = <String, String>{
-      'to': request.to,
-      'subject': request.subject,
-      // Сервер с этим полем шлёт именно с этого ящика; переключение ящика
-      // по умолчанию в sendMail остаётся для старых версий бэкенда.
-      'connection_id': '${request.connectionId}',
-    };
     final body = request.body?.trim();
-    if (body != null && body.isNotEmpty) {
-      fields['body_text'] = body;
-    }
-    fields.addAll(_multipartList('cc', request.cc));
-    fields.addAll(_multipartList('bcc', request.bcc));
     final decoded = await ApiClient.instance.postMultipart(
       MailRoutes.smtpSendUrl,
-      fields: fields,
+      fields: {
+        ..._multipartList('to', _recipients(request.to)),
+        'subject': request.subject,
+        'connection_id': '${request.connectionId}',
+        if (body != null && body.isNotEmpty) 'body_text': body,
+        ..._multipartList('cc', request.cc),
+        ..._multipartList('bcc', request.bcc),
+      },
       files: [for (final a in request.attachments) a.toMultipart()],
     );
-    // Live API returns {success: true, data: true} on success (not an Email
-    // object, despite api-docs.json), so only the success flag can be checked.
     _unwrapMailData(decoded, 'Не удалось отправить письмо');
   }
 
-  // Поля — как в ReplyEmailRequest/ForwardEmailRequest бэкенда: текст
-  // ответа читается из `body_text`, текст пересылки — из `message`; поле
-  // `body` сервер молча отбрасывал, и письмо уходило пустым.
+  /// Ответ с ящика исходного письма: сервер ставит `In-Reply-To` и берёт
+  /// адресатов и тему из запроса («Ответить всем», ответ на своё письмо).
+  /// Текст — в `body_text`: поле `body` сервер отбрасывает.
   Future<void> replyMail(ReplyMailRequest request) async {
-    final fields = <String, String>{
-      'to': request.to,
-      'subject': request.subject,
-      if (request.body != null && request.body!.trim().isNotEmpty)
-        'body_text': request.body!,
-    };
-    final decoded = request.attachments.isNotEmpty
-        ? await ApiClient.instance.postMultipart(
-            MailRoutes.smtpReplyUrl(request.messageId),
-            fields: {
-              ...fields,
-              ..._multipartList('cc', request.cc),
-              ..._multipartList('bcc', request.bcc),
-            },
-            files: [for (final a in request.attachments) a.toMultipart()],
-          )
-        : await ApiClient.instance.post(
-            MailRoutes.smtpReplyUrl(request.messageId),
-            body: {
-              ...fields,
-              if (request.cc.isNotEmpty) 'cc': request.cc,
-              if (request.bcc.isNotEmpty) 'bcc': request.bcc,
-            },
-          );
+    final body = request.body?.trim();
+    final decoded = await ApiClient.instance.postMultipart(
+      MailRoutes.smtpReplyUrl(request.messageId),
+      fields: {
+        ..._multipartList('to', _recipients(request.to)),
+        'subject': request.subject,
+        if (body != null && body.isNotEmpty) 'body_text': request.body!,
+        ..._multipartList('cc', request.cc),
+        ..._multipartList('bcc', request.bcc),
+      },
+      files: [for (final a in request.attachments) a.toMultipart()],
+    );
     _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
 
-  /// Пересылка идёт через `/mail/smtp/send`, а не `/mail/smtp/forward`:
-  /// forward на бэкенде падает с 500 на каждом письме (вызывает `->format()`
-  /// у даты-строки из ImapService::getMessage и `->getName()` у массива
-  /// `from`) — см. docs/BACKEND_MAIL_FIXES.md, п. 15. Поэтому `body` — текст
-  /// пользователя вместе с цитатой исходного письма. Несколько адресатов
-  /// разбирает [sendMail].
-  Future<void> forwardMail(ForwardMailRequest request) => sendMail(
-    SendMailRequest(
-      connectionId: request.connectionId,
-      to: request.to,
-      subject: request.subject,
-      body: request.body,
-      cc: request.cc,
-      bcc: request.bcc,
-      attachments: request.attachments,
-    ),
-  );
+  /// Пересылка через `/mail/smtp/forward`: сервер сам ставит тему
+  /// «Fwd: …», добавляет исходное письмо с оформлением и прикладывает его
+  /// вложения. Поэтому `body` — только текст пользователя, без цитаты.
+  Future<void> forwardMail(ForwardMailRequest request) async {
+    final body = request.body?.trim();
+    final decoded = await ApiClient.instance.postMultipart(
+      MailRoutes.smtpForwardUrl(request.messageId),
+      fields: {
+        ..._multipartList('to', _recipients(request.to)),
+        'connection_id': '${request.connectionId}',
+        if (body != null && body.isNotEmpty) 'message': body,
+        ..._multipartList('cc', request.cc),
+        ..._multipartList('bcc', request.bcc),
+      },
+      files: [for (final a in request.attachments) a.toMultipart()],
+    );
+    _unwrapMailData(decoded, 'Не удалось переслать письмо');
+  }
+
+  /// `a@x, Имя <b@y>` → `[a@x, b@y]`.
+  static List<String> _recipients(String list) {
+    final result = MailMessage.splitAddresses(
+      list,
+    ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
+    return result.isEmpty ? [list.trim()] : result;
+  }
 
   /// Массив для multipart: `cc[0]=a@x`, `cc[1]=b@y` — Laravel собирает
   /// из этого `cc` как массив.
@@ -939,9 +905,12 @@ class MailRepository {
     String errorMessage,
   ) {
     final items = _unwrapMailList(decoded, errorMessage);
+    // Удалённые из корзины письма сервер помечает `\Deleted`, но из списка
+    // не убирает.
     return items
         .where((item) => MailPayloadUtils.isMessage(item))
         .map(MailMessage.fromJson)
+        .where((m) => !m.isDeleted)
         .where((m) => m.id > 0 || m.subject != '(без темы)')
         .toList();
   }
