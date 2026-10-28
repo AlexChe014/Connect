@@ -335,7 +335,7 @@ class MethodChannelJitsiMeet extends JitsiMeetPlatform {
         case "participantsInfoRetrieved":
           String participantsInfo = "";
           if (Platform.isAndroid) {
-            participantsInfo = data["participantsInfo"];
+            participantsInfo = data["participantsInfo"]?.toString() ?? "";
           } else if (Platform.isIOS) {
             participantsInfo = data.toString();
           }

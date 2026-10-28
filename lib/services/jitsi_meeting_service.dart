@@ -63,6 +63,7 @@ class JitsiMeetingService extends ChangeNotifier {
   bool _peerJoined = false;
   Timer? _peerJoinTimer;
   Timer? _peerRejoinTimer;
+  final List<Timer> _peerProbeTimers = [];
   Timer? _closeTimer;
 
   /// Свои сообщения чата, которые Jitsi ещё может вернуть эхом (в
@@ -142,6 +143,7 @@ class JitsiMeetingService extends ChangeNotifier {
       _peerJoined = false;
       _peerJoinTimer?.cancel();
       _peerRejoinTimer?.cancel();
+      _cancelPeerProbes();
       _closeTimer?.cancel();
       _chatEchoes.clear();
 
@@ -260,34 +262,20 @@ class JitsiMeetingService extends ChangeNotifier {
           c.startedAt ??= DateTime.now();
         }
         if (_endWhenLeave && !_peerJoined) _armPeerJoinWatchdog();
-        // Собеседник вошёл раньше нас — своё состояние ему ещё не отправлено.
-        _sendState();
+        if (!_peerJoined) _probeExistingParticipants();
         unawaited(_jitsi.refreshAudioRoute());
         notifyListeners();
       },
       participantJoined: (email, name, role, participantId) {
-        // Может прийти и до conferenceJoined: собеседник, уже сидящий в
-        // комнате, приходит раньше нашего входа. Раньше такие события
-        // отбрасывались, и тот, кто входил вторым, навсегда оставался в
-        // «Ожидании собеседника». Событие о себе отсекает плагин (isLocal).
-        final c = _conference;
-        final id = participantId?.trim() ?? '';
-        if (c == null || id.isEmpty) return;
-        final displayName = name?.trim() ?? '';
-        final participant = c.participants.putIfAbsent(
-          id,
-          () => CallParticipant(id: id, name: displayName),
-        );
-        if (displayName.isNotEmpty) participant.name = displayName;
-        if (c.title.isEmpty && displayName.isNotEmpty) c.title = displayName;
-
-        _peerJoined = true;
-        _peerJoinTimer?.cancel();
-        _peerRejoinTimer?.cancel();
-        if (c.phase != CallPhase.ending) c.phase = CallPhase.active;
-        c.startedAt ??= DateTime.now();
-        _sendState(to: id);
-        notifyListeners();
+        // Приходит только о тех, кто вошёл после нас: Jitsi SDK не сообщает
+        // об участниках, уже сидящих в комнате (см. _probeExistingParticipants).
+        // Событие о себе отсекает плагин (isLocal).
+        _onPeerJoined(participantId, name);
+      },
+      participantsInfoRetrieved: (info) {
+        for (final p in _parseParticipantsInfo(info)) {
+          _onPeerJoined(p.id, p.name);
+        }
       },
       participantLeft: (participantId) {
         final c = _conference;
@@ -527,6 +515,80 @@ class JitsiMeetingService extends ChangeNotifier {
     _closeNow();
   }
 
+  void _onPeerJoined(String? participantId, String? name) {
+    final c = _conference;
+    final id = participantId?.trim() ?? '';
+    if (c == null || id.isEmpty) return;
+    final displayName = name?.trim() ?? '';
+    final participant = c.participants.putIfAbsent(
+      id,
+      () => CallParticipant(id: id, name: displayName),
+    );
+    if (displayName.isNotEmpty) participant.name = displayName;
+    if (c.title.isEmpty && displayName.isNotEmpty) c.title = displayName;
+
+    final wasJoined = _peerJoined;
+    _peerJoined = true;
+    _peerJoinTimer?.cancel();
+    _peerRejoinTimer?.cancel();
+    _cancelPeerProbes();
+    if (c.phase != CallPhase.ending) c.phase = CallPhase.active;
+    c.startedAt ??= DateTime.now();
+    _sendState(to: id);
+    if (!wasJoined) {
+      AppLogger.d('Jitsi: peer $id in the room', name: 'meeting');
+    }
+    notifyListeners();
+  }
+
+  /// Тот, кто входит в комнату вторым (обычно звонящий: собеседник принял
+  /// вызов и вошёл раньше), не получает participantJoined — Jitsi SDK шлёт
+  /// его только о тех, кто вошёл после нас. Без этого звонящий висел в
+  /// «Ожидании собеседника», а через [CallConfig.peerJoinTimeout] звонок
+  /// обрывался как «не удался», хотя разговор шёл. Спрашиваем список
+  /// участников и шлём «привет» — собеседник отвечает своим состоянием.
+  void _probeExistingParticipants() {
+    _cancelPeerProbes();
+    for (final delay in const [0, 1500, 4000, 8000]) {
+      _peerProbeTimers.add(
+        Timer(Duration(milliseconds: delay), () {
+          if (_peerJoined || !_inConference) return;
+          unawaited(_jitsi.retrieveParticipantsInfo());
+          _sendState(hello: true);
+        }),
+      );
+    }
+  }
+
+  void _cancelPeerProbes() {
+    for (final t in _peerProbeTimers) {
+      t.cancel();
+    }
+    _peerProbeTimers.clear();
+  }
+
+  /// Ответ на retrieveParticipantsInfo — строка: на iOS `toString()` списка
+  /// словарей (`{isLocal: false, participantId: 1a2b…}`), на Android —
+  /// Java-`toString()` (`{isLocal=false, participantId=1a2b…}`).
+  static List<({String id, String? name})> _parseParticipantsInfo(
+    String info,
+  ) {
+    final result = <({String id, String? name})>[];
+    for (final m in RegExp(r'\{[^{}]*\}').allMatches(info)) {
+      final entry = m.group(0)!;
+      String? field(String key) => RegExp(
+        '\\b$key\\s*[:=]\\s*([^,}]*)',
+      ).firstMatch(entry)?.group(1)?.trim();
+      final isLocal = field('isLocal');
+      if (isLocal == 'true' || isLocal == '1') continue;
+      final id = field('participantId');
+      if (id == null || id.isEmpty || id == 'local' || id == 'null') continue;
+      final name = field('displayName') ?? field('name');
+      result.add((id: id, name: name == 'null' ? null : name));
+    }
+    return result;
+  }
+
   /// 1:1: собеседник принял звонок, но так и не вошёл в комнату (упало
   /// приложение, нет сети, отказ в правах) — не держим пользователя одного.
   void _armPeerJoinWatchdog() {
@@ -551,6 +613,7 @@ class JitsiMeetingService extends ChangeNotifier {
     _peerJoinTimer = null;
     _peerRejoinTimer?.cancel();
     _peerRejoinTimer = null;
+    _cancelPeerProbes();
     AppTitleBar.homeHidden.value = false;
     final callId = _activeCallId;
     final cb = _onLeave;
@@ -590,13 +653,17 @@ class JitsiMeetingService extends ChangeNotifier {
   }
 
   /// Сообщаем собеседникам (нашим приложениям) про свои камеру и микрофон.
-  void _sendState({String? to}) {
+  /// [hello] — мы только вошли и ещё не знаем, кто в комнате: рассылаем всем
+  /// и просим ответить (см. [_probeExistingParticipants]).
+  void _sendState({String? to, bool hello = false}) {
     final c = _conference;
-    if (c == null || !_inConference || c.participants.isEmpty) return;
+    if (c == null || !_inConference) return;
+    if (c.participants.isEmpty && !hello) return;
     final message = jsonEncode({
       'type': _stateMessageType,
       'video': !c.videoMuted,
       'audio': !c.audioMuted,
+      if (hello) 'hello': true,
     });
     unawaited(_jitsi.sendEndpointTextMessage(to: to, message: message));
   }
@@ -611,6 +678,9 @@ class JitsiMeetingService extends ChangeNotifier {
       return;
     }
     if (decoded is! Map || decoded['type'] != _stateMessageType) return;
+    // Сообщение от того, о ком не было participantJoined, — значит, он
+    // сидел в комнате до нашего входа.
+    if (!c.participants.containsKey(senderId)) _onPeerJoined(senderId, null);
     final participant = c.participants.putIfAbsent(
       senderId,
       () => CallParticipant(id: senderId, name: ''),
@@ -619,6 +689,7 @@ class JitsiMeetingService extends ChangeNotifier {
     final audio = decoded['audio'];
     if (video is bool) participant.videoOn = video;
     if (audio is bool) participant.audioOn = audio;
+    if (decoded['hello'] == true) _sendState(to: senderId);
     notifyListeners();
   }
 

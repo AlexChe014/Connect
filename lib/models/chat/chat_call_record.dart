@@ -34,9 +34,10 @@ class ChatCallRecord {
     );
   }
 
+  /// Есть длительность — разговор был, даже если сервер завершил звонок
+  /// с ошибкой (обрыв связи посреди разговора).
   bool get _wasAnswered =>
-      status == ChatCallStatus.accepted ||
-      (status == ChatCallStatus.ended && (durationSeconds ?? 0) > 0);
+      status == ChatCallStatus.accepted || (durationSeconds ?? 0) > 0;
 
   /// Звонок, который не состоялся (для подсветки красным).
   bool get isUnsuccessful => switch (status) {
@@ -44,20 +45,22 @@ class ChatCallRecord {
     ChatCallStatus.declined ||
     ChatCallStatus.cancelled ||
     ChatCallStatus.busy ||
-    ChatCallStatus.failed => true,
+    ChatCallStatus.failed ||
     ChatCallStatus.ended => !_wasAnswered,
     _ => false,
   };
 
   String title({required bool isOutgoing}) {
     if (!isUnsuccessful) {
+      // Поговорили, но звонок оборвался сам (сеть, сбой) — не красным,
+      // длительность во второй строке.
+      if (status == ChatCallStatus.failed) return 'Звонок прервался';
       return isOutgoing ? 'Исходящий звонок' : 'Входящий звонок';
     }
     return switch (status) {
       ChatCallStatus.declined => 'Отклонённый звонок',
       ChatCallStatus.busy when isOutgoing => 'Абонент занят',
       ChatCallStatus.cancelled when isOutgoing => 'Отменённый звонок',
-      ChatCallStatus.failed => 'Звонок не удался',
       _ when isOutgoing => 'Нет ответа',
       _ => 'Пропущенный звонок',
     };
