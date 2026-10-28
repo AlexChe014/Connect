@@ -26,6 +26,16 @@ class NewsRepository {
     return page;
   }
 
+  /// `GET /dashboard/news/all?q=…` — поиск по заголовку и тексту. Только
+  /// первая страница: `next_page_url` сервер отдаёт без `q`.
+  Future<List<NewsItem>> search(String q, {int perPage = 8}) async {
+    final decoded = await ApiClient.instance.get(
+      NewsRoutes.allUrl,
+      queryParameters: {'q': q, 'per_page': '$perPage'},
+    );
+    return _parsePage(decoded).data;
+  }
+
   /// Первая страница с прошлого раза; `null` — кэша нет или он не
   /// разбирается.
   Future<Paginated<NewsItem>?> cachedFirstPage() async {

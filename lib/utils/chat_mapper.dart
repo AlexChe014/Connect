@@ -473,11 +473,18 @@ class ChatMapper {
 
   static String? _readMessageText(Map<String, dynamic> json) {
     final message = (json['message'] as String?)?.trim();
-    if (message != null && message.isNotEmpty) return message;
+    if (message != null && message.isNotEmpty) {
+      return _nodeCiphertext.hasMatch(message) ? null : message;
+    }
     final text = (json['text'] as String?)?.trim();
     if (text != null && text.isNotEmpty) return text;
     return null;
   }
+
+  /// Шифротекст Node (`encryptForDB`: hex + `:` + authTag на 32 hex). Node
+  /// шифрует и подписи MEDIA, а Laravel считает MEDIA открытым текстом и
+  /// отдаёт такую строку как есть (и копирует её при пересылке).
+  static final _nodeCiphertext = RegExp(r'^[0-9a-f]+:[0-9a-f]{32}$');
 
   /// Стикер — любое сообщение `type == "STICKER"`; содержимое — код стикера.
   /// Набор кодов может расширяться раньше, чем приложение узнает о новых

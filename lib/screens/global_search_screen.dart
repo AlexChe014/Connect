@@ -8,9 +8,11 @@ import '../models/chat.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/bookings/user_booking.dart';
 import '../models/mail/mail_folder.dart';
+import '../models/news_item.dart';
 import '../models/staff_user.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/mail_repository.dart';
+import '../repositories/news_repository.dart';
 import '../repositories/users_repository.dart';
 import '../services/chat_service.dart';
 import '../services/disk_search_service.dart';
@@ -24,15 +26,16 @@ import 'chat_conversation_screen.dart';
 import 'disk_screen.dart';
 import 'employee_detail_screen.dart';
 import 'mail_message_screen.dart';
+import 'news_detail_screen.dart';
 
-/// Сквозной поиск по людям, чатам, встречам, почте и «Диску».
+/// Сквозной поиск по людям, чатам, встречам, почте, новостям и «Диску».
 ///
 /// Раньше поиск был размазан по отдельным экранам (почта, чаты, сотрудники,
 /// создание группы) — свой собственный `CupertinoSearchTextField` в каждом,
 /// без единой точки входа. Этот экран объединяет их: один запрос
-/// параллельно уходит в 5 независимых источников (чаты — локально по уже
+/// параллельно уходит в 6 независимых источников (чаты — локально по уже
 /// загруженному списку, люди — `/user/filter`, встречи — `/booking/filter`,
-/// почта — `/mail/search`,
+/// почта — `/mail/search`, новости — `/dashboard/news/all?q=`,
 /// «Диск» — best-effort обход дерева папок, т.к. у Nextcloud-модуля на
 /// бэкенде нет своего поиска).
 class GlobalSearchScreen extends StatefulWidget {
@@ -58,6 +61,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   bool _isLoadingMail = false;
   List<MailSearchResult> _mail = const [];
+
+  bool _isLoadingNews = false;
+  List<NewsItem> _news = const [];
 
   bool _isLoadingDisk = false;
   List<DiskSearchHit> _disk = const [];
@@ -85,6 +91,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       _isLoadingPeople ||
       _isLoadingBookings ||
       _isLoadingMail ||
+      _isLoadingNews ||
       _isLoadingDisk;
 
   bool get _hasAnyResult =>
@@ -92,6 +99,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       _people.isNotEmpty ||
       _bookings.isNotEmpty ||
       _mail.isNotEmpty ||
+      _news.isNotEmpty ||
       _disk.isNotEmpty;
 
   void _runSearch() {
@@ -106,11 +114,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       _people = const [];
       _bookings = const [];
       _mail = const [];
+      _news = const [];
       _disk = const [];
       _diskTruncated = false;
       _isLoadingPeople = runRemote;
       _isLoadingBookings = runRemote;
       _isLoadingMail = runRemote;
+      _isLoadingNews = runRemote;
       _isLoadingDisk = runRemote;
     });
 
@@ -165,6 +175,20 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           setState(() => _isLoadingMail = false);
         });
 
+    NewsRepository.instance
+        .search(q)
+        .then((items) {
+          if (!mounted || gen != _generation) return;
+          setState(() {
+            _news = items;
+            _isLoadingNews = false;
+          });
+        })
+        .catchError((_) {
+          if (!mounted || gen != _generation) return;
+          setState(() => _isLoadingNews = false);
+        });
+
     DiskSearchService.instance
         .search(q, isCancelled: () => gen != _generation)
         .then((outcome) {
@@ -209,7 +233,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                     child: CupertinoSearchTextField(
                       controller: _searchCtrl,
                       autofocus: true,
-                      placeholder: 'Люди, чаты, встречи, письма, файлы…',
+                      placeholder: 'Люди, чаты, встречи, письма, новости…',
                     ),
                   ),
                   CupertinoButton(
@@ -230,7 +254,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   Widget _buildBody(BuildContext context) {
     if (_query.isEmpty) {
       return const AppEmptyState(
-        message: 'Введите имя, чат, тему встречи или письма, файл',
+        message: 'Введите имя, чат, тему встречи или письма, новость, файл',
         icon: CupertinoIcons.search,
       );
     }
@@ -285,6 +309,19 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                     ),
                   ]
                 : _mail.map(_buildMailTile).toList(),
+          ),
+        if (_isLoadingNews || _news.isNotEmpty)
+          _buildSection(
+            context,
+            'Новости',
+            _isLoadingNews && _news.isEmpty
+                ? const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: AppLoadingIndicator(),
+                    ),
+                  ]
+                : _news.map(_buildNewsTile).toList(),
           ),
         if (_isLoadingDisk || _disk.isNotEmpty)
           _buildSection(context, 'Диск', [
@@ -508,6 +545,36 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           initialMessage: result.message,
           folders: folders,
         ),
+      ),
+    );
+  }
+
+  Widget _buildNewsTile(NewsItem news) {
+    final author = news.author?.fullName.trim() ?? '';
+    final snippet = news.content.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return CupertinoListTile(
+      leading: Icon(
+        CupertinoIcons.news,
+        color: CupertinoColors.systemIndigo.resolveFrom(context),
+      ),
+      title: Text(news.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: author.isEmpty && snippet.isEmpty
+          ? null
+          : Text(
+              author.isEmpty ? snippet : author,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+      trailing: Text(
+        DateFormat('d MMM', 'ru_RU').format(news.date.toLocal()),
+        style: TextStyle(
+          fontSize: 12,
+          color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+        ),
+      ),
+      onTap: () => Navigator.of(context).push(
+        CupertinoPageRoute(builder: (_) => NewsDetailScreen(news: news)),
       ),
     );
   }
