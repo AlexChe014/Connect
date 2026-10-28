@@ -259,7 +259,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen>
                       const SizedBox(height: 8),
                       Text(
                         _statusOverride ??
-                            (_ringing ? 'Идут гудки…' : 'Вызов…'),
+                            (_ringing ? 'Вызов…' : 'Соединение…'),
                         style: const TextStyle(
                           color: AppCallColors.textSecondary,
                           fontSize: 15,

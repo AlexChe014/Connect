@@ -11,6 +11,7 @@ class ConnectorSession {
     this.moderator = false,
     this.displayName,
     this.canJoin,
+    this.participantsCount,
   });
 
   /// Имя комнаты Jitsi (UUID), напр. `ffdc584e-b2f5-4e5d-a0ee-ee6eba4a24f1`.
@@ -34,6 +35,10 @@ class ConnectorSession {
   /// Из `GET /connector/{room}` — можно ли войти.
   final bool? canJoin;
 
+  /// Из `GET /connector/{room}` — сколько людей сейчас в комнате Jitsi.
+  /// `null` — сервер не сообщает (поле добавляется по BACKEND_TODO п. 51).
+  final int? participantsCount;
+
   factory ConnectorSession.fromJson(Map<String, dynamic> json) {
     return ConnectorSession(
       room: (json['room'] as String?)?.trim() ?? '',
@@ -53,6 +58,7 @@ class ConnectorSession {
           : (json['can_join'] == 1
                 ? true
                 : (json['can_join'] == 0 ? false : null)),
+      participantsCount: _parseInt(json['participants_count']),
     );
   }
 

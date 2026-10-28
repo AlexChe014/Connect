@@ -29,8 +29,11 @@ class ChatActiveCallBanner extends StatelessWidget {
         ? 'Входящий звонок от $peerName'
         : 'Вы начали звонок';
 
+    final online = call.participantsCount;
     final subtitle = isGroup
-        ? 'Присоединяйтесь — пока кто-то на линии'
+        ? (online != null && online > 0
+              ? 'Сейчас на линии: $online'
+              : 'Нажмите «Войти», чтобы присоединиться')
         : call.isIncoming
         ? 'Нажмите, чтобы ответить'
         : 'Собеседник может подключиться по ссылке в чате';

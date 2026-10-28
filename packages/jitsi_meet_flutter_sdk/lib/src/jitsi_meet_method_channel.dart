@@ -284,6 +284,11 @@ class MethodChannelJitsiMeet extends JitsiMeetPlatform {
           break;
 
         case "participantJoined":
+          // Событие о себе самом приложению не нужно — отсекаем по isLocal,
+          // а не по времени: участники, уже сидящие в комнате, приходят
+          // раньше conferenceJoined (XMPP MUC шлёт их presence первыми).
+          final isLocal = data["isLocal"];
+          if (isLocal != null && parseBool(isLocal)) break;
           _listener?.participantJoined?.call(
             data["email"],
             data["name"],

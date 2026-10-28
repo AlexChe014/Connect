@@ -480,7 +480,7 @@ class IncomingCallService {
   }
 
   /// CallKit показал входящий (и для FCM-пути, и для VoIP, показанного нативно).
-  /// Сообщаем серверу «ringing» — звонящий видит «Идут гудки…», а сервер
+  /// Сообщаем серверу «ringing» — звонящий видит «Вызов…», а сервер
   /// возвращает актуальный статус: устаревший VoIP-пуш сразу гасим.
   Future<void> _onIncomingShown(CallKitParams params) async {
     final callId = params.id;

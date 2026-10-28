@@ -75,7 +75,7 @@ class ChatCallService extends ChangeNotifier {
 
   bool isAccepted(String callId) => _acceptedCalls.contains(callId);
 
-  /// Собеседник получил звонок хотя бы на одном устройстве (для «Идут гудки…»).
+  /// Собеседник получил звонок хотя бы на одном устройстве (для «Вызов…»).
   bool isRinging(String callId) => _ringingCalls.contains(callId);
 
   bool isOutgoing(String callId) => _outgoingCallIds.contains(callId);
@@ -484,8 +484,10 @@ class ChatCallService extends ChangeNotifier {
       return;
     }
 
-    final stillActive = await _isRoomJoinable(candidate.room);
-    if (!stillActive) {
+    final state = await _roomState(candidate.room);
+    // Комната открыта, но в ней никого нет — плашка «войти» ни к чему:
+    // бэкенд не закрывает встречи, когда все вышли.
+    if (!state.joinable || state.participants == 0) {
       if (_activeByChat.containsKey(chatId)) {
         _activeByChat.remove(chatId);
         notifyListeners();
@@ -493,9 +495,11 @@ class ChatCallService extends ChangeNotifier {
       return;
     }
 
-    if (cached?.room != candidate.room ||
-        cached?.isIncoming != candidate.isIncoming) {
-      _setActiveCall(candidate);
+    final fresh = candidate.copyWith(participantsCount: state.participants);
+    if (cached?.room != fresh.room ||
+        cached?.isIncoming != fresh.isIncoming ||
+        cached?.participantsCount != fresh.participantsCount) {
+      _setActiveCall(fresh);
     }
   }
 
@@ -545,18 +549,22 @@ class ChatCallService extends ChangeNotifier {
     return match?.group(1)?.trim();
   }
 
-  Future<bool> _isRoomJoinable(String room) async {
+  /// Можно ли войти во встречу и сколько в ней людей (`null` — неизвестно).
+  /// Если проверить не удалось, плашку не прячем.
+  Future<({bool joinable, int? participants})> _roomState(String room) async {
     try {
       final meta = await ConnectorRepository.instance.getRoom(room);
-      if (meta.canJoin == false) return false;
-      return true;
+      return (
+        joinable: meta.canJoin != false,
+        participants: meta.participantsCount,
+      );
     } on ApiException catch (e) {
-      if (e.statusCode == 404) return false;
+      if (e.statusCode == 404) return (joinable: false, participants: null);
       AppLogger.d(
         'Не удалось проверить комнату $room: ${e.message}',
         name: 'chat.call',
       );
-      return true;
+      return (joinable: true, participants: null);
     } catch (e, st) {
       AppLogger.d(
         'Не удалось проверить комнату $room',
@@ -564,7 +572,7 @@ class ChatCallService extends ChangeNotifier {
         error: e,
         stackTrace: st,
       );
-      return true;
+      return (joinable: true, participants: null);
     }
   }
 

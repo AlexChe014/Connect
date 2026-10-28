@@ -254,12 +254,16 @@ class JitsiMeetingService extends ChangeNotifier {
           c.startedAt ??= DateTime.now();
         }
         if (_endWhenLeave && !_peerJoined) _armPeerJoinWatchdog();
+        // Собеседник вошёл раньше нас — своё состояние ему ещё не отправлено.
+        _sendState();
         unawaited(_jitsi.refreshAudioRoute());
         notifyListeners();
       },
       participantJoined: (email, name, role, participantId) {
-        // До conferenceJoined может прийти событие о нас самих.
-        if (!_inConference) return;
+        // Может прийти и до conferenceJoined: собеседник, уже сидящий в
+        // комнате, приходит раньше нашего входа. Раньше такие события
+        // отбрасывались, и тот, кто входил вторым, навсегда оставался в
+        // «Ожидании собеседника». Событие о себе отсекает плагин (isLocal).
         final c = _conference;
         final id = participantId?.trim() ?? '';
         if (c == null || id.isEmpty) return;

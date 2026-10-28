@@ -11,6 +11,7 @@ class ChatActiveCall {
     this.isIncoming = false,
     this.callId,
     this.isDirect = false,
+    this.participantsCount,
   });
 
   final String chatId;
@@ -27,6 +28,9 @@ class ChatActiveCall {
   /// Личный 1:1 звонок (без плашки и ссылки в чате).
   final bool isDirect;
 
+  /// Сколько людей сейчас во встрече; `null` — сервер не сообщает.
+  final int? participantsCount;
+
   ChatActiveCall copyWith({
     String? chatId,
     String? room,
@@ -35,6 +39,7 @@ class ChatActiveCall {
     bool? isIncoming,
     String? callId,
     bool? isDirect,
+    int? participantsCount,
   }) {
     return ChatActiveCall(
       chatId: chatId ?? this.chatId,
@@ -44,6 +49,7 @@ class ChatActiveCall {
       isIncoming: isIncoming ?? this.isIncoming,
       callId: callId ?? this.callId,
       isDirect: isDirect ?? this.isDirect,
+      participantsCount: participantsCount ?? this.participantsCount,
     );
   }
 }
