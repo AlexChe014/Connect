@@ -17,6 +17,7 @@ import 'package:connect/services/chat_file_downloads.dart';
 import 'package:connect/services/chat_realtime_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/chat_user_names.dart';
+import 'package:connect/services/chat_voice_recorder.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/chat_mapper.dart';
@@ -30,11 +31,13 @@ import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_download_ring.dart';
 import 'package:connect/widgets/chat_message_text.dart';
+import 'package:connect/widgets/chat_voice_message.dart';
 import 'package:connect/widgets/message_context_menu.dart';
 import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/material.dart'
     show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
@@ -128,6 +131,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   final Map<String, List<String>> _localReactions = {};
   final Map<String, GlobalKey> _messageKeys = {};
   bool _sendingAttachment = false;
+
+  final _voice = ChatVoiceRecorder.instance;
+  double _voiceDragDx = 0;
+
+  /// Палец ещё на микрофоне — если отпустили раньше, чем запись
+  /// стартовала (диалог доступа), её сразу отменяем.
+  bool _voicePressed = false;
+  bool _voiceCancelled = false;
 
   /// Выбранные сообщения; режим выбора включён, пока набор не пуст.
   final Set<String> _selectedIds = {};
@@ -580,8 +591,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                         ? const AppPageLoader()
                         : loadError != null && list.isEmpty
                         ? AppEmptyState(
-                            icon: CupertinoIcons.exclamationmark_triangle,
+                            icon: CupertinoIcons.cloud,
+                            title: 'Не удалось загрузить сообщения',
                             message: loadError,
+                            retryLabel: 'Попробовать снова',
                             onRetry: () => _service.loadMessages(
                               widget.chat.id,
                               force: true,
@@ -788,6 +801,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 : _openStickerPicker,
                             isEditing: _editingMessage != null,
                             isSendingAttachment: _sendingAttachment,
+                            onVoiceStart:
+                                _editingMessage != null || _sendingAttachment
+                                ? null
+                                : _startVoice,
+                            onVoiceMove: _moveVoice,
+                            onVoiceEnd: _endVoice,
+                            voiceDragDx: _voiceDragDx,
                           ),
                       ],
                     ),
@@ -813,6 +833,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (m.text != null && m.text!.trim().isNotEmpty) {
       return HtmlTextUtils.toPlainText(m.text!);
     }
+    final voice = ChatMapper.voiceSnippet(m);
+    if (voice != null) return voice;
     switch (m.attachmentKind) {
       case ChatAttachmentKind.image:
         return '📷 Фото';
@@ -982,6 +1004,74 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                 : 'Сообщение переслано')
           : (_service.lastActionError ?? 'Не удалось переслать сообщение'),
     );
+  }
+
+  Future<void> _startVoice() async {
+    if (_callService.isBusy) {
+      _showSnack('Во время звонка записать голосовое нельзя');
+      return;
+    }
+    _voicePressed = true;
+    _voiceCancelled = false;
+    _focus.unfocus();
+    final ok = await _voice.start();
+    if (!mounted) return;
+    if (!ok) {
+      _voicePressed = false;
+      _showSnack('Нет доступа к микрофону — разрешите его в Настройках');
+      return;
+    }
+    if (!_voicePressed) {
+      await _voice.cancel();
+      return;
+    }
+    AppHaptics.medium();
+  }
+
+  void _moveVoice(double dx) {
+    if (!_voice.isRecording || _voiceCancelled) return;
+    if (dx <= -_voiceCancelDistance) {
+      _voiceCancelled = true;
+      AppHaptics.medium();
+      unawaited(_voice.cancel());
+      setState(() => _voiceDragDx = 0);
+      return;
+    }
+    setState(() => _voiceDragDx = dx.clamp(-_voiceCancelDistance, 0));
+  }
+
+  Future<void> _endVoice() async {
+    _voicePressed = false;
+    if (_voiceDragDx != 0) setState(() => _voiceDragDx = 0);
+    if (_voiceCancelled || !_voice.isRecording) return;
+    final recording = await _voice.stop();
+    if (!mounted) return;
+    if (recording == null) {
+      _showSnack('Удерживайте микрофон, чтобы записать голосовое');
+      return;
+    }
+    setState(() => _sendingAttachment = true);
+    _scrollToBottom();
+    try {
+      await _service.sendMedia(
+        widget.chat.id,
+        files: [
+          (bytes: await recording.file.readAsBytes(), name: recording.fileName),
+        ],
+        replyTo: _replyingTo,
+      );
+      if (_replyingTo != null && mounted) setState(() => _replyingTo = null);
+    } catch (e) {
+      debugPrint('voice: send failed: $e');
+      if (mounted) {
+        _showSnack(
+          e is ApiException ? e.message : 'Не удалось отправить голосовое',
+        );
+      }
+    } finally {
+      unawaited(recording.file.delete().catchError((_) => recording.file));
+      if (mounted) setState(() => _sendingAttachment = false);
+    }
   }
 
   bool _isSelectable(ChatMessage m) => m.canForward;
@@ -1454,6 +1544,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
 /// Сколько фото из галереи уходит одним сообщением.
 const int _maxAttachmentsPerMessage = 10;
+
+/// Насколько увести палец влево, чтобы отменить запись голосового.
+const double _voiceCancelDistance = 110;
 
 /// Лимиты `POST /chat/messages/forward` (в Node — те же 100 и 20).
 const int _maxForwardMessages = 100;
@@ -2040,6 +2133,10 @@ class _Composer extends StatelessWidget {
     this.onStickers,
     this.isEditing = false,
     this.isSendingAttachment = false,
+    this.onVoiceStart,
+    this.onVoiceMove,
+    this.onVoiceEnd,
+    this.voiceDragDx = 0,
   });
 
   final TextEditingController textCtrl;
@@ -2052,9 +2149,26 @@ class _Composer extends StatelessWidget {
   final bool isEditing;
   final bool isSendingAttachment;
 
+  /// Запись голосового: нажали микрофон / ведут палец / отпустили.
+  /// `null` — микрофон скрыт (например, при правке).
+  final VoidCallback? onVoiceStart;
+  final ValueChanged<double>? onVoiceMove;
+  final VoidCallback? onVoiceEnd;
+
+  /// Насколько палец ушёл влево — подсказка «отмена» уезжает вслед.
+  final double voiceDragDx;
+
   @override
   Widget build(BuildContext context) {
     final iconColor = CupertinoColors.label.resolveFrom(context);
+    return ValueListenableBuilder<Duration?>(
+      valueListenable: ChatVoiceRecorder.instance.elapsed,
+      builder: (context, recorded, _) =>
+          _buildRow(context, iconColor, recorded),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, Color iconColor, Duration? recorded) {
     // Плавающие стеклянные капсулы над фоном чата, как в iOS 26.
     return SafeArea(
       top: false,
@@ -2063,65 +2177,81 @@ class _Composer extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            AppGlass(
-              borderRadius: BorderRadius.circular(20),
-              shadows: AppGlass.controlShadow,
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size.square(40),
-                onPressed: isSendingAttachment ? null : onAttach,
-                child: isSendingAttachment
-                    ? const CupertinoActivityIndicator(radius: 9)
-                    : Icon(
-                        CupertinoIcons.paperclip,
-                        size: 21,
-                        color: iconColor,
-                      ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: AppGlass(
+            if (recorded != null)
+              Expanded(
+                child: _VoiceRecordingIndicator(
+                  elapsed: recorded,
+                  dragDx: voiceDragDx,
+                ),
+              )
+            else ...[
+              AppGlass(
                 borderRadius: BorderRadius.circular(20),
                 shadows: AppGlass.controlShadow,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 40),
-                  child: CupertinoTextField(
-                    controller: textCtrl,
-                    focusNode: focus,
-                    minLines: 1,
-                    maxLines: 5,
-                    textCapitalization: TextCapitalization.sentences,
-                    placeholder: 'Сообщение',
-                    decoration: const BoxDecoration(),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    onSubmitted: (_) => onSend(),
-                    suffix: onStickers == null
-                        ? null
-                        : CupertinoButton(
-                            padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
-                            minimumSize: Size.zero,
-                            onPressed: onStickers,
-                            child: Icon(
-                              CupertinoIcons.smiley,
-                              size: 22,
-                              color: CupertinoColors.secondaryLabel.resolveFrom(
-                                context,
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size.square(40),
+                  onPressed: isSendingAttachment ? null : onAttach,
+                  child: isSendingAttachment
+                      ? const CupertinoActivityIndicator(radius: 9)
+                      : Icon(
+                          CupertinoIcons.paperclip,
+                          size: 21,
+                          color: iconColor,
+                        ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: AppGlass(
+                  borderRadius: BorderRadius.circular(20),
+                  shadows: AppGlass.controlShadow,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 40),
+                    child: CupertinoTextField(
+                      controller: textCtrl,
+                      focusNode: focus,
+                      minLines: 1,
+                      maxLines: 5,
+                      textCapitalization: TextCapitalization.sentences,
+                      placeholder: 'Сообщение',
+                      decoration: const BoxDecoration(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      onSubmitted: (_) => onSend(),
+                      suffix: onStickers == null
+                          ? null
+                          : CupertinoButton(
+                              padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+                              minimumSize: Size.zero,
+                              onPressed: onStickers,
+                              child: Icon(
+                                CupertinoIcons.smiley,
+                                size: 22,
+                                color: CupertinoColors.secondaryLabel
+                                    .resolveFrom(context),
                               ),
                             ),
-                          ),
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(width: 8),
             ListenableBuilder(
               listenable: textCtrl,
               builder: (context, _) {
                 final hasText = textCtrl.text.trim().isNotEmpty;
+                if ((!hasText || recorded != null) && onVoiceStart != null) {
+                  return _VoiceRecordButton(
+                    recording: recorded != null,
+                    onStart: onVoiceStart!,
+                    onMove: onVoiceMove,
+                    onEnd: onVoiceEnd,
+                  );
+                }
                 return GestureDetector(
                   onTap: hasText ? onSend : null,
                   child: AnimatedContainer(
@@ -2149,6 +2279,134 @@ class _Composer extends StatelessWidget {
                   ),
                 );
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Микрофон: удерживать — запись, отпустить — отправка, влево — отмена.
+class _VoiceRecordButton extends StatelessWidget {
+  const _VoiceRecordButton({
+    required this.recording,
+    required this.onStart,
+    this.onMove,
+    this.onEnd,
+  });
+
+  final bool recording;
+  final VoidCallback onStart;
+  final ValueChanged<double>? onMove;
+  final VoidCallback? onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawGestureDetector(
+      gestures: {
+        // Короткая задержка, как в Telegram: запись стартует почти сразу,
+        // но случайное касание при прокрутке её не запускает.
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(
+                duration: const Duration(milliseconds: 150),
+              ),
+              (r) {
+                r
+                  ..onLongPressStart = ((_) => onStart())
+                  ..onLongPressMoveUpdate = ((d) {
+                    onMove?.call(d.offsetFromOrigin.dx);
+                  })
+                  ..onLongPressEnd = ((_) => onEnd?.call())
+                  ..onLongPressCancel = (() => onEnd?.call());
+              },
+            ),
+      },
+      child: AnimatedScale(
+        scale: recording ? 1.35 : 1,
+        duration: const Duration(milliseconds: 160),
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: recording
+                ? CupertinoColors.systemRed.resolveFrom(context)
+                : AppColors.outgoingBubble,
+          ),
+          child: const Icon(
+            CupertinoIcons.mic_fill,
+            size: 20,
+            color: CupertinoColors.white,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Вместо поля ввода во время записи: точка, таймер и «‹ Отмена».
+class _VoiceRecordingIndicator extends StatelessWidget {
+  const _VoiceRecordingIndicator({required this.elapsed, required this.dragDx});
+
+  final Duration elapsed;
+  final double dragDx;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return AppGlass(
+      borderRadius: BorderRadius.circular(20),
+      shadows: AppGlass.controlShadow,
+      child: SizedBox(
+        height: 40,
+        child: Row(
+          children: [
+            const SizedBox(width: 14),
+            ValueListenableBuilder<double>(
+              valueListenable: ChatVoiceRecorder.instance.level,
+              builder: (context, level, _) => Container(
+                width: 10 + level * 4,
+                height: 10 + level * 4,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: CupertinoColors.systemRed.resolveFrom(context),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              ChatVoiceMessage.formatDuration(elapsed),
+              style: TextStyle(
+                fontSize: 15,
+                color: CupertinoColors.label.resolveFrom(context),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            Expanded(
+              child: Transform.translate(
+                offset: Offset(dragDx * 0.6, 0),
+                child: Opacity(
+                  opacity: (1 + dragDx / _voiceCancelDistance).clamp(0.2, 1),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        CupertinoIcons.chevron_left,
+                        size: 14,
+                        color: secondary,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Влево — отмена',
+                        style: TextStyle(fontSize: 14, color: secondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -2218,7 +2476,14 @@ class _MessageTile extends StatelessWidget {
       return [
         for (var i = 0; i < m.files.length; i++) ...[
           if (i > 0) const SizedBox(height: 4),
-          if (m.files[i].isImage)
+          if (m.files[i].voiceNote case final note?)
+            ChatVoiceMessage(
+              file: m.files[i],
+              note: note,
+              isOutgoing: m.isOutgoing,
+              onBubble: onBubble,
+            )
+          else if (m.files[i].isImage)
             _ChatImage(
               url: ChatRoutes.fileUrl(m.files[i].id),
               radius: radius,

@@ -7,6 +7,8 @@ import 'package:connect/models/call_conference.dart';
 import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
+import 'package:connect/services/chat_voice_player.dart';
+import 'package:connect/services/chat_voice_recorder.dart';
 import 'package:connect/utils/app_logger.dart';
 import 'package:connect/widgets/app_title_bar.dart';
 import 'package:flutter/foundation.dart';
@@ -94,6 +96,9 @@ class JitsiMeetingService extends ChangeNotifier {
     if (room.isEmpty) {
       throw ApiException(500, 'Сервер не вернул комнату конференции');
     }
+    // Звонку нужен микрофон и аудиосессия — голосовые замолкают.
+    unawaited(ChatVoiceRecorder.instance.cancel());
+    unawaited(ChatVoicePlayer.instance.stop());
 
     final server = session.jitsiServerUrl.trim().replaceAll(RegExp(r'/+$'), '');
     if (server.isEmpty) {
@@ -158,9 +163,10 @@ class JitsiMeetingService extends ChangeNotifier {
             ? JitsiMeetUserInfo(displayName: session.displayName)
             : null,
         configOverrides: {
-          // Камера и микрофон при входе в звонок всегда выключены — участник
-          // включает их сам, если нужно (и в 1:1, и в групповом звонке).
-          'startWithAudioMuted': true,
+          // Камера при входе всегда выключена. Микрофон в 1:1 сразу включён,
+          // как в обычном звонке: трубку берут, чтобы говорить. Во встрече
+          // выключен, чтобы не шуметь в общий эфир — участник включит сам.
+          'startWithAudioMuted': !endWhenLeave,
           'startWithVideoMuted': true,
           'disableInviteFunctions': true,
           'hideConferenceSubject': true,
@@ -230,7 +236,7 @@ class JitsiMeetingService extends ChangeNotifier {
             (endWhenLeave ? '' : 'Видеовстреча'),
         avatarUrl: avatarUrl,
         isDirect: endWhenLeave,
-      );
+      )..audioMuted = !endWhenLeave;
       notifyListeners();
     } catch (e) {
       AppTitleBar.homeHidden.value = false;

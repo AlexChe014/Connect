@@ -573,9 +573,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           color: CupertinoColors.tertiaryLabel.resolveFrom(context),
         ),
       ),
-      onTap: () => Navigator.of(context).push(
-        CupertinoPageRoute(builder: (_) => NewsDetailScreen(news: news)),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(CupertinoPageRoute(builder: (_) => NewsDetailScreen(news: news))),
     );
   }
 

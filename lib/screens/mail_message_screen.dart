@@ -86,7 +86,6 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     _loadMessage();
   }
 
-
   /// Письмо, открытое раньше, — сразу из кэша, пока идёт запрос.
   Future<void> _showCachedMessage() async {
     final cached = await MailRepository.instance.cachedMessage(

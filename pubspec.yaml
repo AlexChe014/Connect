@@ -69,6 +69,11 @@ dependencies:
   local_auth: ^3.0.2
   local_auth_android: ^2.3.0
   local_auth_darwin: ^2.0.5
+  media_kit: ^1.2.6
+  media_kit_libs_audio: ^1.0.7
+  record: ^7.1.2
+  http_parser: ^4.1.2
+  audio_session: ^0.2.4
 
 dev_dependencies:
   flutter_test:

@@ -1,3 +1,4 @@
+import 'package:connect/utils/chat_voice_note.dart';
 import 'package:flutter/foundation.dart';
 
 /// Файл чата (`POST /api/chat/files`, поле `files` у сообщения).
@@ -37,7 +38,14 @@ class ChatFile {
     ]);
   }
 
+  /// Голосовое сообщение портала (`voice-<сек>-<волна>.webm` и т.п.);
+  /// `null` — обычный файл.
+  ChatVoiceNote? get voiceNote => ChatVoiceNote.fromFileName(originalName);
+
+  bool get isVoice => voiceNote != null;
+
   bool get isVideo {
+    if (mimeType.toLowerCase().startsWith('audio/') || isVoice) return false;
     if (mimeType.toLowerCase().startsWith('video/')) return true;
     return _extensionIs(originalName, const [
       'mp4',

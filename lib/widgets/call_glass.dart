@@ -684,10 +684,7 @@ class _SlashedIconPainter extends CustomPainter {
     final a = Offset(s * 0.12, s * 0.08);
     final b = Offset(s * 0.88, s * 0.92);
     canvas.saveLayer(Offset.zero & size, Paint());
-    glyph.paint(
-      canvas,
-      Offset((s - glyph.width) / 2, (s - glyph.height) / 2),
-    );
+    glyph.paint(canvas, Offset((s - glyph.width) / 2, (s - glyph.height) / 2));
     canvas.drawLine(
       a,
       b,

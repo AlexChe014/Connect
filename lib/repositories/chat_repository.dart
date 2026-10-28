@@ -11,7 +11,9 @@ import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
 import 'package:connect/utils/chat_mapper.dart';
+import 'package:connect/utils/chat_voice_note.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 class ChatRepository {
   ChatRepository._();
@@ -272,9 +274,19 @@ class ChatRepository {
       throw ApiException(400, 'Файл больше 10 МБ');
     }
 
+    // Laravel сохраняет mime клиента: без него голосовое станет
+    // `application/octet-stream`, и портал не покажет плеер.
+    final voiceMime = ChatVoiceNote.mimeForFileName(filename);
     final decoded = await ApiClient.instance.postMultipart(
       ChatRoutes.filesUrl(chatId),
-      files: [http.MultipartFile.fromBytes('file', bytes, filename: filename)],
+      files: [
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+          contentType: voiceMime == null ? null : MediaType.parse(voiceMime),
+        ),
+      ],
     );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,

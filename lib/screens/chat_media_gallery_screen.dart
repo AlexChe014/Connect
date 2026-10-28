@@ -108,9 +108,8 @@ class _MediaViewerState extends State<MediaViewer> {
                 // Пока файл качается, кнопка показывает прогресс и по тапу
                 // останавливает скачивание.
                 onPressed: _sharing
-                    ? () => ChatFileDownloads.instance.cancel(
-                        _currentFile()!.id,
-                      )
+                    ? () =>
+                          ChatFileDownloads.instance.cancel(_currentFile()!.id)
                     : _shareCurrent,
                 child: _sharing
                     ? ChatDownloadRing(

@@ -19,6 +19,8 @@ import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_cache_service.dart';
 import 'package:connect/services/chat_draft_service.dart';
 import 'package:connect/services/chat_file_downloads.dart';
+import 'package:connect/services/chat_voice_player.dart';
+import 'package:connect/services/chat_voice_recorder.dart';
 import 'package:connect/services/chat_preferences_service.dart';
 import 'package:connect/services/chat_user_names.dart';
 import 'package:connect/utils/chat_mapper.dart';
@@ -223,6 +225,8 @@ class ChatService extends ChangeNotifier {
     _chatsReady = false;
     unawaited(ChatCacheService.instance.clear());
     unawaited(ChatFileDownloads.instance.reset());
+    unawaited(ChatVoiceRecorder.instance.cancel());
+    unawaited(ChatVoicePlayer.instance.reset());
     _activeChatId = null;
     _contacts = const [];
     _isLoading = true;

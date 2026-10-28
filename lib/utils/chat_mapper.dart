@@ -360,12 +360,25 @@ class ChatMapper {
 
   static const stickerSnippet = 'Стикер';
 
+  /// «🎤 Голосовое, 0:12» или `null`, если голосового в сообщении нет.
+  static String? voiceSnippet(ChatMessage m) {
+    for (final f in m.files) {
+      final note = f.voiceNote;
+      if (note == null) continue;
+      final s = note.duration.inSeconds;
+      return '🎤 Голосовое, ${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+    }
+    return null;
+  }
+
   static String snippet(ChatMessage m) {
     if (m.isSticker) return stickerSnippet;
     if (m.isCall) return m.call!.snippet(isOutgoing: m.isOutgoing);
     if (m.text != null && m.text!.trim().isNotEmpty) {
       return HtmlTextUtils.toPlainText(m.text!);
     }
+    final voice = voiceSnippet(m);
+    if (voice != null) return voice;
     switch (m.attachmentKind) {
       case ChatAttachmentKind.image:
         return '📷 Фото';
