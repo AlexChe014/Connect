@@ -8,6 +8,7 @@ class AppEmptyState extends StatelessWidget {
   const AppEmptyState({
     super.key,
     required this.message,
+    this.title,
     this.icon = CupertinoIcons.tray,
     this.onRetry,
     this.retryLabel = 'Повторить',
@@ -15,6 +16,9 @@ class AppEmptyState extends StatelessWidget {
   });
 
   final String message;
+
+  /// Крупная строка над [message] — для ошибок («Не удалось загрузить…»).
+  final String? title;
   final IconData icon;
   final VoidCallback? onRetry;
   final String retryLabel;
@@ -27,6 +31,7 @@ class AppEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = _AppEmptyStateContent(
       message: message,
+      title: title,
       icon: icon,
       onRetry: onRetry,
       retryLabel: retryLabel,
@@ -61,12 +66,16 @@ class SliverAppEmptyState extends StatelessWidget {
   const SliverAppEmptyState({
     super.key,
     required this.message,
+    this.title,
     this.icon = CupertinoIcons.tray,
     this.onRetry,
     this.retryLabel = 'Повторить',
   });
 
   final String message;
+
+  /// Крупная строка над [message] — для ошибок («Не удалось загрузить…»).
+  final String? title;
   final IconData icon;
   final VoidCallback? onRetry;
   final String retryLabel;
@@ -83,6 +92,7 @@ class SliverAppEmptyState extends StatelessWidget {
           child: Center(
             child: _AppEmptyStateContent(
               message: message,
+              title: title,
               icon: icon,
               onRetry: onRetry,
               retryLabel: retryLabel,
@@ -97,12 +107,16 @@ class SliverAppEmptyState extends StatelessWidget {
 class _AppEmptyStateContent extends StatelessWidget {
   const _AppEmptyStateContent({
     required this.message,
+    this.title,
     required this.icon,
     this.onRetry,
     required this.retryLabel,
   });
 
   final String message;
+
+  /// Крупная строка над [message] — для ошибок («Не удалось загрузить…»).
+  final String? title;
   final IconData icon;
   final VoidCallback? onRetry;
   final String retryLabel;
@@ -120,6 +134,18 @@ class _AppEmptyStateContent extends StatelessWidget {
             color: CupertinoColors.tertiaryLabel.resolveFrom(context),
           ),
           const SizedBox(height: AppSpacing.md),
+          if (title != null) ...[
+            Text(
+              title!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+          ],
           Text(
             message,
             textAlign: TextAlign.center,

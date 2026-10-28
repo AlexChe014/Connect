@@ -418,7 +418,8 @@ class ApiClient {
       name: 'network.http',
     );
 
-    String message = 'Ошибка запроса (${response.statusCode})';
+    final fallbackMessage = _friendlyStatusMessage(response.statusCode);
+    String message = fallbackMessage;
     if (decoded is Map<String, dynamic>) {
       final data = decoded['data'];
       final nestedError = data is Map ? data['error']?.toString() : null;
@@ -428,6 +429,11 @@ class ApiClient {
           (decoded['errors'] as List?)?.join(', ') ??
           nestedError ??
           message;
+    }
+    // Сбой сервера: его текст («Server Error», «SQLSTATE…», HTML прокси)
+    // пользователю ничего не скажет. Русские сообщения бэкенда оставляем.
+    if (response.statusCode >= 500 && !_cyrillic.hasMatch(message)) {
+      message = fallbackMessage;
     }
 
     _noteResponseAuthOutcome(
@@ -439,14 +445,30 @@ class ApiClient {
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw ApiException(
         response.statusCode,
-        message.isNotEmpty &&
-                message != 'Ошибка запроса (${response.statusCode})'
+        message.isNotEmpty && message != fallbackMessage
             ? message
             : 'Ошибка авторизации. Войдите в аккаунт снова.',
       );
     }
 
     throw ApiException(response.statusCode, message);
+  }
+
+  static final _cyrillic = RegExp('[а-яА-ЯёЁ]');
+
+  /// Текст ошибки, когда сервер сам ничего внятного не прислал.
+  static String _friendlyStatusMessage(int statusCode) {
+    if (statusCode == 502 || statusCode == 503 || statusCode == 504) {
+      return 'Сервер временно недоступен. Попробуйте чуть позже.';
+    }
+    if (statusCode >= 500) {
+      return 'На сервере что-то пошло не так. Попробуйте чуть позже.';
+    }
+    if (statusCode == 404) return 'Не найдено — возможно, это уже удалили.';
+    if (statusCode == 429) {
+      return 'Слишком много запросов. Подождите немного и попробуйте снова.';
+    }
+    return 'Не удалось выполнить запрос. Попробуйте ещё раз.';
   }
 
   void _noteResponseAuthOutcome({
