@@ -48,6 +48,27 @@ class CallParticipant {
   bool? audioOn;
 }
 
+/// Сообщение чата встречи (Jitsi хранит его только на время звонка).
+class CallChatMessage {
+  CallChatMessage({
+    required this.senderId,
+    required this.senderName,
+    required this.text,
+    required this.time,
+    this.isOwn = false,
+    this.isPrivate = false,
+  });
+
+  final String senderId;
+  final String senderName;
+  final String text;
+  final DateTime time;
+  final bool isOwn;
+
+  /// Личное сообщение только нам (отправлено из веб-портала).
+  final bool isPrivate;
+}
+
 class CallConference {
   CallConference({
     required this.options,
@@ -78,6 +99,7 @@ class CallConference {
   bool screenSharing = false;
   bool chatOpen = false;
   int unreadChat = 0;
+  final List<CallChatMessage> chatMessages = [];
   bool minimized = false;
 
   CallAudioRoute audioRoute = CallAudioRoute.unknown;
@@ -91,7 +113,11 @@ class CallConference {
   /// 1:1 без видео с обеих сторон — вместо пустого кадра Jitsi показываем
   /// свой экран с аватаром. Пока собеседник не вошёл — тоже он.
   bool get showsAudioStage {
-    if (!isDirect || !videoMuted || screenSharing) return false;
+    if (!isDirect) return false;
+    // Завершение: Jitsi уже вышел и рисует свою заглушку с силуэтом —
+    // прячем её за аватаром собеседника и «Звонок завершён».
+    if (phase == CallPhase.ending) return true;
+    if (!videoMuted || screenSharing) return false;
     final peer = this.peer;
     if (peer == null) return true;
     return peer.videoOn == false;

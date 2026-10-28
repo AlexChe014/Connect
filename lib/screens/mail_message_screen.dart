@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart'
     show ScaffoldMessenger, SelectableText, SnackBar;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -13,20 +14,25 @@ import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
+import '../models/staff_user.dart';
 import '../repositories/mail_repository.dart';
+import '../repositories/users_repository.dart';
+import '../services/api_client.dart';
 import '../services/crash_reporting_service.dart';
+import '../services/mail_contacts_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_title_bar.dart';
-import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/mail_body_content.dart';
 import '../utils/file_size_format.dart';
 import '../widgets/mail_glass.dart';
+import '../widgets/mail_recipient_field.dart';
 import 'compose_mail_screen.dart';
+import 'employee_detail_screen.dart';
 
 class MailMessageScreen extends StatefulWidget {
   const MailMessageScreen({
@@ -63,26 +69,57 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
   bool _isDeleting = false;
   bool _showDetails = false;
 
+  /// Отметка «прочитано» уже отправлена (или письмо вручную вернули в
+  /// непрочитанные) — второй раз автоматически не помечаем.
+  bool _readRequested = false;
+  bool _keptUnread = false;
+
+  /// Сотрудник по адресу — для «Карточки сотрудника» в меню адреса.
+  final Map<String, Future<StaffUser?>> _staffByEmail = {};
+
   /// В тёмной теме письмо показывается в исходных цветах, на белом.
   bool _originalMailColors = false;
-  VoidCallback? _releaseHomeSuppress;
 
   @override
   void initState() {
     super.initState();
-    // Плавающая кнопка «Домой» легла бы поверх «Удалить» в нижней панели.
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     _loadMessage();
   }
 
-  @override
-  void dispose() {
-    _releaseHomeSuppress?.call();
-    super.dispose();
+
+  /// Письмо, открытое раньше, — сразу из кэша, пока идёт запрос.
+  Future<void> _showCachedMessage() async {
+    final cached = await MailRepository.instance.cachedMessage(
+      connectionId: widget.connection.id,
+      messageId: widget.messageId,
+    );
+    final trusted = cached == null ? null : _withListReadState(cached);
+    _markReadOnOpen(trusted);
+    if (trusted == null || !mounted || _message != null) return;
+    if (!trusted.hasBody) return;
+    setState(() {
+      _message = trusted;
+      _isLoading = false;
+    });
+  }
+
+  /// Статус прочтения берём из списка: `get/message` сервер собирает прямо
+  /// с IMAP и из-за ошибки в проверке флага всегда отдаёт `is_seen: false`
+  /// (BACKEND_TODO п. 15). Иначе каждое открытие уже прочитанного письма
+  /// снова отправляло «прочитано» в ящик.
+  MailMessage _withListReadState(MailMessage message) {
+    final initial = widget.initialMessage;
+    if (initial == null) return message;
+    return MailRepository.instance.withLocalReadState(
+      widget.connection.id,
+      message.withRead(initial.isRead),
+    );
   }
 
   Future<void> _loadMessage() async {
     setState(() => _isLoading = true);
+    _markReadOnOpen(widget.initialMessage);
+    unawaited(_showCachedMessage());
     try {
       final message = await MailRepository.instance.getMessage(
         connectionId: widget.connection.id,
@@ -107,22 +144,31 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
             )
           : message;
 
+      // До проверки mounted: письмо из кэша читают сразу и успевают уйти
+      // назад раньше, чем пришёл ответ, — отметка всё равно должна уйти.
+      resolved = _withListReadState(resolved);
+      _markReadOnOpen(resolved);
+      if (resolved.from.isNotEmpty && !_isOwn(resolved.from)) {
+        unawaited(
+          MailContactsService.instance.rememberReceived(
+            MailRecipient.parse(resolved.from),
+          ),
+        );
+      }
       if (!mounted) return;
       setState(() {
-        _message = resolved;
+        _message = _readRequested && !_keptUnread
+            ? resolved.withRead(true)
+            : resolved;
         _isLoading = false;
       });
-
-      // Открытие письма — это фактическое прочтение: getMessage() сам по себе
-      // ничего не помечает на сервере, поэтому раньше письмо оставалось
-      // непрочитанным (и точка-индикатор в списке не пропадала), пока
-      // пользователь вручную не свайпал «прочитано». Помечаем в фоне, не
-      // задерживая открытие письма вторым round-trip'ом.
-      if (!resolved.isRead) {
-        unawaited(_markReadInBackground(resolved));
-      }
     } catch (_) {
       if (!mounted) return;
+      // Без сети письмо уже показано из кэша.
+      if (_message != null) {
+        setState(() => _isLoading = false);
+        return;
+      }
       final fallback = widget.initialMessage;
       setState(() {
         _message = fallback;
@@ -140,20 +186,184 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     }
   }
 
-  Future<void> _markReadInBackground(MailMessage current) async {
+  /// Открытие письма — это прочтение: getMessage() сам по себе ничего не
+  /// помечает на сервере. Помечаем сразу, как узнали, что письмо
+  /// непрочитанное (из списка, кэша или ответа), не дожидаясь загрузки
+  /// текста; статус в списке держит MailRepository до ответа сервера.
+  void _markReadOnOpen(MailMessage? message) {
+    if (message == null || message.isRead || _readRequested) return;
+    _readRequested = true;
+    unawaited(_markReadInBackground());
+  }
+
+  Future<void> _markReadInBackground() async {
     try {
       await MailRepository.instance.markRead(
         connectionId: widget.connection.id,
         messageId: widget.messageId,
       );
       MailUnreadService.instance.invalidate();
-      if (!mounted || _message == null || _message!.isRead) return;
-      setState(() {
-        _message = current.withRead(true);
-      });
     } catch (_) {
-      // Не удалось отметить прочитанным — письмо всё равно открыто,
-      // просто точка-индикатор в списке останется до следующей попытки.
+      // Не удалось — письмо всё равно открыто, точка-индикатор в списке
+      // останется до следующей попытки.
+      return;
+    }
+    final current = _message;
+    if (!mounted || _keptUnread || current == null || current.isRead) return;
+    setState(() => _message = current.withRead(true));
+  }
+
+  /// «Непрочитанное» — вернуть письмо в непрочитанные, чтобы не забыть
+  /// к нему вернуться (и обратно).
+  Future<void> _toggleRead() async {
+    final current = _message;
+    if (current == null) return;
+    final read = !current.isRead;
+    _readRequested = true;
+    _keptUnread = !read;
+    setState(() => _message = current.withRead(read));
+    try {
+      final repo = MailRepository.instance;
+      await (read
+          ? repo.markRead(
+              connectionId: widget.connection.id,
+              messageId: widget.messageId,
+            )
+          : repo.markUnread(
+              connectionId: widget.connection.id,
+              messageId: widget.messageId,
+            ));
+      MailUnreadService.instance.invalidate();
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            read
+                ? 'Письмо отмечено прочитанным'
+                : 'Письмо отмечено непрочитанным',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _keptUnread = false;
+      setState(() => _message = _message?.withRead(current.isRead));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить статус письма')),
+      );
+    }
+  }
+
+  /// Флажок «важное» — ставится на самом ящике (IMAP `\Flagged`), виден
+  /// и в Outlook/веб-почте.
+  Future<void> _toggleFlag() async {
+    final current = _message;
+    if (current == null) return;
+    final flagged = !current.isFlagged;
+    setState(() => _message = current.withFlagged(flagged));
+    try {
+      await MailRepository.instance.setFlagged(
+        connectionId: widget.connection.id,
+        messageId: widget.messageId,
+        flagged: flagged,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _message = _message?.withFlagged(current.isFlagged));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            e is ApiException ? e.message : 'Не удалось изменить флажок',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<StaffUser?> _findStaff(String email) =>
+      _staffByEmail.putIfAbsent(email.toLowerCase(), () async {
+        try {
+          final page = await UsersRepository.instance.getPage(q: email);
+          return page.data
+              .where(
+                (u) =>
+                    (u.email ?? '').trim().toLowerCase() == email.toLowerCase(),
+              )
+              .firstOrNull;
+        } catch (_) {
+          return null;
+        }
+      });
+
+  /// Меню адреса в шапке письма: написать, открыть карточку сотрудника,
+  /// скопировать.
+  Future<void> _showAddressActions(String address) async {
+    final recipient = MailRecipient.parse(address);
+    if (recipient.email.isEmpty) return;
+    final own = _isOwn(address);
+    final staffFuture = _findStaff(recipient.email);
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (sheetContext) => FutureBuilder<StaffUser?>(
+        future: staffFuture,
+        builder: (context, snapshot) => CupertinoActionSheet(
+          title: recipient.name.isEmpty ? null : Text(recipient.name),
+          message: Text(recipient.email),
+          actions: [
+            if (!own)
+              CupertinoActionSheetAction(
+                onPressed: () => Navigator.pop(sheetContext, 'write'),
+                child: const Text('Написать письмо'),
+              ),
+            if (snapshot.data != null)
+              CupertinoActionSheetAction(
+                onPressed: () => Navigator.pop(sheetContext, 'card'),
+                child: const Text('Карточка сотрудника'),
+              ),
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(sheetContext, 'copy'),
+              child: const Text('Скопировать адрес'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetContext),
+            child: const Text('Отмена'),
+          ),
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    switch (choice) {
+      case 'write':
+        final staff = await staffFuture;
+        if (!mounted) return;
+        final to = staff != null ? MailRecipient.fromStaff(staff) : recipient;
+        if (widget.connection.canSend) {
+          await Navigator.of(context).push<bool>(
+            CupertinoPageRoute<bool>(
+              builder: (context) => ComposeMailScreen(
+                connection: widget.connection,
+                initialTo: [to],
+              ),
+            ),
+          );
+        } else {
+          await ComposeMailScreen.openNew(context, to: to);
+        }
+      case 'card':
+        final staff = await staffFuture;
+        if (staff == null || !mounted) return;
+        await Navigator.of(context).push(
+          CupertinoPageRoute<void>(
+            builder: (context) => EmployeeDetailScreen(user: staff),
+          ),
+        );
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: recipient.email));
+        if (!mounted) return;
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('Адрес скопирован')));
     }
   }
 
@@ -162,8 +372,12 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('Удалить письмо?'),
-        content: const Text(
-          'Письмо будет удалено без возможности восстановления.',
+        // Сервер переносит письмо в «Корзину» и удаляет окончательно,
+        // только если оно уже там.
+        content: Text(
+          widget.currentFolder?.isTrash == true
+              ? 'Письмо будет удалено без возможности восстановления.'
+              : 'Письмо будет перемещено в корзину.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -268,7 +482,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       final bytes = await MailRepository.instance.downloadAttachment(
         connectionId: widget.connection.id,
         messageId: widget.messageId,
-        filename: attachment.filename,
+        attachment: attachment,
       );
       if (kIsWeb) {
         await SharePlus.instance.share(
@@ -376,6 +590,56 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
       ),
     );
 
+    final tint = CupertinoColors.systemBlue.resolveFrom(context);
+
+    /// Каждый адрес — отдельной строкой, по нажатию — меню адреса.
+    Widget addresses(String title, List<String> values) => Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$title: ', style: detailStyle.copyWith(color: secondary)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final address in values)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showAddressActions(address),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: _isOwn(address)
+                                  ? 'мне'
+                                  : mailDisplayName(address),
+                              style: TextStyle(
+                                color: tint,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            if (mailDisplayName(address) !=
+                                mailEmailOnly(address))
+                              TextSpan(
+                                text: '  ${mailEmailOnly(address)}',
+                                style: TextStyle(color: secondary),
+                              ),
+                          ],
+                        ),
+                        style: detailStyle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
     return AppGlass(
       borderRadius: BorderRadius.circular(20),
       shadows: AppGlass.controlShadow,
@@ -474,9 +738,11 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                 color: CupertinoColors.separator.resolveFrom(context),
               ),
               const SizedBox(height: 4),
-              detail('От', message.from),
-              if ((message.to ?? '').isNotEmpty) detail('Кому', message.to!),
-              if ((message.cc ?? '').isNotEmpty) detail('Копия', message.cc!),
+              if (message.from.isNotEmpty) addresses('От', [message.from]),
+              if (MailMessage.splitAddresses(message.to).isNotEmpty)
+                addresses('Кому', MailMessage.splitAddresses(message.to)),
+              if (MailMessage.splitAddresses(message.cc).isNotEmpty)
+                addresses('Копия', MailMessage.splitAddresses(message.cc)),
               if (message.date != null)
                 detail(
                   'Дата',
@@ -611,6 +877,51 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
     );
   }
 
+  /// Конверт в шапке: вернуть письмо в непрочитанные (в своих
+  /// «Отправленных» и «Черновиках» статус не показывается — кнопки нет).
+  Widget? _buildReadToggle(MailMessage? message, Color color) {
+    final folder = widget.currentFolder;
+    if (message == null ||
+        (folder?.isSent ?? false) ||
+        (folder?.isDrafts ?? false)) {
+      return null;
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 18),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: _toggleRead,
+        child: Icon(
+          message.isRead
+              ? CupertinoIcons.envelope_badge
+              : CupertinoIcons.envelope_open,
+          size: AppTitleBar.iconSize,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget? _buildFlagToggle(MailMessage? message, Color color) {
+    if (message == null) return null;
+    return Padding(
+      padding: const EdgeInsets.only(left: 18),
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: _toggleFlag,
+        child: Icon(
+          message.isFlagged ? CupertinoIcons.flag_fill : CupertinoIcons.flag,
+          size: AppTitleBar.iconSize,
+          color: message.isFlagged
+              ? CupertinoColors.systemOrange.resolveFrom(context)
+              : color,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final message = _message;
@@ -634,7 +945,14 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
           ),
           trailing: _isDeleting
               ? const CupertinoActivityIndicator()
-              : _buildMailColorsToggle(context, message, label),
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ?_buildMailColorsToggle(context, message, label),
+                    ?_buildReadToggle(message, label),
+                    ?_buildFlagToggle(message, label),
+                  ],
+                ),
         ),
         child: DefaultTextStyle(
           style: TextStyle(
@@ -679,7 +997,7 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                               MailRepository.instance.downloadAttachment(
                                 connectionId: widget.connection.id,
                                 messageId: widget.messageId,
-                                filename: attachment.filename,
+                                attachment: attachment,
                               ),
                         ),
                       ),

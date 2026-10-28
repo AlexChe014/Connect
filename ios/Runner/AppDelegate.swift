@@ -11,6 +11,7 @@ import flutter_callkit_incoming
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, PKPushRegistryDelegate, CallkitIncomingAppDelegate {
   private var voipRegistry: PKPushRegistry?
   private var voipChannel: FlutterMethodChannel?
+  private let widgetBridge = WidgetBridge()
   /// Пользователь уже в звонке (Dart: ChatCallService.isBusy). Новый VoIP-
   /// звонок тогда не показываем в CallKit: полноценный входящий поверх
   /// разговора мигает и забирает аудиосессию у Jitsi.
@@ -46,6 +47,7 @@ import flutter_callkit_incoming
     if #available(iOS 10.0, *) {
       UNUserNotificationCenter.current().delegate = self
     }
+    registerChatNotificationCategory()
     application.registerForRemoteNotifications()
 
     let mainQueue = DispatchQueue.main
@@ -60,6 +62,7 @@ import flutter_callkit_incoming
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    widgetBridge.register(with: engineBridge.pluginRegistry)
 
     guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ConnectVoipPush") else {
       return
@@ -97,6 +100,118 @@ import flutter_callkit_incoming
         result(self?.presentInAppBrowser(url) ?? false)
       }
     }
+  }
+
+  // MARK: - Ответ из уведомления
+
+  /// Категория пуша о сообщении чата: бэкенд ставит `aps.category`, и iOS
+  /// показывает под баннером «Ответить» / «Прочитано». Идентификаторы —
+  /// те же, что ChatQuickReply в Dart (Android обрабатывается там).
+  private static let chatCategoryId = "CHAT_MESSAGE"
+  private static let chatReplyActionId = "chat_reply"
+  private static let chatMarkReadActionId = "chat_mark_read"
+  private static let backendHostDefaultsKey = "flutter.backend_host"
+  private static let defaultBackendHost = "https://connect.xondev.ru"
+
+  private func registerChatNotificationCategory() {
+    let reply = UNTextInputNotificationAction(
+      identifier: AppDelegate.chatReplyActionId,
+      title: "Ответить",
+      options: [],
+      textInputButtonTitle: "Отправить",
+      textInputPlaceholder: "Сообщение"
+    )
+    let markRead = UNNotificationAction(
+      identifier: AppDelegate.chatMarkReadActionId,
+      title: "Прочитано",
+      options: []
+    )
+    let category = UNNotificationCategory(
+      identifier: AppDelegate.chatCategoryId,
+      actions: [reply, markRead],
+      intentIdentifiers: [],
+      options: []
+    )
+    UNUserNotificationCenter.current().setNotificationCategories([category])
+  }
+
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let action = response.actionIdentifier
+    guard action == AppDelegate.chatReplyActionId || action == AppDelegate.chatMarkReadActionId else {
+      super.userNotificationCenter(center, didReceive: response, withCompletionHandler: completionHandler)
+      return
+    }
+    let userInfo = response.notification.request.content.userInfo
+    guard let chatId = stringValue(userInfo["chat_id"]) else {
+      completionHandler()
+      return
+    }
+    let text = (response as? UNTextInputNotificationResponse)?.userText
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    sendChatQuickAction(chatId: chatId, replyText: action == AppDelegate.chatReplyActionId ? text : nil) {
+      completionHandler()
+    }
+  }
+
+  /// Запросы идут отсюда, а не из Dart: на действие без открытия приложения
+  /// iOS будит процесс в фоне на несколько секунд, и Flutter-движок к этому
+  /// моменту может быть ещё не готов.
+  private func sendChatQuickAction(chatId: String, replyText: String?, completion: @escaping () -> Void) {
+    guard let token = UserDefaults.standard.string(forKey: AppDelegate.authTokenDefaultsKey), !token.isEmpty else {
+      completion()
+      return
+    }
+    var host = UserDefaults.standard.string(forKey: AppDelegate.backendHostDefaultsKey) ?? AppDelegate.defaultBackendHost
+    while host.hasSuffix("/") { host.removeLast() }
+    let base = "\(host)/mobile/api/chat/\(chatId)"
+
+    let app = UIApplication.shared
+    var taskId = UIBackgroundTaskIdentifier.invalid
+    let finish = {
+      DispatchQueue.main.async {
+        completion()
+        if taskId != .invalid {
+          app.endBackgroundTask(taskId)
+          taskId = .invalid
+        }
+      }
+    }
+    taskId = app.beginBackgroundTask(withName: "chat-quick-action") { finish() }
+
+    func request(_ path: String, body: [String: Any]?) -> URLRequest? {
+      guard let url = URL(string: base + path) else { return nil }
+      var req = URLRequest(url: url, timeoutInterval: 15)
+      req.httpMethod = "POST"
+      req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+      req.setValue("application/json", forHTTPHeaderField: "Accept")
+      req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      if let body = body {
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+      }
+      return req
+    }
+
+    // Ответили — значит, прочитали.
+    let markRead = {
+      guard let req = request("/read", body: nil) else { return finish() }
+      URLSession.shared.dataTask(with: req) { _, _, _ in finish() }.resume()
+    }
+
+    guard let text = replyText else { return markRead() }
+    if text.isEmpty { return finish() }
+    guard let req = request("/messages", body: ["message": text, "text": text]) else { return finish() }
+    URLSession.shared.dataTask(with: req) { _, response, error in
+      let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+      if error != nil || status >= 300 {
+        NSLog("[push] quick reply failed: status=%d error=%@", status, error?.localizedDescription ?? "-")
+        return finish()
+      }
+      markRead()
+    }.resume()
   }
 
   // MARK: - Встроенный браузер

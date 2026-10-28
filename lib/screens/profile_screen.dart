@@ -10,10 +10,9 @@ import '../models/bookings/user_booking.dart';
 import '../repositories/bookings_repository.dart';
 import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
-import '../services/chat_realtime_service.dart';
+import '../services/haptics_service.dart';
 import '../services/notification_unread_service.dart';
-import '../services/push_notification_service.dart';
-import '../services/user_presence_service.dart';
+import '../services/sign_out.dart';
 import '../utils/media_url_utils.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
@@ -230,11 +229,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirm = await showCupertinoDialog<bool>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('Удаление аккаунта'),
+        title: const Text('Удалить аккаунт?'),
         content: const Text(
           'Аккаунт создаётся и управляется корпоративной IT-службой. '
-          'Мы откроем письмо с запросом на удаление — его нужно отправить '
-          'в поддержку, обработка занимает до 30 дней.',
+          'Мы отправим ей запрос на удаление аккаунта и связанных с ним '
+          'данных — обработка занимает до 30 дней.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -242,15 +241,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Отмена'),
           ),
           CupertinoDialogAction(
-            isDefaultAction: true,
+            isDestructiveAction: true,
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Продолжить'),
+            child: const Text('Отправить запрос'),
           ),
         ],
       ),
     );
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
 
+    try {
+      await ProfileRepository.instance.requestAccountDeletion();
+      if (!mounted) return;
+      await showCupertinoDialog<void>(
+        context: context,
+        builder: (ctx) => CupertinoAlertDialog(
+          title: const Text('Запрос отправлен'),
+          content: const Text(
+            'IT-служба свяжется с вами по корпоративной почте.',
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ОК'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      // Эндпоинт мог ещё не доехать до прода — запасной путь письмом.
+      if (mounted) await _requestAccountDeletionByMail();
+    }
+  }
+
+  Future<void> _requestAccountDeletionByMail() async {
     final email = _optionalField('email', altKeys: ['mail']) ?? '';
     final uri = Uri(
       scheme: 'mailto',
@@ -264,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await showCupertinoDialog<void>(
         context: context,
         builder: (ctx) => CupertinoAlertDialog(
-          title: const Text('Не удалось открыть почту'),
+          title: const Text('Не удалось отправить запрос'),
           content: const Text(
             'Отправьте запрос на удаление аккаунта на support@xondev.ru вручную.',
           ),
@@ -299,20 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      await UserPresenceService.instance.setOnline(false);
-      UserPresenceService.instance.reset();
-      await ChatRealtimeService.instance.stop();
-      // Порядок важен: токены отвязываем, пока Bearer ещё валиден, а
-      // локально гасим уже после очистки сессии.
-      await PushNotificationService.instance.unregisterOnBackend();
-      await AuthService.instance.revokeServerSession();
-      await AuthService.instance.logout();
-      await PushNotificationService.instance.disableLocally();
-      if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
-      }
-    }
+    if (confirm == true && mounted) await signOut();
   }
 
   String _formatHm(DateTime d) {
@@ -597,7 +608,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return GestureDetector(
       onLongPress: () {
         Clipboard.setData(ClipboardData(text: version));
-        HapticFeedback.selectionClick();
+        AppHaptics.selection();
         ScaffoldMessenger.maybeOf(
           context,
         )?.showSnackBar(const SnackBar(content: Text('Версия скопирована')));
@@ -676,7 +687,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         top: false,
         bottom: false,
         child: RefreshIndicator.adaptive(
-          onRefresh: _loadProfile,
+          onRefresh: AppHaptics.onRefresh(_loadProfile),
           child: CustomScrollView(
             slivers: [
               AppSliverTitleBar(

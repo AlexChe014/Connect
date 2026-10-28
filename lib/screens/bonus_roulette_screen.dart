@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import '../services/haptics_service.dart';
 
 import '../config/app_theme.dart';
 import '../models/bonus_program/roulette_config.dart';
@@ -13,7 +13,6 @@ import '../services/api_client.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/bonus_glass.dart';
-import '../widgets/home_shortcut_button.dart';
 import 'bonus_roulette_prizes_screen.dart';
 
 /// Неотрицательный остаток от деления (Dart `%` уже такой для num,
@@ -48,13 +47,10 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
   late final AnimationController _ambient;
   Animation<double>? _reelAnimation;
   double? _restPosition;
-  late final VoidCallback _releaseHomeSuppress;
 
   @override
   void initState() {
     super.initState();
-    // «Домой» легла бы поверх кнопки «Крутить» (см. HomeShortcutButton).
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     _spinController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 4000),
@@ -68,7 +64,6 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
 
   @override
   void dispose() {
-    _releaseHomeSuppress();
     _spinController.dispose();
     _ambient.dispose();
     super.dispose();
@@ -109,7 +104,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
     }
 
     setState(() => _isSpinning = true);
-    HapticFeedback.lightImpact();
+    AppHaptics.light();
 
     RouletteSpin spin;
     try {
@@ -153,7 +148,7 @@ class _BonusRouletteScreenState extends State<BonusRouletteScreen>
       _restPosition = finalPosition;
       _isSpinning = false;
     });
-    HapticFeedback.heavyImpact();
+    AppHaptics.heavy();
 
     await _showResult(spin);
     if (!mounted) return;

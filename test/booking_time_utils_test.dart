@@ -1,3 +1,4 @@
+import 'package:connect/models/bookings/booking_json.dart';
 import 'package:connect/utils/booking_time_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -124,6 +125,23 @@ void main() {
       final start = DateTime.now().add(const Duration(hours: 1));
       final end = start.add(const Duration(minutes: 30));
       expect(BookingTimeUtils.isRangeValid(start, end), isTrue);
+    });
+  });
+
+  group('BookingJson.parseDateTime', () {
+    test('naive server string is Moscow time', () {
+      final parsed = BookingJson.parseDateTime('2026-10-23 10:00:00');
+      expect(parsed.toUtc(), DateTime.utc(2026, 10, 23, 7));
+    });
+
+    test('string with zone keeps its offset', () {
+      final parsed = BookingJson.parseDateTime('2026-10-23T10:00:00Z');
+      expect(parsed.toUtc(), DateTime.utc(2026, 10, 23, 10));
+    });
+
+    test('epoch seconds', () {
+      final parsed = BookingJson.parseDateTime(1792738800);
+      expect(parsed.toUtc(), DateTime.utc(2026, 10, 23, 7));
     });
   });
 }

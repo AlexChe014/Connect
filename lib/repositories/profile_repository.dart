@@ -13,4 +13,16 @@ class ProfileRepository {
       defaultErrorMessage: 'Не удалось получить профиль',
     );
   }
+
+  /// Запрос на удаление аккаунта: сервер отправляет письмо в поддержку от
+  /// имени текущего пользователя.
+  Future<void> requestAccountDeletion() async {
+    final decoded = await ApiClient.instance.post(
+      UserRoutes.requestDeletionUrl,
+    );
+    ApiEnvelope.unwrapData(
+      decoded,
+      defaultErrorMessage: 'Не удалось отправить запрос на удаление',
+    );
+  }
 }

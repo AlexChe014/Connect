@@ -7,6 +7,7 @@ import '../config/app_theme.dart';
 import 'app_glass.dart';
 import 'app_title_bar.dart';
 import 'confetti_overlay.dart';
+import '../services/haptics_service.dart';
 
 /// Общие детали раздела «Бонусная программа» в стиле Liquid Glass:
 /// прозрачная шапка над цветным пятном, содержимое на стеклянных карточках.
@@ -144,7 +145,7 @@ class BonusGlassScaffold extends StatelessWidget {
                   final refresh = onRefresh;
                   if (refresh == null) return view;
                   return RefreshIndicator.adaptive(
-                    onRefresh: refresh,
+                    onRefresh: AppHaptics.onRefresh(refresh),
                     child: view,
                   );
                 },

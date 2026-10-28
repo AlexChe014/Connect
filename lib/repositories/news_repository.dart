@@ -1,6 +1,9 @@
 import 'package:connect/config/routes/news_routes.dart';
 import 'package:connect/models/news_item.dart';
+import 'dart:async';
+
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/api_response_cache.dart';
 import 'package:connect/services/api_envelope.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/paginated.dart';
@@ -10,16 +13,37 @@ class NewsRepository {
   NewsRepository._();
   static final NewsRepository instance = NewsRepository._();
 
+  /// Первая страница ленты — показывается сразу, пока идёт запрос.
+  final _cache = ApiResponseCache('news');
+  static const _firstPageKey = 'first_page';
+
   Future<Paginated<NewsItem>> getPage({String? url}) async {
     final requestUrl = url ?? NewsRoutes.allUrl;
     final decoded = await ApiClient.instance.get(requestUrl);
 
-    return ApiPaginatedEnvelope.unwrapPaginated<NewsItem>(
-      decoded,
-      defaultErrorMessage: 'Не удалось получить новости',
-      mapItem: (json) => NewsItem.fromJson(json),
-    );
+    final page = _parsePage(decoded);
+    if (url == null) unawaited(_cache.write(_firstPageKey, decoded));
+    return page;
   }
+
+  /// Первая страница с прошлого раза; `null` — кэша нет или он не
+  /// разбирается.
+  Future<Paginated<NewsItem>?> cachedFirstPage() async {
+    final decoded = await _cache.read(_firstPageKey);
+    if (decoded == null) return null;
+    try {
+      return _parsePage(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Paginated<NewsItem> _parsePage(Map<String, dynamic> decoded) =>
+      ApiPaginatedEnvelope.unwrapPaginated<NewsItem>(
+        decoded,
+        defaultErrorMessage: 'Не удалось получить новости',
+        mapItem: (json) => NewsItem.fromJson(json),
+      );
 
   Future<NewsItem> getById(String newsId, {bool includePeople = false}) async {
     final decoded = await ApiClient.instance.get(

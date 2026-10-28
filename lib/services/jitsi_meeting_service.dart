@@ -8,7 +8,7 @@ import 'package:connect/models/connector/connector_session.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/call_permissions.dart';
 import 'package:connect/utils/app_logger.dart';
-import 'package:connect/widgets/home_shortcut_button.dart';
+import 'package:connect/widgets/app_title_bar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -62,8 +62,11 @@ class JitsiMeetingService extends ChangeNotifier {
   Timer? _peerJoinTimer;
   Timer? _peerRejoinTimer;
   Timer? _closeTimer;
+
+  /// Свои сообщения чата, которые Jitsi ещё может вернуть эхом (в
+  /// chatMessageReceived — со своим id участника, который нам неизвестен).
+  final List<({String text, DateTime sentAt})> _chatEchoes = [];
   JitsiLeaveCallback? _onLeave;
-  VoidCallback? _releaseHomeSuppress;
   CallConference? _conference;
 
   /// Текущая конференция для экрана звонка; `null` — звонка нет.
@@ -135,11 +138,10 @@ class JitsiMeetingService extends ChangeNotifier {
       _peerJoinTimer?.cancel();
       _peerRejoinTimer?.cancel();
       _closeTimer?.cancel();
+      _chatEchoes.clear();
 
-      // Кнопка "на главный экран" скрыта всё время звонка: под свёрнутым
-      // окошком звонка ей не место, а полноэкранный звонок её перекрывает.
-      _releaseHomeSuppress?.call();
-      _releaseHomeSuppress = HomeShortcutButton.suppress();
+      // Домик «на главный экран» скрыт всё время звонка (см. AppTitleBar).
+      AppTitleBar.homeHidden.value = true;
 
       // Снимаем фокус с полей ввода Flutter (обычно — поле сообщения в чате):
       // иначе клавиатура всплывает поверх звонка (в т.ч. при возврате из
@@ -170,6 +172,8 @@ class JitsiMeetingService extends ChangeNotifier {
           // self-view локально между звонками — явно включаем.
           'disableSelfView': false,
           'disableProfile': true,
+          // Чат встречи — свой (CallChatSheet), опросов в нём нет.
+          'disablePolls': true,
         },
         featureFlags: {
           // Звонком уже управляет наш flutter_callkit_incoming (см.
@@ -209,7 +213,8 @@ class JitsiMeetingService extends ChangeNotifier {
           'speakerstats.enabled': false,
           'breakout-rooms.enabled': false,
           'close-captions.enabled': false,
-          // Чат Jitsi открывается с нашей кнопки «Чат» во встрече.
+          // Окно чата Jitsi не открываем (чат встречи — свой), но без
+          // этого флага Jitsi не принимает и не отправляет сообщения.
           'chat.enabled': !endWhenLeave,
           'android.screensharing.enabled': !endWhenLeave,
           'video-share.enabled': false,
@@ -228,8 +233,7 @@ class JitsiMeetingService extends ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      _releaseHomeSuppress?.call();
-      _releaseHomeSuppress = null;
+      AppTitleBar.homeHidden.value = false;
       rethrow;
     } finally {
       _joining = false;
@@ -335,17 +339,7 @@ class JitsiMeetingService extends ChangeNotifier {
         notifyListeners();
       },
       chatMessageReceived: (senderId, message, isPrivate, timestamp) {
-        final c = _conference;
-        if (c == null || c.chatOpen) return;
-        c.unreadChat++;
-        notifyListeners();
-      },
-      chatToggled: (isOpen) {
-        final c = _conference;
-        if (c == null) return;
-        c.chatOpen = isOpen;
-        if (isOpen) c.unreadChat = 0;
-        notifyListeners();
+        _onChatMessage(senderId, message, isPrivate, timestamp);
       },
       audioRouteChanged: (route, available) {
         final c = _conference;
@@ -403,18 +397,87 @@ class JitsiMeetingService extends ChangeNotifier {
     await _jitsi.toggleScreenShare(!c.screenSharing);
   }
 
-  Future<void> openChat() async {
+  void openChat() {
     final c = _conference;
     if (c == null) return;
+    c.chatOpen = true;
     c.unreadChat = 0;
     notifyListeners();
-    await _jitsi.openChat();
+  }
+
+  void closeChat() {
+    final c = _conference;
+    if (c == null || !c.chatOpen) return;
+    c.chatOpen = false;
+    notifyListeners();
+  }
+
+  Future<void> sendChatMessage(String text) async {
+    final c = _conference;
+    final message = text.trim();
+    if (c == null || message.isEmpty || !_inConference) return;
+    final now = DateTime.now();
+    final self = c.options.userInfo?.displayName?.trim() ?? '';
+    c.chatMessages.add(
+      CallChatMessage(
+        senderId: '',
+        senderName: self,
+        text: message,
+        time: now,
+        isOwn: true,
+      ),
+    );
+    _chatEchoes.add((text: message, sentAt: now));
+    notifyListeners();
+    await _jitsi.sendChatMessage(message: message);
+  }
+
+  void _onChatMessage(
+    String senderId,
+    String message,
+    bool isPrivate,
+    String? timestamp,
+  ) {
+    final c = _conference;
+    if (c == null) return;
+    final now = DateTime.now();
+    _chatEchoes.removeWhere(
+      (e) => now.difference(e.sentAt) > const Duration(seconds: 15),
+    );
+    // Своё сообщение, вернувшееся эхом: оно уже в списке.
+    if (!c.participants.containsKey(senderId)) {
+      final echo = _chatEchoes.indexWhere((e) => e.text == message.trim());
+      if (echo >= 0) {
+        _chatEchoes.removeAt(echo);
+        return;
+      }
+    }
+    c.chatMessages.add(
+      CallChatMessage(
+        senderId: senderId,
+        senderName: c.participants[senderId]?.name ?? '',
+        text: message,
+        time: _parseChatTime(timestamp) ?? now,
+        isPrivate: isPrivate,
+      ),
+    );
+    if (!c.chatOpen) c.unreadChat++;
+    notifyListeners();
+  }
+
+  /// Jitsi присылает время то ISO-строкой, то миллисекундами.
+  static DateTime? _parseChatTime(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final millis = int.tryParse(value);
+    if (millis != null) return DateTime.fromMillisecondsSinceEpoch(millis);
+    return DateTime.tryParse(value)?.toLocal();
   }
 
   void minimize() {
     final c = _conference;
     if (c == null || c.minimized || c.phase == CallPhase.ending) return;
     c.minimized = true;
+    c.chatOpen = false;
     notifyListeners();
   }
 
@@ -478,8 +541,7 @@ class JitsiMeetingService extends ChangeNotifier {
     _peerJoinTimer = null;
     _peerRejoinTimer?.cancel();
     _peerRejoinTimer = null;
-    _releaseHomeSuppress?.call();
-    _releaseHomeSuppress = null;
+    AppTitleBar.homeHidden.value = false;
     final callId = _activeCallId;
     final cb = _onLeave;
     _activeCallId = null;

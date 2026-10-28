@@ -16,6 +16,7 @@ import 'bonus_history_screen.dart';
 import 'bonus_roulette_screen.dart';
 import 'bonus_shop_screen.dart';
 import 'bonus_transfer_screen.dart';
+import '../services/haptics_service.dart';
 
 /// Раздел «Бонусная программа» по образцу Apple Cash в «Кошельке»:
 /// карта баланса, ряд действий, лента товаров, на которые можно
@@ -107,7 +108,7 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
     return BonusGlassScaffold(
       title: 'Бонусная программа',
       largeTitle: true,
-      onRefresh: _load,
+      onRefresh: AppHaptics.onRefresh(_load),
       slivers: [_buildBody()],
     );
   }

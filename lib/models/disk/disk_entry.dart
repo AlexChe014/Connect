@@ -4,6 +4,9 @@ class DiskFolder {
   final String name;
   final bool isShared;
   final String? owner;
+
+  /// Имя владельца (`owner_name`), если сервер его прислал.
+  final String? ownerName;
   final DateTime? lastModified;
 
   const DiskFolder({
@@ -11,6 +14,7 @@ class DiskFolder {
     required this.name,
     this.isShared = false,
     this.owner,
+    this.ownerName,
     this.lastModified,
   });
 
@@ -20,6 +24,7 @@ class DiskFolder {
       name: (json['name'] ?? '').toString(),
       isShared: _hasShare(json['share']),
       owner: json['owner']?.toString(),
+      ownerName: _nonEmpty(json['owner_name']),
       lastModified: _parseDate(json['last_modified']),
     );
   }
@@ -33,6 +38,9 @@ class DiskFile {
   final String? mime;
   final bool isShared;
   final String? owner;
+
+  /// Имя владельца (`owner_name`), если сервер его прислал.
+  final String? ownerName;
   final DateTime? lastModified;
 
   const DiskFile({
@@ -42,6 +50,7 @@ class DiskFile {
     this.mime,
     this.isShared = false,
     this.owner,
+    this.ownerName,
     this.lastModified,
   });
 
@@ -55,6 +64,7 @@ class DiskFile {
       mime: json['mime']?.toString(),
       isShared: _hasShare(json['share']),
       owner: json['owner']?.toString(),
+      ownerName: _nonEmpty(json['owner_name']),
       lastModified: _parseDate(json['last_modified']),
     );
   }
@@ -65,7 +75,14 @@ class DiskListing {
   final List<DiskFolder> folders;
   final List<DiskFile> files;
 
-  const DiskListing({required this.folders, required this.files});
+  /// Владелец самой запрошенной папки; у корня — это сам пользователь.
+  final String? folderOwner;
+
+  const DiskListing({
+    required this.folders,
+    required this.files,
+    this.folderOwner,
+  });
 
   bool get isEmpty => folders.isEmpty && files.isEmpty;
 
@@ -95,10 +112,11 @@ class DiskListing {
     // Пути не совпали ни с одной папкой (сервер отдал их в другом виде) —
     // остаётся прежнее, проверенное на живых данных поведение: первая папка
     // в ответе — сама запрошенная.
-    final trimmedFolders =
-        children.length == folders.length && folders.isNotEmpty
-        ? folders.sublist(1)
-        : children;
+    final fallback = children.length == folders.length && folders.isNotEmpty;
+    final trimmedFolders = fallback ? folders.sublist(1) : children;
+    final selfFolder = fallback
+        ? folders.first
+        : folders.where((f) => key(f.path) == self).firstOrNull;
 
     final files = rawFiles is List
         ? rawFiles
@@ -107,7 +125,11 @@ class DiskListing {
               .toList(growable: false)
         : <DiskFile>[];
 
-    return DiskListing(folders: trimmedFolders, files: files);
+    return DiskListing(
+      folders: trimmedFolders,
+      files: files,
+      folderOwner: selfFolder?.owner,
+    );
   }
 }
 
@@ -123,6 +145,11 @@ DateTime? _parseDate(Object? value) {
   final s = value.toString().trim();
   if (s.isEmpty) return null;
   return DateTime.tryParse(s);
+}
+
+String? _nonEmpty(Object? value) {
+  final s = value?.toString().trim() ?? '';
+  return s.isEmpty ? null : s;
 }
 
 bool _hasShare(Object? value) {

@@ -15,6 +15,7 @@ import '../widgets/app_title_bar.dart';
 import '../widgets/employee_row.dart';
 import 'create_booking_screen.dart';
 import 'employee_detail_screen.dart';
+import '../services/haptics_service.dart';
 
 /// Избранное: сотрудники и объекты бронирования (переговорки, парковки и
 /// любые другие типы `BookableObject`) в одном разделе, переключаемые
@@ -161,6 +162,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
     messenger?.hideCurrentSnackBar();
     messenger?.showSnackBar(
       SnackBar(
+        persist: false,
+        duration: const Duration(seconds: 4),
         content: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
         action: SnackBarAction(
           label: 'Вернуть',
@@ -308,7 +311,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> with RouteAware {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: _load,
+                  onRefresh: AppHaptics.onRefresh(_load),
                   child: CustomScrollView(
                     slivers: [
                       AppSliverTitleBar(

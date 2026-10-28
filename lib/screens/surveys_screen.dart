@@ -14,8 +14,9 @@ import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
 import 'survey_form_screen.dart';
+import '../services/haptics_service.dart';
 
-/// «Мои опросы»: приглашения, ожидающие ответа, и уже пройденные.
+/// «Мои опросы»: приглашения, ожидающие ответа.
 class SurveysScreen extends StatefulWidget {
   const SurveysScreen({super.key});
 
@@ -130,7 +131,9 @@ class _SurveysScreenState extends State<SurveysScreen> {
                       ),
                       blur: blur,
                     ),
-                    CupertinoSliverRefreshControl(onRefresh: _load),
+                    CupertinoSliverRefreshControl(
+                      onRefresh: AppHaptics.onRefresh(_load),
+                    ),
                     ..._buildBody(),
                     SliverToBoxAdapter(
                       child: SizedBox(
@@ -168,45 +171,24 @@ class _SurveysScreenState extends State<SurveysScreen> {
         ),
       ];
     }
-    if (invitations.isEmpty) {
-      return const [
+    final active = invitations.where((i) => i.isPending(now)).toList()
+      ..sort(_byDeadline);
+    // Пройденные и закрытые опросы не показываем: открыть их нельзя,
+    // а список нужен только для того, что ещё ждёт ответа.
+    if (active.isEmpty) {
+      return [
         SliverAppEmptyState(
           icon: CupertinoIcons.checkmark_seal,
-          message:
-              'Опросов пока нет. Когда вас пригласят пройти опрос, '
-              'он появится здесь.',
+          message: invitations.isEmpty
+              ? 'Опросов пока нет. Когда вас пригласят пройти опрос, '
+                    'он появится здесь.'
+              : 'Все опросы пройдены — спасибо!\n'
+                    'Новые приглашения появятся здесь.',
         ),
       ];
     }
 
-    final active = invitations.where((i) => i.isPending(now)).toList()
-      ..sort(_byDeadline);
-    final past = invitations.where((i) => !i.isPending(now)).toList()
-      ..sort(
-        (a, b) => (b.completedAt ?? b.closesAt ?? DateTime(0)).compareTo(
-          a.completedAt ?? a.closesAt ?? DateTime(0),
-        ),
-      );
-
-    return [
-      if (active.isNotEmpty)
-        ..._section('Ожидают ответа', active, now)
-      else
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(32, 8, 32, 4),
-            child: Text(
-              'Все опросы пройдены — спасибо!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ),
-        ),
-      if (past.isNotEmpty) ..._section('Завершённые', past, now),
-    ];
+    return _section('Ожидают ответа', active, now);
   }
 
   static int _byDeadline(SurveyInvitation a, SurveyInvitation b) {

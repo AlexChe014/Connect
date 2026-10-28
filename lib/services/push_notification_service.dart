@@ -8,7 +8,9 @@ import 'package:connect/services/app_navigation_service.dart';
 import 'package:connect/services/auth_service.dart';
 import 'package:connect/services/chat_call_service.dart';
 import 'package:connect/services/chat_preferences_service.dart';
+import 'package:connect/services/chat_quick_reply.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/home_widget_service.dart';
 import 'package:connect/services/mail_unread_service.dart';
 import 'package:connect/services/notification_unread_service.dart';
 import 'package:connect/services/document_pending_service.dart';
@@ -91,7 +93,7 @@ class PushNotificationService {
         final payload = launch?.notificationResponse?.payload;
         if (launch?.didNotificationLaunchApp == true && payload != null) {
           _storeNavigationFromMessage(
-            RemoteMessage(data: _decodePayload(payload)),
+            RemoteMessage(data: decodeNotificationPayload(payload)),
           );
         }
       }
@@ -156,11 +158,9 @@ class PushNotificationService {
     );
     await _localNotifications.initialize(
       settings: const InitializationSettings(android: androidInit),
-      onDidReceiveNotificationResponse: (response) {
-        final payload = response.payload;
-        if (payload == null || payload.isEmpty) return;
-        _handlePayloadNavigation(payload);
-      },
+      onDidReceiveNotificationResponse: _onLocalNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse:
+          chatNotificationBackgroundResponse,
     );
 
     final androidPlugin = _localNotifications
@@ -176,8 +176,49 @@ class PushNotificationService {
     );
   }
 
+  Future<void> _onLocalNotificationResponse(
+    NotificationResponse response,
+  ) async {
+    if (ChatQuickReply.isQuickAction(response.actionId)) {
+      final chatId = await ChatQuickReply.handle(
+        response.actionId,
+        response.input,
+        decodeNotificationPayload(response.payload),
+      );
+      if (chatId != null) {
+        unawaited(ChatService.instance.applyPushForChat(chatId.toString()));
+      }
+      return;
+    }
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    _handlePayloadNavigation(payload);
+  }
+
+  static const _defaultDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _androidChannelId,
+      _androidChannelName,
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
+  );
+
+  /// Сообщение чата — с кнопками «Ответить» и «Прочитано».
+  static const _chatDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _androidChannelId,
+      _androidChannelName,
+      importance: Importance.high,
+      priority: Priority.high,
+      category: AndroidNotificationCategory.message,
+      actions: ChatQuickReply.androidActions,
+    ),
+  );
+
   /// После успешного логина: разрешение → FCM-токен в БД → топики.
   Future<void> registerAfterLogin() async {
+    unawaited(HomeWidgetService.instance.refresh(force: true));
     await requestPermissions();
     await registerCurrentDevice();
   }
@@ -307,6 +348,7 @@ class PushNotificationService {
   /// токены. После очистки сессии — иначе `onTokenRefresh` успеет
   /// зарегистрировать новый токен на старого пользователя.
   Future<void> disableLocally() async {
+    await HomeWidgetService.instance.clear();
     await IncomingCallService.instance.disableLocally();
     if (!_initialized) return;
 
@@ -343,19 +385,18 @@ class PushNotificationService {
   }
 
   Future<void> _onForegroundMessage(RemoteMessage message) async {
-    final type = message.data['type'];
-    if (type == 'mail' || type == 'new_emails') {
+    final type = NotificationTopics.canonicalType(message.data['type']);
+    if (type == 'mail') {
       MailUnreadService.instance.invalidate();
     }
     // Пуш по записи `user_notifications` — запись уже создана, обновляем
     // счётчик. Чаты и звонки в эту таблицу не попадают.
-    if (type is String &&
-        type.isNotEmpty &&
+    if (type.isNotEmpty &&
         type != 'chat_message' &&
         !type.startsWith('chat_call')) {
       unawaited(NotificationUnreadService.instance.refresh());
     }
-    if (message.data['type'] == 'new_documents') {
+    if (type == 'new_documents') {
       unawaited(DocumentPendingService.instance.refreshKnownServices());
     }
     if (_isSurveyMessage(message.data)) {
@@ -404,7 +445,7 @@ class PushNotificationService {
         ? ChatMapper.stickerSnippet
         : null;
 
-    final payload = _encodePayload(message.data);
+    final payload = encodeNotificationPayload(message.data);
     _localNotifications.show(
       id: message.messageId.hashCode ^ message.data.hashCode,
       title:
@@ -416,15 +457,40 @@ class PushNotificationService {
           notification?.body ??
           message.data['body']?.toString() ??
           message.data['subject']?.toString(),
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _androidChannelId,
-          _androidChannelName,
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      ),
+      notificationDetails: chatMessageType != null
+          ? _chatDetails
+          : _defaultDetails,
       payload: payload,
+    );
+  }
+
+  /// Android: data-only пуш о сообщении чата, пока приложение в фоне или
+  /// убито. Системный баннер (пуш с `notification`) не умеет кнопок, поэтому
+  /// такие пуши рисуем сами — с «Ответить» / «Прочитано».
+  Future<void> showBackgroundChat(RemoteMessage message) async {
+    final data = message.data;
+    if (!Platform.isAndroid ||
+        message.notification != null ||
+        data['type'] != 'chat_message') {
+      return;
+    }
+    final chatId = data['chat_id']?.toString();
+    if (chatId == null || chatId.isEmpty) return;
+    await ChatPreferencesService.instance.ensureLoaded();
+    if (ChatPreferencesService.instance.isMuted(chatId)) return;
+
+    final messageType = data['message_type']?.toString().trim().toUpperCase();
+    if (messageType == ChatCallRecord.messageType) return;
+
+    await _initAndroidNotifications();
+    await _localNotifications.show(
+      id: (message.messageId ?? '$chatId:${data['message_id']}').hashCode,
+      title: data['title']?.toString() ?? 'Новое сообщение',
+      body: messageType == ChatStickers.messageType
+          ? ChatMapper.stickerSnippet
+          : data['body']?.toString(),
+      notificationDetails: _chatDetails,
+      payload: encodeNotificationPayload(data),
     );
   }
 
@@ -446,15 +512,8 @@ class PushNotificationService {
       body:
           message.data['body']?.toString() ??
           message.data['subject']?.toString(),
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          _androidChannelId,
-          _androidChannelName,
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      ),
-      payload: _encodePayload(message.data),
+      notificationDetails: _defaultDetails,
+      payload: encodeNotificationPayload(message.data),
     );
   }
 
@@ -463,7 +522,7 @@ class PushNotificationService {
   }
 
   void _handlePayloadNavigation(String payload) {
-    final data = _decodePayload(payload);
+    final data = decodeNotificationPayload(payload);
     if (data.isEmpty) return;
     _navigateFromData(data);
   }
@@ -482,7 +541,7 @@ class PushNotificationService {
       );
       return;
     }
-    switch (data['type']) {
+    switch (NotificationTopics.canonicalType(data['type'])) {
       case 'chat_message':
         final chatId = data['chat_id'];
         if (chatId != null && chatId.isNotEmpty) {
@@ -504,7 +563,6 @@ class PushNotificationService {
           AppNavigationService.storePendingDocument(serviceId);
         }
       case 'mail':
-      case 'new_emails':
         final connectionId = data['connection_id'];
         if (connectionId != null && connectionId.isNotEmpty) {
           AppNavigationService.storePendingMail(
@@ -541,25 +599,6 @@ class PushNotificationService {
       return;
     }
     AppNavigationService.openFromData(data);
-  }
-
-  String _encodePayload(Map<String, dynamic> data) {
-    return data.entries
-        .map((e) => '${e.key}=${Uri.encodeComponent(e.value.toString())}')
-        .join('&');
-  }
-
-  Map<String, dynamic> _decodePayload(String payload) {
-    final result = <String, dynamic>{};
-    for (final part in payload.split('&')) {
-      if (part.isEmpty) continue;
-      final idx = part.indexOf('=');
-      if (idx <= 0) continue;
-      final key = part.substring(0, idx);
-      final value = Uri.decodeComponent(part.substring(idx + 1));
-      result[key] = value;
-    }
-    return result;
   }
 
   String _platformName() {

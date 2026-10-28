@@ -20,7 +20,10 @@ import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/app_network_image.dart';
 import 'package:connect/widgets/booking_glass_form.dart';
 import 'package:connect/widgets/booking_pickers.dart';
+import '../services/api_client.dart';
+import '../utils/app_feedback.dart';
 import '../widgets/app_title_bar.dart';
+import '../services/haptics_service.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key, this.showAppBar = true, this.initialDate});
@@ -87,7 +90,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
       final buildings = await InfrastructureRepository.instance
           .getActiveBuildings();
       if (buildings.isEmpty) {
-        throw Exception('Нет активных офисов для бронирования');
+        throw ApiException(200, 'Нет активных офисов для бронирования');
       }
 
       final selectedBuilding = buildings.first;
@@ -95,7 +98,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
           .getActiveSpacesAndTypes(selectedBuilding.id);
 
       if (spacesAndTypes.spaces.isEmpty) {
-        throw Exception(
+        throw ApiException(
+          200,
           'В выбранном офисе нет активных этажей для бронирования',
         );
       }
@@ -104,7 +108,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
       final initialTypes = initialSpace.types;
 
       if (initialTypes.isEmpty) {
-        throw Exception(
+        throw ApiException(
+          200,
           'В выбранном офисе нет доступных типов объектов для бронирования',
         );
       }
@@ -146,7 +151,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _bootError = e.toString();
+        _bootError = AppFeedback.messageOf(e);
         _isBootLoading = false;
       });
     }
@@ -185,7 +190,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
       final spacesAndTypes = await InfrastructureRepository.instance
           .getActiveSpacesAndTypes(building.id);
       if (spacesAndTypes.spaces.isEmpty) {
-        throw Exception(
+        throw ApiException(
+          200,
           'В выбранном офисе нет активных этажей для бронирования',
         );
       }
@@ -194,7 +200,8 @@ class _BookingsScreenState extends State<BookingsScreen> {
       final initialTypes = initialSpace.types;
 
       if (initialTypes.isEmpty) {
-        throw Exception(
+        throw ApiException(
+          200,
           'В выбранном офисе нет доступных типов объектов для бронирования',
         );
       }
@@ -218,7 +225,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _bootError = e.toString();
+        _bootError = AppFeedback.messageOf(e);
         _isBootLoading = false;
       });
     }
@@ -265,7 +272,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _resultsError = e.toString();
+        _resultsError = AppFeedback.messageOf(e);
         _results = const [];
         _isResultsLoading = false;
       });
@@ -576,7 +583,9 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: _isBootLoading ? _bootstrap : _loadResults,
+                  onRefresh: AppHaptics.onRefresh(
+                    _isBootLoading ? _bootstrap : _loadResults,
+                  ),
                   child: CustomScrollView(
                     slivers: [
                       AppSliverTitleBar(

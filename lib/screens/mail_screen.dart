@@ -15,6 +15,7 @@ import '../widgets/employee_row.dart';
 import 'mail_connection_form_screen.dart';
 import 'mail_inbox_screen.dart';
 import 'mail_provider_picker_screen.dart';
+import '../services/haptics_service.dart';
 
 class MailScreen extends StatefulWidget {
   const MailScreen({
@@ -91,6 +92,7 @@ class _MailScreenState extends State<MailScreen> {
 
   Future<void> _loadConnections() async {
     setState(() => _isLoading = true);
+    await _showCachedConnections();
     try {
       final userId = await MailScreen.resolveUserId();
       _userId = userId;
@@ -112,7 +114,8 @@ class _MailScreenState extends State<MailScreen> {
         if (widget.isTab) {
           setState(() {
             _connections = items;
-            _tabInbox = selected;
+            // Ящик из кэша уже открыт — не пересоздаём его экран.
+            if (_tabInbox?.id != selected.id) _tabInbox = selected;
             _isLoading = false;
           });
           return;
@@ -132,10 +135,37 @@ class _MailScreenState extends State<MailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
+      // Ящики из кэша на экране — без сети работаем с ними молча.
+      if (_connections.isNotEmpty) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Не удалось загрузить почтовые ящики')),
       );
     }
+  }
+
+  /// Ящики с прошлого раза — во вкладке сразу открываем ящик, пока
+  /// сервер (и профиль для [MailScreen.resolveUserId]) не ответил.
+  Future<void> _showCachedConnections() async {
+    // Вне вкладки ящик открывается заменой экрана — второй раз не выйдет.
+    if (widget.autoOpenInbox && !widget.isTab) return;
+    final user = await AuthService.instance.getStoredUser();
+    final userId = MailScreen._parseUserId(user);
+    if (userId == null) return;
+    final cached = await MailRepository.instance.cachedConnectionsByUser(
+      userId,
+    );
+    if (!mounted || cached == null || cached.isEmpty) return;
+    if (_connections.isNotEmpty || _tabInbox != null) return;
+    setState(() {
+      _connections = cached;
+      if (widget.autoOpenInbox) {
+        _tabInbox = cached.firstWhere(
+          (c) => c.isDefault,
+          orElse: () => cached.first,
+        );
+      }
+      _isLoading = false;
+    });
   }
 
   Future<void> _openCreateConnection() async {
@@ -203,6 +233,7 @@ class _MailScreenState extends State<MailScreen> {
     final inbox = _tabInbox;
     if (inbox != null) {
       return MailInboxScreen(
+        key: ValueKey(inbox.id),
         connection: inbox,
         connections: _connections,
         isTab: true,
@@ -226,7 +257,7 @@ class _MailScreenState extends State<MailScreen> {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: _loadConnections,
+                  onRefresh: AppHaptics.onRefresh(_loadConnections),
                   child: CustomScrollView(
                     slivers: [
                       AppSliverTitleBar(

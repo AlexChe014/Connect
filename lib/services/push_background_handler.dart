@@ -35,5 +35,8 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (ChatCallSignal.isCallSignal(message.data)) {
     final signal = ChatCallSignal.tryParse(message.data);
     if (signal != null) ChatCallService.instance.applySignal(signal);
+    return;
   }
+
+  await PushNotificationService.instance.showBackgroundChat(message);
 }

@@ -18,6 +18,7 @@ import '../widgets/app_loading.dart';
 import '../widgets/app_title_bar.dart';
 import '../widgets/news_glass.dart' show formatNewsDate;
 import 'notification_settings_screen.dart';
+import '../services/haptics_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -340,7 +341,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: _loadFirstPage,
+                  onRefresh: AppHaptics.onRefresh(_loadFirstPage),
                   child: CustomScrollView(
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),

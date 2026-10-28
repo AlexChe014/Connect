@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import '../models/mail/mail_payload_utils.dart';
@@ -6,6 +7,7 @@ import 'package:connect/models/mail/mail_connection.dart';
 import 'package:connect/models/mail/mail_folder.dart';
 import 'package:connect/models/mail/mail_message.dart';
 import 'package:connect/services/api_client.dart';
+import 'package:connect/services/api_response_cache.dart';
 import 'package:http/http.dart' as http;
 
 class MailMessagePage {
@@ -228,12 +230,131 @@ class MailRepository {
   MailRepository._();
   static final MailRepository instance = MailRepository._();
 
+  /// Ящики, папки, первые страницы списков и последние открытые письма —
+  /// экраны почты показывают их сразу, пока идёт запрос (см. `cached*`).
+  final _cache = ApiResponseCache(
+    'mail',
+    maxEntriesPerPrefix: const {'message_': 30, 'list_': 20},
+  );
+
+  static String _listKey(int connectionId, int? folderId) =>
+      'list_${connectionId}_${folderId ?? 'all'}';
+
+  static String _messageKey(int connectionId, int messageId) =>
+      'message_${connectionId}_$messageId';
+
+  /// Прочитанный кэш, разобранный тем же кодом, что и живой ответ; `null` —
+  /// кэша нет или он не разбирается (сменился формат).
+  Future<T?> _fromCache<T>(
+    String key,
+    T Function(Map<String, dynamic>) parse,
+  ) async {
+    final decoded = await _cache.read(key);
+    if (decoded == null) return null;
+    try {
+      return parse(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<MailConnection>?> cachedConnectionsByUser(int userId) =>
+      _fromCache('connections_$userId', _parseConnections);
+
+  Future<List<MailFolder>?> cachedMailboxes(int connectionId) =>
+      _fromCache('folders_$connectionId', (d) => _parseMailboxList(d, ''));
+
+  /// Первая страница писем папки ([folderId] `null` — весь ящик).
+  Future<MailMessagePage?> cachedMessages(int connectionId, {int? folderId}) =>
+      _fromCache(
+        _listKey(connectionId, folderId),
+        (d) => _withLocalPage(connectionId, _parseMessagePage(d, '')),
+      );
+
+  Future<MailMessage?> cachedMessage({
+    required int connectionId,
+    required int messageId,
+  }) => _fromCache(
+    _messageKey(connectionId, messageId),
+    (d) => withLocalReadState(connectionId, _parseMessage(d, messageId)),
+  );
+
+  /// Прочитано/непрочитано, отмеченное в приложении, пока сервер этого не
+  /// подтвердил: список, запрошенный сразу после возврата из письма (или
+  /// взятый из кэша), ещё приходит со старым статусом, и письмо снова
+  /// казалось непрочитанным. Отметка снимается, как только сервер вернёт
+  /// тот же статус, или если запрос не удался.
+  final Map<String, bool> _readOverrides = {};
+
+  static String _readKey(int connectionId, int messageId) =>
+      '$connectionId:$messageId';
+
+  /// Статус прочтения с учётом ещё не подтверждённых сервером отметок.
+  MailMessage withLocalReadState(int connectionId, MailMessage message) {
+    final key = _readKey(connectionId, message.id);
+    final override = _readOverrides[key];
+    if (override == null) return message;
+    return message.isRead == override ? message : message.withRead(override);
+  }
+
+  List<MailMessage> withLocalReadStates(
+    int connectionId,
+    List<MailMessage> messages,
+  ) => _readOverrides.isEmpty
+      ? messages
+      : [for (final m in messages) withLocalReadState(connectionId, m)];
+
+  /// Свежий ответ сервера: совпавшие отметки больше не нужны.
+  MailMessagePage _applyServerPage(int connectionId, MailMessagePage page) {
+    if (_readOverrides.isEmpty) return page;
+    for (final m in page.messages) {
+      final key = _readKey(connectionId, m.id);
+      if (_readOverrides[key] == m.isRead) _readOverrides.remove(key);
+    }
+    return _withLocalPage(connectionId, page);
+  }
+
+  MailMessagePage _withLocalPage(int connectionId, MailMessagePage page) =>
+      _readOverrides.isEmpty
+      ? page
+      : MailMessagePage(
+          messages: withLocalReadStates(connectionId, page.messages),
+          hasMore: page.hasMore,
+          nextPage: page.nextPage,
+        );
+
+  Future<void> _setRead(
+    int connectionId,
+    int messageId,
+    bool read,
+    Future<void> Function() request,
+  ) async {
+    final key = _readKey(connectionId, messageId);
+    _readOverrides[key] = read;
+    try {
+      await request();
+    } catch (_) {
+      if (_readOverrides[key] == read) _readOverrides.remove(key);
+      rethrow;
+    }
+  }
+
+  /// Письмо удалено или перенесено — его копия не должна всплыть офлайн.
+  void _forgetMessage(int connectionId, int messageId) =>
+      unawaited(_cache.remove(_messageKey(connectionId, messageId)));
+
   // --- Connections ---
 
   Future<List<MailConnection>> getConnectionsByUser(int userId) async {
     final decoded = await ApiClient.instance.get(
       MailRoutes.connectionsByUserUrl(userId),
     );
+    final connections = _parseConnections(decoded);
+    unawaited(_cache.write('connections_$userId', decoded));
+    return connections;
+  }
+
+  List<MailConnection> _parseConnections(Map<String, dynamic> decoded) {
     final items = _unwrapMailList(
       decoded,
       'Не удалось получить почтовые подключения',
@@ -318,7 +439,9 @@ class MailRepository {
     final decoded = await ApiClient.instance.get(
       MailRoutes.getMailboxesUrl(connectionId),
     );
-    return _parseMailboxList(decoded, 'Не удалось получить папки');
+    final folders = _parseMailboxList(decoded, 'Не удалось получить папки');
+    unawaited(_cache.write('folders_$connectionId', decoded));
+    return folders;
   }
 
   // --- Messages ---
@@ -338,7 +461,14 @@ class MailRepository {
       MailRoutes.getByServiceUrl(connectionId),
       queryParameters: {'page': '$page'},
     );
-    return _parseMessagePage(decoded, 'Не удалось получить письма');
+    final result = _applyServerPage(
+      connectionId,
+      _parseMessagePage(decoded, 'Не удалось получить письма'),
+    );
+    if (page == 1) {
+      unawaited(_cache.write(_listKey(connectionId, null), decoded));
+    }
+    return result;
   }
 
   Future<MailMessagePage> getMessagesByFolder({
@@ -350,7 +480,14 @@ class MailRepository {
       MailRoutes.getByFolderUrl(connectionId, folderId),
       queryParameters: {'page': '$page'},
     );
-    return _parseMessagePage(decoded, 'Не удалось получить письма');
+    final result = _applyServerPage(
+      connectionId,
+      _parseMessagePage(decoded, 'Не удалось получить письма'),
+    );
+    if (page == 1) {
+      unawaited(_cache.write(_listKey(connectionId, folderId), decoded));
+    }
+    return result;
   }
 
   Future<MailMessage> getMessage({
@@ -360,6 +497,12 @@ class MailRepository {
     final decoded = await ApiClient.instance.get(
       MailRoutes.getMessageUrl(connectionId, messageId),
     );
+    final message = _parseMessage(decoded, messageId);
+    unawaited(_cache.write(_messageKey(connectionId, messageId), decoded));
+    return withLocalReadState(connectionId, message);
+  }
+
+  MailMessage _parseMessage(Map<String, dynamic> decoded, int messageId) {
     final data = _unwrapMailMessagePayload(
       decoded,
       messageId: messageId,
@@ -438,48 +581,81 @@ class MailRepository {
 
   // --- Mark read/unread ---
 
-  Future<void> markRead({
-    required int connectionId,
-    required int messageId,
-  }) async {
-    final decoded = await ApiClient.instance.post(
-      MailRoutes.markReadUrl(connectionId, messageId),
-      body: {'is_read': true},
-    );
-    _unwrapMailData(decoded, 'Не удалось отметить письмо прочитанным');
-  }
+  Future<void> markRead({required int connectionId, required int messageId}) =>
+      _setRead(connectionId, messageId, true, () async {
+        final decoded = await ApiClient.instance.post(
+          MailRoutes.markReadUrl(connectionId, messageId),
+          body: {'is_read': true},
+        );
+        _requireDone(decoded, 'Не удалось отметить письмо прочитанным');
+      });
 
   Future<void> markUnread({
     required int connectionId,
     required int messageId,
-  }) async {
+  }) => _setRead(connectionId, messageId, false, () async {
     final decoded = await ApiClient.instance.post(
       MailRoutes.markUnreadUrl(connectionId, messageId),
       body: {'is_read': false},
     );
-    _unwrapMailData(decoded, 'Не удалось отметить письмо непрочитанным');
-  }
+    _requireDone(decoded, 'Не удалось отметить письмо непрочитанным');
+  });
 
   Future<void> markFewRead({
     required int connectionId,
     required List<int> ids,
   }) async {
+    final keys = [for (final id in ids) _readKey(connectionId, id)];
+    for (final key in keys) {
+      _readOverrides[key] = true;
+    }
+    try {
+      // EmailController::massMarkAsRead читает список из `emails`; с `ids`
+      // сервер получал пустой список и ничего не отмечал.
+      final decoded = await ApiClient.instance.post(
+        MailRoutes.markFewReadUrl(connectionId),
+        body: {'emails': ids},
+      );
+      _requireDone(decoded, 'Не удалось изменить статус писем');
+    } catch (_) {
+      for (final key in keys) {
+        if (_readOverrides[key] == true) _readOverrides.remove(key);
+      }
+      rethrow;
+    }
+  }
+
+  // --- Flags ---
+
+  Future<void> setFlagged({
+    required int connectionId,
+    required int messageId,
+    required bool flagged,
+  }) async {
     final decoded = await ApiClient.instance.post(
-      MailRoutes.markFewReadUrl(connectionId),
-      body: {'ids': ids},
+      flagged
+          ? MailRoutes.markFlaggedUrl(connectionId, messageId)
+          : MailRoutes.markUnflaggedUrl(connectionId, messageId),
     );
-    _unwrapMailData(decoded, 'Не удалось изменить статус писем');
+    _requireDone(
+      decoded,
+      flagged ? 'Не удалось поставить флажок' : 'Не удалось снять флажок',
+    );
   }
 
   // --- Delete ---
 
+  /// Сервер переносит письмо в «Корзину», а из самой корзины удаляет
+  /// окончательно.
   Future<void> deleteMessage({
     required int connectionId,
     required int messageId,
   }) async {
-    await ApiClient.instance.get(
+    final decoded = await ApiClient.instance.get(
       MailRoutes.deleteMessageUrl(connectionId, messageId),
     );
+    _requireDone(decoded, 'Не удалось удалить письмо');
+    _forgetMessage(connectionId, messageId);
   }
 
   Future<void> deleteFewMessages({required int connectionId}) async {
@@ -493,20 +669,29 @@ class MailRepository {
     required int messageId,
     required int folderId,
   }) async {
-    await ApiClient.instance.get(
+    final decoded = await ApiClient.instance.get(
       MailRoutes.moveMessageUrl(connectionId, messageId, folderId),
     );
+    _requireDone(decoded, 'Не удалось переместить письмо');
   }
 
   // --- Attachments ---
 
+  /// По id вложения, если сервер его отдал, — однозначно и для файлов с
+  /// одинаковыми именами; иначе по имени.
   Future<Uint8List> downloadAttachment({
     required int connectionId,
     required int messageId,
-    required String filename,
+    required MailAttachment attachment,
   }) async {
     final bytes = await ApiClient.instance.downloadBytes(
-      MailRoutes.attachmentUrl(connectionId, messageId, filename),
+      attachment.id > 0
+          ? MailRoutes.attachmentByIdUrl(connectionId, messageId, attachment.id)
+          : MailRoutes.attachmentUrl(
+              connectionId,
+              messageId,
+              attachment.filename,
+            ),
     );
     return Uint8List.fromList(bytes);
   }
@@ -548,132 +733,72 @@ class MailRepository {
     _unwrapMailData(decoded, 'Не удалось установить ящик по умолчанию');
   }
 
-  /// Принимают ли `/mail/smtp/reply` и `/mail/smtp/forward` вложения
-  /// (multipart `attachments[]`, как `/mail/smtp/send`). Пока сервер их не
-  /// поддерживает, в ответе/пересылке кнопка «Прикрепить» скрыта — см.
-  /// docs/BACKEND_MAIL_FIXES.md, п. 10. Включить после выкладки бэкенда.
-  static const bool replyAttachmentsSupported = false;
-
+  /// Одно письмо всем адресатам с ящика [SendMailRequest.connectionId]:
+  /// сервер принимает список в `to` и сам шлёт с ящика из `connection_id`.
+  /// Раньше (старый бэкенд) клиент слал по письму каждому адресату и перед
+  /// отправкой переключал ящик по умолчанию.
   Future<void> sendMail(SendMailRequest request) async {
-    // The current API sends from the user's default SMTP connection.
-    // Select it explicitly; an atomic per-message sender needs backend support.
-    // Afterwards the previous default is restored: otherwise sending once
-    // from a second mailbox silently changed which one opens first.
-    int? previousDefault;
-    try {
-      final sendable = await getSendableConnections();
-      previousDefault = sendable.where((c) => c.isDefault).firstOrNull?.id;
-    } catch (_) {
-      // Without the list we cannot restore — sending still matters more.
-    }
-    final switched = previousDefault != request.connectionId;
-    if (switched) await setDefaultConnection(request.connectionId);
-    try {
-      // SendEmailRequest валидирует `to` как 'required|email' — один адрес,
-      // список через запятую сервер отклоняет с 422. Поэтому каждому
-      // получателю уходит своё письмо; копия и скрытая копия — только с
-      // первым, иначе каждый из них получил бы по экземпляру на каждого
-      // адресата. Убрать, когда сервер начнёт принимать список
-      // (docs/BACKEND_PROMPTS.md, задача 2).
-      final recipients = MailMessage.splitAddresses(
-        request.to,
-      ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
-      var first = true;
-      for (final to in recipients.isEmpty ? [request.to] : recipients) {
-        await _postSend(
-          SendMailRequest(
-            connectionId: request.connectionId,
-            to: to,
-            subject: request.subject,
-            body: request.body,
-            cc: first ? request.cc : const [],
-            bcc: first ? request.bcc : const [],
-            attachments: request.attachments,
-          ),
-        );
-        first = false;
-      }
-    } finally {
-      if (switched && previousDefault != null) {
-        try {
-          await setDefaultConnection(previousDefault);
-        } catch (_) {}
-      }
-    }
-  }
-
-  Future<void> _postSend(SendMailRequest request) async {
-    final fields = <String, String>{
-      'to': request.to,
-      'subject': request.subject,
-      // Сервер с этим полем шлёт именно с этого ящика; переключение ящика
-      // по умолчанию в sendMail остаётся для старых версий бэкенда.
-      'connection_id': '${request.connectionId}',
-    };
     final body = request.body?.trim();
-    if (body != null && body.isNotEmpty) {
-      fields['body_text'] = body;
-    }
-    fields.addAll(_multipartList('cc', request.cc));
-    fields.addAll(_multipartList('bcc', request.bcc));
     final decoded = await ApiClient.instance.postMultipart(
       MailRoutes.smtpSendUrl,
-      fields: fields,
+      fields: {
+        ..._multipartList('to', _recipients(request.to)),
+        'subject': request.subject,
+        'connection_id': '${request.connectionId}',
+        if (body != null && body.isNotEmpty) 'body_text': body,
+        ..._multipartList('cc', request.cc),
+        ..._multipartList('bcc', request.bcc),
+      },
       files: [for (final a in request.attachments) a.toMultipart()],
     );
-    // Live API returns {success: true, data: true} on success (not an Email
-    // object, despite api-docs.json), so only the success flag can be checked.
     _unwrapMailData(decoded, 'Не удалось отправить письмо');
   }
 
-  // Поля — как в ReplyEmailRequest/ForwardEmailRequest бэкенда: текст
-  // ответа читается из `body_text`, текст пересылки — из `message`; поле
-  // `body` сервер молча отбрасывал, и письмо уходило пустым.
+  /// Ответ с ящика исходного письма: сервер ставит `In-Reply-To` и берёт
+  /// адресатов и тему из запроса («Ответить всем», ответ на своё письмо).
+  /// Текст — в `body_text`: поле `body` сервер отбрасывает.
   Future<void> replyMail(ReplyMailRequest request) async {
-    final fields = <String, String>{
-      'to': request.to,
-      'subject': request.subject,
-      if (request.body != null && request.body!.trim().isNotEmpty)
-        'body_text': request.body!,
-    };
-    final decoded = request.attachments.isNotEmpty
-        ? await ApiClient.instance.postMultipart(
-            MailRoutes.smtpReplyUrl(request.messageId),
-            fields: {
-              ...fields,
-              ..._multipartList('cc', request.cc),
-              ..._multipartList('bcc', request.bcc),
-            },
-            files: [for (final a in request.attachments) a.toMultipart()],
-          )
-        : await ApiClient.instance.post(
-            MailRoutes.smtpReplyUrl(request.messageId),
-            body: {
-              ...fields,
-              if (request.cc.isNotEmpty) 'cc': request.cc,
-              if (request.bcc.isNotEmpty) 'bcc': request.bcc,
-            },
-          );
+    final body = request.body?.trim();
+    final decoded = await ApiClient.instance.postMultipart(
+      MailRoutes.smtpReplyUrl(request.messageId),
+      fields: {
+        ..._multipartList('to', _recipients(request.to)),
+        'subject': request.subject,
+        if (body != null && body.isNotEmpty) 'body_text': request.body!,
+        ..._multipartList('cc', request.cc),
+        ..._multipartList('bcc', request.bcc),
+      },
+      files: [for (final a in request.attachments) a.toMultipart()],
+    );
     _unwrapMailData(decoded, 'Не удалось ответить на письмо');
   }
 
-  /// Пересылка идёт через `/mail/smtp/send`, а не `/mail/smtp/forward`:
-  /// forward на бэкенде падает с 500 на каждом письме (вызывает `->format()`
-  /// у даты-строки из ImapService::getMessage и `->getName()` у массива
-  /// `from`) — см. docs/BACKEND_MAIL_FIXES.md, п. 15. Поэтому `body` — текст
-  /// пользователя вместе с цитатой исходного письма. Несколько адресатов
-  /// разбирает [sendMail].
-  Future<void> forwardMail(ForwardMailRequest request) => sendMail(
-    SendMailRequest(
-      connectionId: request.connectionId,
-      to: request.to,
-      subject: request.subject,
-      body: request.body,
-      cc: request.cc,
-      bcc: request.bcc,
-      attachments: request.attachments,
-    ),
-  );
+  /// Пересылка через `/mail/smtp/forward`: сервер сам ставит тему
+  /// «Fwd: …», добавляет исходное письмо с оформлением и прикладывает его
+  /// вложения. Поэтому `body` — только текст пользователя, без цитаты.
+  Future<void> forwardMail(ForwardMailRequest request) async {
+    final body = request.body?.trim();
+    final decoded = await ApiClient.instance.postMultipart(
+      MailRoutes.smtpForwardUrl(request.messageId),
+      fields: {
+        ..._multipartList('to', _recipients(request.to)),
+        'connection_id': '${request.connectionId}',
+        if (body != null && body.isNotEmpty) 'message': body,
+        ..._multipartList('cc', request.cc),
+        ..._multipartList('bcc', request.bcc),
+      },
+      files: [for (final a in request.attachments) a.toMultipart()],
+    );
+    _unwrapMailData(decoded, 'Не удалось переслать письмо');
+  }
+
+  /// `a@x, Имя <b@y>` → `[a@x, b@y]`.
+  static List<String> _recipients(String list) {
+    final result = MailMessage.splitAddresses(
+      list,
+    ).map(_bareAddress).where((a) => a.isNotEmpty).toList();
+    return result.isEmpty ? [list.trim()] : result;
+  }
 
   /// Массив для multipart: `cc[0]=a@x`, `cc[1]=b@y` — Laravel собирает
   /// из этого `cc` как массив.
@@ -780,9 +905,12 @@ class MailRepository {
     String errorMessage,
   ) {
     final items = _unwrapMailList(decoded, errorMessage);
+    // Удалённые из корзины письма сервер помечает `\Deleted`, но из списка
+    // не убирает.
     return items
         .where((item) => MailPayloadUtils.isMessage(item))
         .map(MailMessage.fromJson)
+        .where((m) => !m.isDeleted)
         .where((m) => m.id > 0 || m.subject != '(без темы)')
         .toList();
   }
@@ -845,6 +973,16 @@ class MailRepository {
       throw ApiException(200, message);
     }
     return decoded['data'] ?? decoded;
+  }
+
+  /// Для операций над письмом на IMAP-сервере (удаление, перенос, отметки):
+  /// сервер отвечает 200 и при ошибке — `success: false`, а если IMAP-команда
+  /// не прошла, то `success: true, data: false`. Раньше ответ не проверялся,
+  /// и неудача выглядела как успех: письмо пропадало и возвращалось при
+  /// следующем обновлении.
+  void _requireDone(Map<String, dynamic> decoded, String errorMessage) {
+    final data = _unwrapMailData(decoded, errorMessage);
+    if (data == false) throw ApiException(200, errorMessage);
   }
 
   List<Map<String, dynamic>> _unwrapMailList(

@@ -16,6 +16,10 @@ class DiskRoutes {
   static String get downloadUrl =>
       '${ApiConfig.baseUrl}$_prefix/files/download';
 
+  /// `GET /nextcloud/files/preview?path=…&size=…` — картинка-превью
+  /// (размер 16–1024), 404, если превью для файла нет.
+  static String get previewUrl => '${ApiConfig.baseUrl}$_prefix/files/preview';
+
   static String get createFolderUrl =>
       '${ApiConfig.baseUrl}$_prefix/folders/create';
 

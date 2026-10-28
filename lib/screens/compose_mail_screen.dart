@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
@@ -8,6 +10,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
+import '../services/mail_contacts_service.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/booking_glass_form.dart';
@@ -17,6 +20,7 @@ import '../widgets/mail_recipient_field.dart';
 import '../widgets/staff_user_picker_sheet.dart';
 import 'mail_provider_picker_screen.dart';
 import 'mail_screen.dart';
+import '../services/haptics_service.dart';
 
 class _PendingAttachment {
   final String filename;
@@ -123,8 +127,6 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   final _subjectController = TextEditingController();
   final _bodyController = TextEditingController();
 
-  static const _forwardMarker = '---------- Пересланное сообщение ----------';
-
   final List<_PendingAttachment> _attachments = [];
   bool _isSending = false;
   String? _toError;
@@ -141,6 +143,10 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
   late final String _initialCc;
 
   static const _labelWidth = 72.0;
+
+  /// SendEmailRequest: `attachments_files.*` — `max:10240` (КБ). Больше —
+  /// сервер отвечает 422 уже после нажатия «Отправить».
+  static const _maxAttachmentBytes = 10240 * 1024;
   late final String _initialSubject;
   late final String _initialBody;
 
@@ -148,11 +154,6 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     r'^\s*(re|ответ|aw|sv)\s*:',
     caseSensitive: false,
   );
-  static final _forwardPrefix = RegExp(
-    r'^\s*(fwd?|пересл|tr|wg)\s*:',
-    caseSensitive: false,
-  );
-
   String _ownEmail() => widget.connection.email.trim().toLowerCase();
 
   bool _isOwn(String address) =>
@@ -216,18 +217,9 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
         _bodyController.text = '\n\n$header\n$quote';
       }
     } else if (forwardOf != null) {
-      _subjectController.text = _forwardPrefix.hasMatch(forwardOf.subject)
-          ? forwardOf.subject
-          : 'Fwd: ${forwardOf.subject}';
-      final quote = forwardOf.previewBody;
-      final date = forwardOf.date;
-      _bodyController.text =
-          '\n\n$_forwardMarker\n'
-          'От: ${forwardOf.from}\n'
-          '${date == null ? '' : 'Дата: ${dateFormat.format(date.toLocal())}\n'}'
-          'Тема: ${forwardOf.subject}\n'
-          '${(forwardOf.to ?? '').isEmpty ? '' : 'Кому: ${forwardOf.to}\n'}'
-          '\n$quote';
+      // Тему «Fwd: …» и исходное письмо с вложениями сервер добавляет сам —
+      // здесь только текст пользователя (см. [_buildForwardedCard]).
+      _subjectController.text = 'Fwd: ${forwardOf.subject}';
     }
     _initialTo = _toController.snapshot;
     _initialCc = _ccController.snapshot;
@@ -267,12 +259,6 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     if (discard == true && mounted) Navigator.of(context).pop();
   }
 
-  /// Вложения в ответе сервер пока не принимает — до доработки бэкенда
-  /// (replyAttachmentsSupported) кнопку прикрепления не показываем.
-  /// Пересылка идёт через /mail/smtp/send, там вложения работают.
-  bool get _canAttach =>
-      widget.replyTo == null || MailRepository.replyAttachmentsSupported;
-
   @override
   void dispose() {
     _toController.dispose();
@@ -294,12 +280,29 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     if (result == null) return;
 
     final picked = <_PendingAttachment>[];
+    final tooLarge = <String>[];
     for (final file in result.files) {
       final bytes = file.bytes;
       if (bytes == null) continue;
+      if (bytes.length > _maxAttachmentBytes) {
+        tooLarge.add(file.name);
+        continue;
+      }
       picked.add(_PendingAttachment(filename: file.name, bytes: bytes));
     }
-    if (picked.isEmpty || !mounted) return;
+    if (!mounted) return;
+    if (tooLarge.isNotEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(
+            tooLarge.length == 1
+                ? 'Файл «${tooLarge.single}» больше 10 МБ — такие сервер не принимает'
+                : 'Файлы больше 10 МБ не добавлены: ${tooLarge.join(', ')}',
+          ),
+        ),
+      );
+    }
+    if (picked.isEmpty) return;
     setState(() => _attachments.addAll(picked));
   }
 
@@ -388,8 +391,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           .toList();
       final cc = _ccController.emails;
       final bcc = _bccController.emails;
-      // /mail/smtp/reply/{email} и /mail/smtp/forward/{email} отправляют с
-      // ящика исходного письма и связывают ответ с перепиской.
+      // /mail/smtp/reply/{email} отправляет с ящика исходного письма и
+      // связывает ответ с перепиской.
       if (replyTo != null) {
         await MailRepository.instance.replyMail(
           ReplyMailRequest(
@@ -428,9 +431,18 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           ),
         );
       }
+      AppHaptics.success();
+      unawaited(
+        MailContactsService.instance.rememberSent([
+          ..._toController.recipients,
+          ..._ccController.recipients,
+          ..._bccController.recipients,
+        ]),
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
+      AppHaptics.error();
       if (!mounted) return;
       final message = e is ApiException
           ? e.message
@@ -570,6 +582,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
                       minLines: 1,
                       maxLines: 3,
                       enabled: !_isSending,
+                      // Тему пересылки сервер задаёт сам — «Fwd: <тема>».
+                      readOnly: widget.forwardOf != null,
                       decoration: const BoxDecoration(),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       style: fieldStyle.copyWith(fontWeight: FontWeight.w600),
@@ -601,13 +615,87 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           maxLines: null,
           enabled: !_isSending,
           textCapitalization: TextCapitalization.sentences,
-          placeholder: 'Текст письма',
+          placeholder: widget.forwardOf != null
+              ? 'Комментарий к пересылаемому письму'
+              : 'Текст письма',
           decoration: const BoxDecoration(),
           padding: const EdgeInsets.all(16),
           style: TextStyle(
             fontSize: 16,
             height: 1.35,
             color: CupertinoColors.label.resolveFrom(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Что будет переслано: исходное письмо целиком (с оформлением и
+  /// вложениями) сервер добавит под текстом пользователя.
+  Widget _buildForwardedCard(BuildContext context, MailMessage message) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    final date = message.date;
+    final sender = mailDisplayName(message.from);
+    final attachments = message.attachments.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(22),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    CupertinoIcons.arrowshape_turn_up_right,
+                    size: 15,
+                    color: secondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Пересылаемое письмо',
+                    style: TextStyle(fontSize: 13, color: secondary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                message.subject,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                [
+                  if (sender.isNotEmpty) sender,
+                  if (date != null)
+                    DateFormat(
+                      'd MMMM yyyy, HH:mm',
+                      'ru_RU',
+                    ).format(date.toLocal()),
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: secondary),
+              ),
+              if (attachments > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  attachments == 1
+                      ? 'Вложение письма тоже будет переслано'
+                      : 'Вложения письма ($attachments) тоже будут пересланы',
+                  style: TextStyle(fontSize: 13, color: secondary),
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -682,7 +770,9 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           _buildHeaderFields(context),
           if (error != null) BookingFootnote(error, isError: true),
           _buildBody(context),
-          if (_canAttach) _buildAttachments(context),
+          if (widget.forwardOf != null)
+            _buildForwardedCard(context, widget.forwardOf!),
+          _buildAttachments(context),
         ],
       ),
     );

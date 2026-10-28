@@ -10,7 +10,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/chats_list_screen.dart';
 import 'screens/connector_screen.dart';
-import 'screens/news_feed_screen.dart';
+import 'screens/today_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/mail_screen.dart';
 import 'screens/more_screen.dart';
@@ -19,9 +19,14 @@ import 'config/app_theme.dart';
 import 'config/home_tabs.dart';
 import 'models/chat.dart';
 import 'repositories/documents_repository.dart';
+import 'services/api_response_cache.dart';
+import 'services/app_lock_service.dart';
 import 'services/app_navigation_service.dart';
 import 'services/auth_service.dart';
 import 'services/branding_service.dart';
+import 'services/haptics_service.dart';
+import 'services/home_widget_service.dart';
+import 'services/live_activity_service.dart';
 import 'services/chat_service.dart';
 import 'services/chat_realtime_service.dart';
 import 'services/crash_reporting_service.dart';
@@ -36,8 +41,8 @@ import 'services/survey_pending_service.dart';
 import 'services/theme_mode_service.dart';
 import 'services/user_presence_service.dart';
 import 'services/vpn_detector_service.dart';
+import 'widgets/app_lock_overlay.dart';
 import 'widgets/call_overlay.dart';
-import 'widgets/home_shortcut_button.dart';
 import 'widgets/vpn_banner.dart';
 
 Future<void> main() async {
@@ -48,7 +53,9 @@ Future<void> main() async {
     await initializeDateFormatting('ru_RU', null);
     await ApiConfig.init();
     await ThemeModeService.instance.init();
+    await AppHaptics.init();
     await AuthService.instance.init();
+    await AppLockService.instance.init();
     await BrandingService.instance.init();
     // Инициализирует Firebase (нужен для CrashReportingService ниже).
     await PushNotificationService.instance.init();
@@ -71,10 +78,15 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    LiveActivityService.instance.init();
+    HomeWidgetService.instance.init();
     AuthService.instance.onSessionExpired = () {
       UserPresenceService.instance.reset();
       unawaited(ChatRealtimeService.instance.stop());
+      ChatService.instance.reset();
+      unawaited(ApiResponseCache.clearAll());
       unawaited(PushNotificationService.instance.disableLocally());
+      AppLockService.instance.dismiss();
       AppNavigationService.goToLogin();
     };
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -104,6 +116,7 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
     if (!AuthService.instance.isAuthenticated) return;
     if (state == AppLifecycleState.resumed) {
       unawaited(UserPresenceService.instance.setOnline(true));
+      unawaited(HomeWidgetService.instance.refresh());
       // Accept с lock screen / cold start мог произойти до готовности Dart.
       unawaited(IncomingCallService.instance.recoverPendingAcceptedCalls());
       unawaited(
@@ -169,8 +182,8 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
                       resizeToAvoidBottomInset: false,
                       body: DefaultTextStyle(style: textStyle, child: child!),
                     ),
-                    const HomeShortcutButton(),
                     const VpnBanner(),
+                    const AppLockOverlay(),
                     // Экран звонка — над всем, в т.ч. над Navigator: при
                     // сворачивании в окошко звонок продолжается, пока
                     // пользователь ходит по приложению.
@@ -201,7 +214,7 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
                 ? (args['openNewsId'] as String?)
                 : null;
             return MainNavigationScreen(
-              initialIndex: initialIndex ?? HomeTabs.news,
+              initialIndex: initialIndex ?? HomeTabs.today,
               openNewsId: openNewsId,
             );
           },
@@ -214,7 +227,7 @@ class _ConnectAppState extends State<ConnectApp> with WidgetsBindingObserver {
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({
     super.key,
-    this.initialIndex = HomeTabs.news,
+    this.initialIndex = HomeTabs.today,
     this.openNewsId,
   });
 
@@ -232,7 +245,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   /// Вкладки, которые уже открывали. Создаём их лениво, а потом держим
   /// смонтированными: при переключении сохраняются прокрутка и данные.
   final Set<int> _loadedTabs = {};
-  VoidCallback? _releaseHomeSuppress;
   Timer? _mailRefreshTimer;
 
   @override
@@ -240,7 +252,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     super.initState();
     _currentIndex = widget.initialIndex.clamp(0, HomeTabs.more);
     _loadedTabs.add(_currentIndex);
-    _syncHomeSuppress();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppNavigationService.processPendingNavigation();
     });
@@ -272,7 +283,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _releaseHomeSuppress?.call();
     ChatService.instance.removeListener(_onBadgesChanged);
     MailUnreadService.instance.removeListener(_onBadgesChanged);
     DocumentPendingService.instance.removeListener(_onBadgesChanged);
@@ -315,27 +325,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     }
   }
 
-  /// В Чатах и Почте кнопка «Домой» не нужна (и в почте легла бы поверх
-  /// нижней панели поиска) — прячем её, пока активна одна из этих вкладок.
-  void _syncHomeSuppress() {
-    final suppress =
-        _currentIndex == HomeTabs.chats || _currentIndex == HomeTabs.mail;
-    if (suppress) {
-      _releaseHomeSuppress ??= HomeShortcutButton.suppress();
-    } else {
-      _releaseHomeSuppress?.call();
-      _releaseHomeSuppress = null;
-    }
-  }
-
   void _selectTab(int index) {
-    HapticFeedback.selectionClick();
+    AppHaptics.selection();
     if (index == _currentIndex) return;
     setState(() {
       _currentIndex = index;
       _loadedTabs.add(index);
     });
-    _syncHomeSuppress();
     if (index == HomeTabs.mail) {
       MailUnreadService.instance.refresh();
     }
@@ -344,18 +340,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   static String? _countBadge(int count) =>
       count <= 0 ? null : (count > 99 ? '99+' : '$count');
 
-  int get _unreadChatsCount =>
-      ChatService.instance.chats.fold<int>(0, (sum, c) => sum + c.unreadCount);
-
+  /// Сколько строк в списке чатов ждут внимания. Строка «Согласование» —
+  /// одна, сколько бы документов в ней ни было.
   int get _chatsTabCount =>
-      _unreadChatsCount + DocumentPendingService.instance.totalCount;
+      ChatService.instance.unreadChatsCount +
+      (DocumentPendingService.instance.totalCount > 0 ? 1 : 0);
 
   Widget _buildTab(int index) {
     return switch (index) {
-      HomeTabs.news => NewsFeedScreen(
-        showAppBar: false,
-        openNewsId: widget.openNewsId,
-      ),
+      HomeTabs.today => TodayScreen(openNewsId: widget.openNewsId),
       HomeTabs.chats => const ChatsListScreen(),
       HomeTabs.calls => const ConnectorScreen(),
       HomeTabs.mail => const MailScreen(isTab: true),
@@ -403,9 +396,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         onSelect: _selectTab,
         items: [
           const _TabItem(
-            icon: CupertinoIcons.news,
-            activeIcon: CupertinoIcons.news_solid,
-            label: 'Лента',
+            icon: CupertinoIcons.house,
+            activeIcon: CupertinoIcons.house_fill,
+            label: 'Главная',
           ),
           _TabItem(
             icon: CupertinoIcons.chat_bubble_2,

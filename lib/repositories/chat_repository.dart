@@ -117,7 +117,11 @@ class ChatRepository {
       } catch (_) {}
     }
 
-    return ChatMessagesPage(messages: messages, members: members);
+    return ChatMessagesPage(
+      messages: messages,
+      members: members,
+      raw: pageUrl == null ? decoded : null,
+    );
   }
 
   /// Загружает всю историю сообщений чата постранично — для клиентской
@@ -180,6 +184,38 @@ class ChatRepository {
       forwardedMessageId: forwardedMessageId,
       type: ChatStickers.messageType,
     );
+  }
+
+  /// `POST /chat/messages/forward`. Сервер сам копирует текст и файлы;
+  /// в ответе по каждому чату — созданные копии.
+  Future<Map<int, List<ChatMessage>>> forwardMessages({
+    required List<int> chatIds,
+    required List<int> messageIds,
+    required int currentUserId,
+  }) async {
+    final decoded = await ApiClient.instance.post(
+      ChatRoutes.forwardUrl,
+      body: {'chat_ids': chatIds, 'message_ids': messageIds},
+    );
+    final data = ApiEnvelope.unwrapDataList(
+      decoded,
+      defaultErrorMessage: 'Не удалось переслать сообщение',
+    );
+    final result = <int, List<ChatMessage>>{};
+    for (final entry in data.whereType<Map<String, dynamic>>()) {
+      final chatId = int.tryParse('${entry['chat_id']}');
+      final messages = entry['messages'];
+      if (chatId == null || messages is! List) continue;
+      result[chatId] = [
+        for (final m in messages.whereType<Map<String, dynamic>>())
+          ChatMapper.mapMessage(
+            m,
+            chatId: chatId.toString(),
+            currentUserId: currentUserId,
+          ),
+      ];
+    }
+    return result;
   }
 
   Future<ChatMessage> sendMessage(

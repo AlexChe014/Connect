@@ -15,6 +15,32 @@ class HtmlTextUtils {
     ).hasMatch(value);
   }
 
+  /// HTML → текст с сохранёнными переносами строк (абзацы, `<br>`, пункты
+  /// списков) — для копирования и правки сообщения в поле ввода, где
+  /// [toPlainText] склеил бы абзацы портала в одну строку.
+  static String toMultilineText(String html) {
+    final trimmed = html.trim();
+    if (trimmed.isEmpty) return '';
+    if (!looksLikeHtml(trimmed)) return decodeEntities(trimmed);
+
+    // Переносы в исходнике HTML — просто пробелы; строки задают теги.
+    final withBreaks = trimmed
+        .replaceAll(RegExp(r'\s*\n\s*'), ' ')
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(
+          RegExp(r'</(p|div|tr|li|h[1-6]|blockquote)>', caseSensitive: false),
+          '\n',
+        );
+    String text;
+    try {
+      final document = html_parser.parse(withBreaks);
+      text = document.body?.text ?? document.documentElement?.text ?? '';
+    } catch (_) {
+      text = decodeEntities(withBreaks.replaceAll(RegExp(r'<[^>]*>'), ''));
+    }
+    return _normalizeWhitespace(text.replaceAll(' ', ' '));
+  }
+
   /// HTML → однострочный/многострочный plain text для превью и сниппетов.
   static String toPlainText(String html) {
     final trimmed = html.trim();

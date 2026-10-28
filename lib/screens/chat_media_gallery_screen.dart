@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat/chat_file.dart';
 import 'package:connect/models/chat_message.dart';
+import 'package:connect/services/chat_file_downloads.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/widgets/app_network_image.dart';
+import 'package:connect/widgets/chat_download_ring.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ScaffoldMessenger, SnackBar;
 
@@ -103,10 +105,21 @@ class _MediaViewerState extends State<MediaViewer> {
             ? null
             : CupertinoButton(
                 padding: EdgeInsets.zero,
-                onPressed: _sharing ? null : _shareCurrent,
+                // Пока файл качается, кнопка показывает прогресс и по тапу
+                // останавливает скачивание.
+                onPressed: _sharing
+                    ? () => ChatFileDownloads.instance.cancel(
+                        _currentFile()!.id,
+                      )
+                    : _shareCurrent,
                 child: _sharing
-                    ? const CupertinoActivityIndicator(
+                    ? ChatDownloadRing(
+                        fileId: _currentFile()!.id,
                         color: CupertinoColors.white,
+                        size: 30,
+                        idle: const CupertinoActivityIndicator(
+                          color: CupertinoColors.white,
+                        ),
                       )
                     : const Icon(
                         CupertinoIcons.share,
@@ -121,7 +134,7 @@ class _MediaViewerState extends State<MediaViewer> {
         itemBuilder: (context, index) {
           final m = items[index];
           if (m.attachmentKind == ChatAttachmentKind.video) {
-            final hasFile = m.files.any((f) => f.isVideo);
+            final videoFile = m.files.where((f) => f.isVideo).firstOrNull;
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -136,11 +149,11 @@ class _MediaViewerState extends State<MediaViewer> {
                     m.fileName ?? 'Видео',
                     style: const TextStyle(color: CupertinoColors.white),
                   ),
-                  if (hasFile) ...[
+                  if (videoFile != null) ...[
                     const SizedBox(height: 16),
-                    CupertinoButton.filled(
-                      onPressed: () => _openVideo(context, m),
-                      child: const Text('Открыть'),
+                    _VideoOpenButton(
+                      file: videoFile,
+                      onOpen: () => _openVideo(context, m),
                     ),
                   ],
                 ],
@@ -163,6 +176,59 @@ class _MediaViewerState extends State<MediaViewer> {
           );
         },
       ),
+    );
+  }
+}
+
+/// «Открыть» для видео; пока оно качается — кольцо с крестиком и «X из Y»,
+/// тап останавливает скачивание.
+class _VideoOpenButton extends StatelessWidget {
+  const _VideoOpenButton({required this.file, required this.onOpen});
+
+  final ChatFile file;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final downloads = ChatFileDownloads.instance;
+    return ValueListenableBuilder<ChatFileDownloadProgress?>(
+      valueListenable: downloads.progressOf(file.id),
+      builder: (context, progress, _) {
+        if (progress == null) {
+          return CupertinoButton.filled(
+            onPressed: onOpen,
+            child: const Text('Открыть'),
+          );
+        }
+        final total = progress.total;
+        final received = ChatFile.formatBytes(progress.received);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => downloads.cancel(file.id),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ChatDownloadRing(
+                fileId: file.id,
+                color: CupertinoColors.white,
+                size: 52,
+                idle: const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                total == null
+                    ? received
+                    : '$received из ${ChatFile.formatBytes(total)}',
+                style: const TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 13,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../config/app_theme.dart';
 import '../models/surveys/survey_form.dart';
 import '../repositories/surveys_repository.dart';
+import '../services/survey_draft_service.dart';
 import '../services/survey_pending_service.dart';
 import '../utils/app_feedback.dart';
 import '../widgets/app_empty_state.dart';
@@ -45,6 +46,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
   /// Не `null` — ответы отправлены, показываем экран благодарности.
   String? _successMessage;
 
+  /// Отложенное сохранение черновика: текст сохраняем не на каждую букву.
+  Timer? _draftTimer;
+
   @override
   void initState() {
     super.initState();
@@ -53,6 +57,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
 
   @override
   void dispose() {
+    if (_draftTimer?.isActive ?? false) {
+      _draftTimer!.cancel();
+      _saveDraft();
+    }
     for (final c in _textControllers.values) {
       c.dispose();
     }
@@ -85,6 +93,14 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
       if (form.alreadyCompleted) {
         SurveyPendingService.instance.markCompleted(widget.token);
       }
+      _answers.clear();
+      if (form.alreadyCompleted || !form.isOpen) {
+        unawaited(SurveyDraftService.instance.clear(widget.token));
+      } else {
+        final draft = await SurveyDraftService.instance.load(widget.token);
+        if (!mounted) return;
+        if (draft != null) _restoreDraft(form, draft);
+      }
       setState(() {
         _form = form;
         _isLoading = false;
@@ -101,6 +117,49 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
     }
   }
 
+  void _restoreDraft(SurveyForm form, SurveyDraft draft) {
+    // Опрос уже начинали — повторное событие `start` не нужно.
+    if (!draft.isEmpty) _startSent = true;
+    for (final q in form.questions) {
+      final saved = draft.answers[q.id];
+      bool isOption(Object? v) => q.options.any((o) => o.value == v);
+      switch (q.type) {
+        case SurveyQuestionType.multi:
+          if (saved is List) {
+            final values = saved.whereType<Object>().where(isOption).toSet();
+            if (values.isNotEmpty) _answers[q.id] = values;
+          }
+        case SurveyQuestionType.single:
+          if (saved != null && isOption(saved)) _answers[q.id] = saved;
+        case SurveyQuestionType.rating:
+        case SurveyQuestionType.nps:
+          if (saved is num) _answers[q.id] = saved.toInt();
+      }
+      final text = draft.texts[q.id];
+      if (text != null) _textControllers[q.id]?.text = text;
+    }
+  }
+
+  void _scheduleDraftSave() {
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 400), _saveDraft);
+  }
+
+  void _saveDraft() {
+    if (_form == null || _successMessage != null) return;
+    unawaited(
+      SurveyDraftService.instance.save(
+        widget.token,
+        SurveyDraft(
+          answers: Map.of(_answers),
+          texts: {
+            for (final e in _textControllers.entries) e.key: e.value.text,
+          },
+        ),
+      ),
+    );
+  }
+
   /// `start` — событие воронки «начал прохождение»: шлём один раз,
   /// при первом ответе, ошибки не мешают проходить опрос.
   void _markStarted() {
@@ -113,6 +172,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
 
   void _onTextChanged(int questionId) {
     if (_textControllers[questionId]!.text.trim().isNotEmpty) _markStarted();
+    if (_form != null) _scheduleDraftSave();
     if (_fieldErrors.containsKey(questionId)) {
       setState(() => _fieldErrors.remove(questionId));
     }
@@ -128,6 +188,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
       }
       _fieldErrors.remove(questionId);
     });
+    _scheduleDraftSave();
   }
 
   String _text(int questionId) =>
@@ -239,6 +300,8 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
       if (!mounted) return;
       SurveyPendingService.instance.markCompleted(widget.token);
       unawaited(SurveyPendingService.instance.refreshQuietly());
+      _draftTimer?.cancel();
+      unawaited(SurveyDraftService.instance.clear(widget.token));
       setState(() {
         _isSubmitting = false;
         _successMessage =

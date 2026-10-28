@@ -6,28 +6,33 @@ import 'package:intl/intl.dart';
 import '../config/app_theme.dart';
 import '../models/chat.dart';
 import '../models/mail/mail_connection.dart';
+import '../models/bookings/user_booking.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/staff_user.dart';
+import '../repositories/bookings_repository.dart';
 import '../repositories/mail_repository.dart';
 import '../repositories/users_repository.dart';
 import '../services/chat_service.dart';
 import '../services/disk_search_service.dart';
+import '../utils/booking_time_utils.dart';
 import '../utils/file_size_format.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
+import 'booking_detail_sheet.dart';
 import 'chat_conversation_screen.dart';
 import 'disk_screen.dart';
 import 'employee_detail_screen.dart';
 import 'mail_message_screen.dart';
 
-/// Сквозной поиск по людям, чатам, почте и «Диску».
+/// Сквозной поиск по людям, чатам, встречам, почте и «Диску».
 ///
 /// Раньше поиск был размазан по отдельным экранам (почта, чаты, сотрудники,
 /// создание группы) — свой собственный `CupertinoSearchTextField` в каждом,
 /// без единой точки входа. Этот экран объединяет их: один запрос
-/// параллельно уходит в 4 независимых источника (чаты — локально по уже
-/// загруженному списку, люди — `/user/filter`, почта — `/mail/search`,
+/// параллельно уходит в 5 независимых источников (чаты — локально по уже
+/// загруженному списку, люди — `/user/filter`, встречи — `/booking/filter`,
+/// почта — `/mail/search`,
 /// «Диск» — best-effort обход дерева папок, т.к. у Nextcloud-модуля на
 /// бэкенде нет своего поиска).
 class GlobalSearchScreen extends StatefulWidget {
@@ -47,6 +52,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   bool _isLoadingPeople = false;
   List<StaffUser> _people = const [];
+
+  bool _isLoadingBookings = false;
+  List<UserBooking> _bookings = const [];
 
   bool _isLoadingMail = false;
   List<MailSearchResult> _mail = const [];
@@ -73,11 +81,16 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     _debounce = Timer(const Duration(milliseconds: 350), _runSearch);
   }
 
-  bool get _isBusy => _isLoadingPeople || _isLoadingMail || _isLoadingDisk;
+  bool get _isBusy =>
+      _isLoadingPeople ||
+      _isLoadingBookings ||
+      _isLoadingMail ||
+      _isLoadingDisk;
 
   bool get _hasAnyResult =>
       _chats.isNotEmpty ||
       _people.isNotEmpty ||
+      _bookings.isNotEmpty ||
       _mail.isNotEmpty ||
       _disk.isNotEmpty;
 
@@ -91,10 +104,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       _query = q;
       _chats = q.isEmpty ? const [] : _searchChats(q);
       _people = const [];
+      _bookings = const [];
       _mail = const [];
       _disk = const [];
       _diskTruncated = false;
       _isLoadingPeople = runRemote;
+      _isLoadingBookings = runRemote;
       _isLoadingMail = runRemote;
       _isLoadingDisk = runRemote;
     });
@@ -113,6 +128,27 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         .catchError((_) {
           if (!mounted || gen != _generation) return;
           setState(() => _isLoadingPeople = false);
+        });
+
+    final now = DateTime.now();
+    BookingsRepository.instance
+        .searchBookings(q, from: now.subtract(const Duration(days: 90)))
+        .then((items) {
+          if (!mounted || gen != _generation) return;
+          // Сначала ближайшие предстоящие, затем прошедшие — от свежих.
+          final upcoming =
+              items.where((b) => b.datetimeEnd.isAfter(now)).toList()
+                ..sort((a, b) => a.datetimeStart.compareTo(b.datetimeStart));
+          final past = items.where((b) => !b.datetimeEnd.isAfter(now)).toList()
+            ..sort((a, b) => b.datetimeStart.compareTo(a.datetimeStart));
+          setState(() {
+            _bookings = [...upcoming, ...past].take(8).toList(growable: false);
+            _isLoadingBookings = false;
+          });
+        })
+        .catchError((_) {
+          if (!mounted || gen != _generation) return;
+          setState(() => _isLoadingBookings = false);
         });
 
     MailRepository.instance
@@ -173,7 +209,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                     child: CupertinoSearchTextField(
                       controller: _searchCtrl,
                       autofocus: true,
-                      placeholder: 'Люди, чаты, письма, файлы…',
+                      placeholder: 'Люди, чаты, встречи, письма, файлы…',
                     ),
                   ),
                   CupertinoButton(
@@ -194,7 +230,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   Widget _buildBody(BuildContext context) {
     if (_query.isEmpty) {
       return const AppEmptyState(
-        message: 'Введите имя, название чата, тему письма или файл',
+        message: 'Введите имя, чат, тему встречи или письма, файл',
         icon: CupertinoIcons.search,
       );
     }
@@ -223,6 +259,19 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                     ),
                   ]
                 : _people.map(_buildPersonTile).toList(),
+          ),
+        if (_isLoadingBookings || _bookings.isNotEmpty)
+          _buildSection(
+            context,
+            'Встречи',
+            _isLoadingBookings && _bookings.isEmpty
+                ? const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: AppLoadingIndicator(),
+                    ),
+                  ]
+                : _bookings.map(_buildBookingTile).toList(),
           ),
         if (_isLoadingMail || _mail.isNotEmpty)
           _buildSection(
@@ -360,6 +409,36 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       onTap: () => Navigator.of(context).push(
         CupertinoPageRoute(builder: (_) => EmployeeDetailScreen(user: user)),
       ),
+    );
+  }
+
+  Widget _buildBookingTile(UserBooking booking) {
+    final isOver = DateTime.now().isAfter(booking.datetimeEnd);
+    final when =
+        '${DateFormat('d MMM', 'ru_RU').format(booking.datetimeStart)}, '
+        '${BookingTimeUtils.formatHm(booking.datetimeStart)}–'
+        '${BookingTimeUtils.formatHm(booking.datetimeEnd)}';
+    final place = (booking.objectName ?? '').trim();
+
+    return CupertinoListTile(
+      leading: Icon(
+        CupertinoIcons.calendar,
+        color: isOver
+            ? CupertinoColors.systemGrey.resolveFrom(context)
+            : CupertinoColors.systemOrange.resolveFrom(context),
+      ),
+      title: Text(booking.theme, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        place.isEmpty ? when : '$when · $place',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Icon(
+        CupertinoIcons.chevron_forward,
+        size: 16,
+        color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+      ),
+      onTap: () => BookingDetailSheet.show(context, bookingId: booking.id),
     );
   }
 

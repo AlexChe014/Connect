@@ -8,6 +8,7 @@ import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
+import 'package:connect/services/chat_user_names.dart';
 import 'package:connect/services/paginated.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/utils/media_url_utils.dart';
@@ -148,6 +149,7 @@ class ChatMapper {
     final authorName = sender != null
         ? userDisplayNameFromJson(sender)
         : 'Пользователь';
+    if (senderId != null) ChatUserNames.instance.remember(senderId, authorName);
     final authorAvatarUrl = sender != null
         ? MediaUrlUtils.normalizeFirstUrl(sender['media'])
         : null;
@@ -178,8 +180,22 @@ class ChatMapper {
                 deletedMessageMarker);
 
     final forwardedMessageId = _parseInt(json['forwarded_message_id']);
+    final forwardedFromUserId = _parseInt(json['forwarded_from_user_id']);
     MessageReference? forwardOf;
-    if (forwardedMessageId != null) {
+    if (forwardedFromUserId != null) {
+      // `POST /chat/messages/forward`: содержимое скопировано в само
+      // сообщение, от оригинала остаётся только автор.
+      final forwardedFromUser = _asJsonMap(json['forwarded_from_user']);
+      forwardOf = MessageReference(
+        messageId: forwardedMessageId?.toString() ?? '',
+        authorId: forwardedFromUserId,
+        authorName: forwardedFromUser != null
+            ? userDisplayNameFromJson(forwardedFromUser)
+            : ChatUserNames.instance.nameFor(forwardedFromUserId) ??
+                  'Пользователь',
+        textPreview: '',
+      );
+    } else if (forwardedMessageId != null) {
       final forwardedFromUser = _asJsonMap(json['forwarded_from_user']);
       forwardOf = MessageReference(
         messageId: forwardedMessageId.toString(),
@@ -247,6 +263,7 @@ class ChatMapper {
     final items = rawList
         .map(_asJsonMap)
         .whereType<Map<String, dynamic>>()
+        .where((json) => !isServerCallEndedLine(json))
         .map(
           (json) =>
               mapMessage(json, chatId: chatIdStr, currentUserId: currentUserId),
@@ -375,7 +392,7 @@ class ChatMapper {
     ChatMessage? latest;
     for (final item in rawMessages) {
       final map = _asJsonMap(item);
-      if (map == null) continue;
+      if (map == null || isServerCallEndedLine(map)) continue;
       final chatId = _parseInt(map['chat_id'])?.toString() ?? '';
       final message = mapMessage(
         map,
@@ -434,6 +451,24 @@ class ChatMapper {
       if (member.userId != currentUserId) return member;
     }
     return members.isNotEmpty ? members.first : null;
+  }
+
+  static final _serverCallEndedLine = RegExp(
+    r'^Звонок завершён\s*\(\s*-?\d+\s*сек\.?\s*\)$',
+  );
+
+  /// Серверная строка «Звонок завершён (-55 сек)»: бэкенд добавляет её
+  /// рядом с сообщением `CALL`, в том числе к неотвеченным звонкам и с
+  /// отрицательной длительностью (docs/BACKEND_CALLS.md, §0).
+  /// Звонок уже показан самим `CALL`, поэтому строку не показываем.
+  static bool isServerCallEndedLine(Map<String, dynamic> json) {
+    final type = (json['type'] as String?)?.trim().toUpperCase();
+    if (type != 'SYSTEM') return false;
+    final text = _readMessageText(json);
+    if (text == null) return false;
+    return _serverCallEndedLine.hasMatch(
+      HtmlTextUtils.toPlainText(text).trim(),
+    );
   }
 
   static String? _readMessageText(Map<String, dynamic> json) {

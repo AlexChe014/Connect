@@ -458,6 +458,7 @@ class IncomingCallService {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
+          persist: false,
           duration: const Duration(seconds: 8),
           content: Text('Пока вы разговаривали, вам звонили: $names'),
           action: chats.length == 1

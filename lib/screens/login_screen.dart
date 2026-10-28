@@ -108,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(
           '/home',
-          arguments: {'initialIndex': HomeTabs.news},
+          arguments: {'initialIndex': HomeTabs.today},
         );
       }
     } on AuthException catch (e) {

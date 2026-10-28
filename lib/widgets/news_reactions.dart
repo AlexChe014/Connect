@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/auth_service.dart';
+import '../services/haptics_service.dart';
 import 'chat_avatar.dart';
 
 /// Эмодзи, которые предлагаются в пикере. Сервер принимает любую строку
@@ -75,7 +75,7 @@ class NewsReactionsBar extends StatelessWidget {
 
   void _toggle(String emoji) {
     if (isLoading) return;
-    HapticFeedback.lightImpact();
+    AppHaptics.light();
     onToggle(emoji);
   }
 

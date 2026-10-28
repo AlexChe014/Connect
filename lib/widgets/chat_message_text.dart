@@ -1,5 +1,4 @@
-import 'package:connect/repositories/connector_repository.dart';
-import 'package:connect/utils/connector_launch.dart';
+import 'package:connect/utils/connector_link_join.dart';
 import 'package:connect/utils/connector_url_utils.dart';
 import 'package:connect/utils/html_text_utils.dart';
 import 'package:connect/utils/open_link.dart';
@@ -47,15 +46,11 @@ class _ChatMessageTextState extends State<ChatMessageText> {
 
   Future<void> _openUrl(String raw) async {
     final url = raw.replaceAll(RegExp(r'[.,;:!?)]+$'), '');
-    final room = connectorRoomFromUrl(url);
-    if (room != null) {
-      try {
-        final session = await ConnectorRepository.instance.join(room);
-        await openConnectorSession(session);
-        return;
-      } catch (_) {
-        // Фоллбэк на браузер ниже.
-      }
+    // Ссылка ВКС — как в календаре и брони: вход в приложении, при
+    // ошибке — причина, а не молчаливый переход в браузер.
+    if (connectorRoomFromUrl(url) != null) {
+      await joinMeetingLink(context, url);
+      return;
     }
 
     final uri = Uri.tryParse(url);

@@ -8,7 +8,6 @@ import 'package:flutter/material.dart'
         SnackBar,
         SnackBarAction,
         SnackBarClosedReason;
-import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../config/app_theme.dart';
 import '../models/mail/mail_connection.dart';
@@ -20,14 +19,15 @@ import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_title_bar.dart';
-import '../widgets/home_shortcut_button.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/chat_avatar.dart';
 import '../widgets/mail_glass.dart';
+import '../widgets/swipe_actions_row.dart';
 import 'compose_mail_screen.dart';
 import 'mail_folders_screen.dart';
 import 'mail_message_screen.dart';
 import 'mail_screen.dart';
+import '../services/haptics_service.dart';
 
 class MailInboxScreen extends StatefulWidget {
   const MailInboxScreen({
@@ -92,10 +92,10 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
   String _searchQuery = '';
   final _searchController = TextEditingController();
+  final _swipeGroup = SwipeGroupController();
   bool _isEditing = false;
   final Set<int> _selectedIds = {};
   bool _isBulkActing = false;
-  VoidCallback? _releaseHomeSuppress;
 
   /// Поиск: совпадения среди загруженных писем (в т.ч. по тексту) плюс
   /// найденное сервером во всём ящике — раньше искали только по первым
@@ -124,11 +124,6 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Нижняя стеклянная панель занимает всю ширину — плавающая кнопка
-    // «Домой» легла бы поверх поиска (см. HomeShortcutButton).
-    if (!widget.isTab) {
-      _releaseHomeSuppress = HomeShortcutButton.suppress();
-    }
     MailUnreadService.instance.mailChanges.addListener(_refreshVisible);
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
@@ -198,13 +193,13 @@ class _MailInboxScreenState extends State<MailInboxScreen>
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     MailUnreadService.instance.mailChanges.removeListener(_refreshVisible);
     _searchController.dispose();
     _searchDebounce?.cancel();
     _scrollController.dispose();
+    _swipeGroup.dispose();
     super.dispose();
   }
 
@@ -229,6 +224,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   Future<void> _loadFolders() async {
     final connectionId = _connection.id;
     setState(() => _isLoadingFolders = true);
+    await _showCachedFolders(connectionId);
     try {
       final folders = await MailRepository.instance.getMailboxes(connectionId);
       if (!mounted || connectionId != _connection.id) return;
@@ -245,6 +241,45 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       setState(() => _isLoadingFolders = false);
       await _loadMessages();
     }
+  }
+
+  /// Папки и письма с прошлого раза — на экран сразу, пока идут запросы.
+  Future<void> _showCachedFolders(int connectionId) async {
+    final folders = await MailRepository.instance.cachedMailboxes(connectionId);
+    if (folders == null || !mounted || connectionId != _connection.id) return;
+    if (_folders.isNotEmpty) return;
+    setState(() {
+      _folders = folders;
+      _selectedFolder =
+          folders.where((f) => f.isInbox).firstOrNull ??
+          folders.where((f) => f.id > 0).firstOrNull;
+    });
+    await _showCachedMessages(connectionId, _selectedFolder, _requestVersion);
+  }
+
+  /// Первая страница папки из кэша, пока список пуст (первое открытие,
+  /// смена папки). Подгрузку следующих страниц не включаем — она начнётся
+  /// от свежей первой страницы.
+  Future<void> _showCachedMessages(
+    int connectionId,
+    MailFolder? folder,
+    int version,
+  ) async {
+    final page = await MailRepository.instance.cachedMessages(
+      connectionId,
+      folderId: folder?.id,
+    );
+    if (page == null || page.messages.isEmpty || !mounted) return;
+    if (version != _requestVersion ||
+        connectionId != _connection.id ||
+        _selectedFolder?.id != folder?.id ||
+        _messages.isNotEmpty) {
+      return;
+    }
+    setState(() {
+      _messages = page.messages;
+      _hasMoreMessages = false;
+    });
   }
 
   List<MailFolder> get _browsableFolders =>
@@ -266,6 +301,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       _isLoadingMessages = true;
       _isLoadingMore = false;
     });
+    if (_messages.isEmpty) {
+      unawaited(_showCachedMessages(connectionId, folder, version));
+    }
     try {
       if (forceSync) {
         await MailRepository.instance.fetchMessages(connectionId);
@@ -303,6 +341,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     } catch (_) {
       if (!mounted || version != _requestVersion) return;
       setState(() => _isLoadingMessages = false);
+      // Без сети на экране остаётся список из кэша — фоновое обновление
+      // не ругается, ошибку показываем только на явное действие.
+      if (_messages.isNotEmpty && !forceSync) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           content: Text(
@@ -482,8 +523,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
   }
 
   Future<void> _openMessage(MailMessage message) async {
-    final wasUnread = !message.isRead;
-    final changed = await Navigator.of(context).push<bool>(
+    await Navigator.of(context).push<bool>(
       CupertinoPageRoute<bool>(
         builder: (context) => MailMessageScreen(
           connection: _connection,
@@ -495,14 +535,20 @@ class _MailInboxScreenState extends State<MailInboxScreen>
         ),
       ),
     );
-    // MailMessageScreen помечает письмо прочитанным на сервере при открытии,
-    // но возвращает `true` только когда пользователь явно что-то изменил
-    // (удалил/переместил/ответил) — обычный возврат назад приходит с `null`.
-    // Перезагружаем список и в этом случае, иначе точка-индикатор
-    // «непрочитано» не исчезнет сама по себе.
-    if (mounted && (changed == true || wasUnread)) {
-      await _loadMessages(keepLoaded: true);
-    }
+    if (!mounted) return;
+    // Статус меняем сразу, не дожидаясь списка с сервера: письмо открыто —
+    // значит прочитано (или его вручную вернули в непрочитанные).
+    final connectionId = _connection.id;
+    setState(
+      () => _replaceMessage(
+        message.id,
+        (m) => MailRepository.instance.withLocalReadState(connectionId, m),
+      ),
+    );
+    // Перечитываем список и при обычном возврате назад (`changed == null`):
+    // в письме могли поменять прочитанность или флажок, а сервер мог
+    // подтянуть новые флаги из других клиентов.
+    await _loadMessages(keepLoaded: true);
   }
 
   Future<void> _showFolderPicker() async {
@@ -564,6 +610,10 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     messenger
         .showSnackBar(
           SnackBar(
+            // С action Flutter по умолчанию держит снекбар вечно
+            // (persist), а письмо удаляется только после его закрытия.
+            persist: false,
+            duration: const Duration(seconds: 4),
             content: const Text('Письмо удалено'),
             action: SnackBarAction(label: 'Вернуть', onPressed: () {}),
           ),
@@ -893,6 +943,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     return AppSliverTitleBar(
       title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
       blur: blur,
+      home: !_isEditing,
       leading: _isEditing
           ? CupertinoButton(
               padding: EdgeInsets.zero,
@@ -1083,6 +1134,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                 : () => _openMessage(message),
             onToggleRead: () => _toggleRead(message),
             onDelete: () => _deleteMessage(message),
+            swipeGroup: _swipeGroup,
           );
         },
       ),
@@ -1136,7 +1188,9 @@ class _MailInboxScreenState extends State<MailInboxScreen>
                 top: false,
                 bottom: false,
                 child: RefreshIndicator.adaptive(
-                  onRefresh: () => _loadMessages(forceSync: true),
+                  onRefresh: AppHaptics.onRefresh(
+                    () => _loadMessages(forceSync: true),
+                  ),
                   child: NotificationListener<ScrollNotification>(
                     onNotification: (notification) {
                       final metrics = notification.metrics;
@@ -1221,6 +1275,7 @@ class _MessageTile extends StatelessWidget {
     required this.onTap,
     required this.onToggleRead,
     required this.onDelete,
+    required this.swipeGroup,
   });
 
   static const double _dotSlot = 18;
@@ -1241,6 +1296,7 @@ class _MessageTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onToggleRead;
   final VoidCallback onDelete;
+  final SwipeGroupController swipeGroup;
 
   @override
   Widget build(BuildContext context) {
@@ -1332,6 +1388,16 @@ class _MessageTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (message.isFlagged) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            CupertinoIcons.flag_fill,
+                            size: 13,
+                            color: CupertinoColors.systemOrange.resolveFrom(
+                              context,
+                            ),
+                          ),
+                        ],
                         if (message.hasAttachments) ...[
                           const SizedBox(width: 6),
                           Icon(
@@ -1389,36 +1455,28 @@ class _MessageTile extends StatelessWidget {
 
     if (isEditing) return row;
 
-    return Slidable(
-      key: ValueKey(message.id),
-      startActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.3,
-        children: [
-          SlidableAction(
-            onPressed: (_) => onToggleRead(),
-            backgroundColor: AppColors.primary,
-            foregroundColor: CupertinoColors.white,
-            icon: isUnread
-                ? CupertinoIcons.envelope_open
-                : CupertinoIcons.envelope_badge,
-            label: isUnread ? 'Прочитано' : 'Непрочит.',
-          ),
-        ],
-      ),
-      endActionPane: ActionPane(
-        motion: const DrawerMotion(),
-        extentRatio: 0.3,
-        children: [
-          SlidableAction(
-            onPressed: (_) => onDelete(),
-            backgroundColor: CupertinoColors.systemRed.resolveFrom(context),
-            foregroundColor: CupertinoColors.white,
-            icon: CupertinoIcons.trash,
-            label: 'Удалить',
-          ),
-        ],
-      ),
+    return SwipeActionsRow(
+      id: '${message.id}',
+      groupController: swipeGroup,
+      borderRadius: BorderRadius.zero,
+      startActions: [
+        SwipeAction(
+          icon: isUnread
+              ? CupertinoIcons.envelope_open
+              : CupertinoIcons.envelope_badge,
+          label: isUnread ? 'Прочитано' : 'Непрочит.',
+          color: AppColors.primary,
+          onTap: onToggleRead,
+        ),
+      ],
+      actions: [
+        SwipeAction(
+          icon: CupertinoIcons.trash,
+          label: 'Удалить',
+          color: CupertinoColors.systemRed.resolveFrom(context),
+          onTap: onDelete,
+        ),
+      ],
       child: row,
     );
   }

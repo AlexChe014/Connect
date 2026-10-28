@@ -13,19 +13,24 @@ import 'package:connect/screens/chat_media_gallery_screen.dart';
 import 'package:connect/screens/chat_settings_screen.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/chat_call_service.dart';
+import 'package:connect/services/chat_file_downloads.dart';
+import 'package:connect/services/chat_realtime_service.dart';
 import 'package:connect/services/chat_service.dart';
+import 'package:connect/services/chat_user_names.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
 import 'package:connect/utils/chat_mapper.dart';
 import 'package:connect/utils/html_text_utils.dart';
+import 'package:connect/utils/ru_plural.dart';
 import 'package:connect/config/app_theme.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_glass.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
+import 'package:connect/widgets/chat_download_ring.dart';
 import 'package:connect/widgets/chat_message_text.dart';
-import 'package:connect/widgets/home_shortcut_button.dart';
+import 'package:connect/widgets/message_context_menu.dart';
 import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -33,7 +38,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/material.dart'
     show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
-import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:connect/services/haptics_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -93,6 +99,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   MessageReference? _replyingTo;
   ChatMessage? _editingMessage;
+
+  /// Что было набрано в композере до правки — вернётся после неё.
+  String _draftBeforeEdit = '';
   bool _joiningCall = false;
 
   final _scrollTargetKey = GlobalKey();
@@ -112,13 +121,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   int _lastBuiltIndex = 0;
   bool _jumpingToPinned = false;
   Timer? _liveRefresh;
+  DateTime _lastLiveRefresh = DateTime.now();
   Timer? _draftSaveTimer;
-  VoidCallback? _releaseHomeSuppress;
 
   /// Локальные реакции на сообщения (не синхронизируются с сервером, пока нет API).
   final Map<String, List<String>> _localReactions = {};
   final Map<String, GlobalKey> _messageKeys = {};
   bool _sendingAttachment = false;
+
+  /// Пользователь отлистал больше экрана вверх — показываем кнопку «вниз».
+  bool _showScrollDown = false;
   bool _sendingText = false;
 
   /// Высоты плавающих стеклянных панелей над лентой (поиск, звонок,
@@ -142,10 +154,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   @override
   void initState() {
     super.initState();
-    // Кнопке «на главный экран» тут не место: попытка ей воспользоваться
-    // молча оставила бы активный звонок/навигацию из чата, поэтому она
-    // скрыта весь срок жизни этого экрана — не только на время самого звонка.
-    _releaseHomeSuppress = HomeShortcutButton.suppress();
     WidgetsBinding.instance.addObserver(this);
     _service.addListener(_onMsg);
     _callService.addListener(_onCallState);
@@ -154,8 +162,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _service
         .loadMessages(widget.chat.id, force: true)
         .whenComplete(() => _service.markChatRead(widget.chat.id));
+    // Подстраховка к сокету: без него — опрос раз в 4 с, с ним — раз в
+    // 30 с (закрепы, пропущенные события). Каждый опрос — три запроса.
     _liveRefresh = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted) return;
+      if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+        return;
+      }
+      final now = DateTime.now();
+      // Секунда запаса: тики таймера плавают и иначе пропускался бы каждый.
+      final interval = ChatRealtimeService.instance.isConnected
+          ? const Duration(seconds: 29)
+          : const Duration(seconds: 3);
+      if (now.difference(_lastLiveRefresh) < interval) return;
+      _lastLiveRefresh = now;
       unawaited(
         _service.loadMessages(widget.chat.id, force: true, showLoading: false),
       );
@@ -166,6 +186,40 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       _textCtrl.selection = TextSelection.collapsed(offset: draft.length);
     }
     _textCtrl.addListener(_onDraftTextChanged);
+    _listCtrl.addListener(_onListScroll);
+  }
+
+  /// Лента перевёрнута: верх истории — это maxScrollExtent. Догружаем
+  /// старые сообщения заранее, за пару экранов до края.
+  void _onListScroll() {
+    if (!_listCtrl.hasClients) return;
+    final pos = _listCtrl.position;
+    final showScrollDown = pos.pixels > pos.viewportDimension;
+    if (showScrollDown != _showScrollDown) {
+      setState(() => _showScrollDown = showScrollDown);
+    }
+    if (pos.maxScrollExtent - pos.pixels > pos.viewportDimension * 2) return;
+    final chatId = widget.chat.id;
+    if (!_service.hasOlderMessages(chatId) || _service.isLoadingOlder(chatId)) {
+      return;
+    }
+    unawaited(_service.loadOlderMessages(chatId));
+  }
+
+  /// Лента перевёрнута: низ (свежие сообщения) — это offset 0.
+  void _scrollToBottom() {
+    if (!_listCtrl.hasClients || _listCtrl.offset <= 0) return;
+    final far = _listCtrl.offset > _listCtrl.position.viewportDimension * 3;
+    if (far) {
+      // Долгая анимация через всю историю строила бы каждое сообщение.
+      _listCtrl.jumpTo(0);
+    } else {
+      _listCtrl.animateTo(
+        0,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _onDraftTextChanged() {
@@ -179,7 +233,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   @override
   void dispose() {
-    _releaseHomeSuppress?.call();
     WidgetsBinding.instance.removeObserver(this);
     _liveRefresh?.cancel();
     _service.removeListener(_onMsg);
@@ -201,10 +254,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final chatId = widget.chat.id;
     if (state == AppLifecycleState.resumed) {
+      _service.setActiveChat(chatId);
       unawaited(
-        _service.loadMessages(widget.chat.id, force: true, showLoading: false),
+        _service
+            .loadMessages(chatId, force: true, showLoading: false)
+            .whenComplete(() => _service.markChatRead(chatId)),
       );
+    } else if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      // Свёрнутое приложение не читает переписку: иначе пришедшие по сокету
+      // или пушу сообщения сразу отмечались бы прочитанными у собеседника.
+      _service.clearActiveChat(chatId);
     }
   }
 
@@ -214,6 +276,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       if (!mounted) return;
       setState(() {});
       _scheduleInitialScroll();
+      // Страница догрузилась, а пользователь так и стоит у верха — следующую.
+      if (!_service.olderLoadFailed(widget.chat.id)) _onListScroll();
     });
   }
 
@@ -520,8 +584,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                             10,
                             _bottomOverlayHeight + 10,
                           ),
-                          itemCount: list.length,
+                          itemCount:
+                              list.length +
+                              (_service.hasOlderMessages(widget.chat.id)
+                                  ? 1
+                                  : 0),
                           itemBuilder: (context, i) {
+                            if (i >= list.length) {
+                              // Конец перевёрнутого списка — верх истории.
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: CupertinoActivityIndicator(),
+                              );
+                            }
                             _lastBuiltIndex = i;
                             final chronologicalIndex = list.length - 1 - i;
                             final m = list[chronologicalIndex];
@@ -561,6 +636,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                     _replyingTo = _refFromMessage(m);
                                     _focus.requestFocus();
                                   });
+                                } else if (action == _MsgAction.copy) {
+                                  _copyMessage(m);
                                 } else if (action == _MsgAction.forward) {
                                   _openForwardTarget(m);
                                 } else if (action == _MsgAction.edit) {
@@ -604,6 +681,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                     MediaQuery.paddingOf(context).top + _topOverlayHeight + 24,
               ),
               _EdgeFade.bottom(height: _bottomOverlayHeight + 24),
+              if (_showScrollDown)
+                Positioned(
+                  right: 12,
+                  bottom: _bottomOverlayHeight + 10,
+                  child: _ScrollDownButton(onTap: _scrollToBottom),
+                ),
               Positioned(
                 top: MediaQuery.paddingOf(context).top,
                 left: 0,
@@ -703,9 +786,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(message)));
+    // Новое сообщение сразу сменяет предыдущее, а не ждёт его в очереди.
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildSearchBar(BuildContext context) {
@@ -767,14 +851,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (t.trim().isEmpty) return;
     final replyTo = _replyingTo;
     _sendingText = true;
+    AppHaptics.light();
     _textCtrl.clear();
     if (mounted) setState(() => _replyingTo = null);
+    _scrollToBottom();
     try {
       await _service.sendText(widget.chat.id, t, replyTo: replyTo);
     } catch (e) {
       if (mounted) {
         _textCtrl.text = t;
-        _showSnack('Не удалось отправить: $e');
+        AppHaptics.error();
+        _showSnack(
+          e is ApiException ? e.message : 'Не удалось отправить сообщение',
+        );
       }
     } finally {
       _sendingText = false;
@@ -813,10 +902,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (id == null || !mounted) return;
     final replyTo = _replyingTo;
     setState(() => _replyingTo = null);
+    _scrollToBottom();
     try {
       await _service.sendSticker(widget.chat.id, id, replyTo: replyTo);
     } catch (e) {
-      if (mounted) _showSnack('Не удалось отправить стикер: $e');
+      if (mounted) {
+        _showSnack(
+          e is ApiException ? e.message : 'Не удалось отправить стикер',
+        );
+      }
     }
   }
 
@@ -875,9 +969,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       sourceChatId: widget.chat.id,
     );
     if (!mounted) return;
-    if (!success) {
-      _showSnack(_service.lastActionError ?? 'Не удалось переслать сообщение');
-    }
+    _showSnack(
+      success
+          ? 'Сообщение переслано'
+          : (_service.lastActionError ?? 'Не удалось переслать сообщение'),
+    );
   }
 
   Future<void> _openAttachMenu() async {
@@ -888,7 +984,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context, 'gallery'),
-            child: const Text('Галерея (фото)'),
+            child: const Text('Фото из галереи'),
           ),
           CupertinoActionSheetAction(
             onPressed: () => Navigator.pop(context, 'video'),
@@ -911,44 +1007,39 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
     if (choice == null) return;
 
-    List<int>? bytes;
-    var name = 'file';
-
+    final picked = <XFile>[];
     try {
       if (choice == 'gallery') {
-        final x = await _picker.pickImage(
-          source: ImageSource.gallery,
-          maxWidth: 1600,
-          imageQuality: 88,
+        picked.addAll(
+          await _picker.pickMultiImage(
+            maxWidth: 1600,
+            imageQuality: 88,
+            limit: _maxAttachmentsPerMessage,
+          ),
         );
-        if (x == null) return;
-        bytes = await x.readAsBytes();
-        name = x.name;
       } else if (choice == 'video') {
-        final x = await _picker.pickVideo(
-          source: ImageSource.gallery,
-          maxDuration: const Duration(minutes: 5),
-        );
-        if (x == null) return;
-        bytes = await x.readAsBytes();
-        name = x.name;
+        final x = await _picker.pickVideo(source: ImageSource.gallery);
+        if (x != null) picked.add(x);
       } else if (choice == 'camera') {
         final x = await _picker.pickImage(
           source: ImageSource.camera,
           maxWidth: 1600,
           imageQuality: 88,
         );
-        if (x == null) return;
-        bytes = await x.readAsBytes();
-        name = x.name;
+        if (x != null) picked.add(x);
       } else if (choice == 'file') {
-        final r = await FilePicker.platform.pickFiles(withData: true);
-        if (r == null || r.files.isEmpty) return;
-        final f = r.files.single;
-        name = f.name;
-        bytes = f.bytes;
-        if (bytes == null && f.path != null && !kIsWeb) {
-          bytes = await File(f.path!).readAsBytes();
+        // Без withData: файл читается с диска только после проверки
+        // размера, а не целиком в память ещё в пикере.
+        final r = await FilePicker.platform.pickFiles(withData: kIsWeb);
+        final f = r?.files.singleOrNull;
+        if (f != null) {
+          final path = f.path;
+          final data = f.bytes;
+          if (path != null && !kIsWeb) {
+            picked.add(XFile(path, name: f.name, length: f.size));
+          } else if (data != null) {
+            picked.add(XFile.fromData(data, name: f.name, length: f.size));
+          }
         }
       }
     } catch (e) {
@@ -957,20 +1048,34 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       _showSnack('Не удалось выбрать файл');
       return;
     }
+    if (picked.isEmpty) return;
 
-    if (bytes == null || bytes.isEmpty) {
-      debugPrint('attach: picked file has no bytes (choice=$choice)');
+    // Размер — до чтения в память: пятиминутное видео весит сотни МБ,
+    // и узнавать о лимите после долгой загрузки обидно.
+    final tooBig = <String>[];
+    for (final x in picked) {
+      if (await x.length() > ChatFile.maxSizeBytes) tooBig.add(x.name);
+    }
+    if (tooBig.isNotEmpty) {
       if (!mounted) return;
-      _showSnack('Не удалось выбрать файл');
+      _showSnack(
+        tooBig.length == 1 && picked.length == 1
+            ? 'Файл больше 10 МБ — такой в чат не отправить'
+            : 'Больше 10 МБ: ${tooBig.join(', ')}',
+      );
       return;
     }
 
     setState(() => _sendingAttachment = true);
+    _scrollToBottom();
     try {
+      final files = <({List<int> bytes, String name})>[];
+      for (final x in picked) {
+        files.add((bytes: await x.readAsBytes(), name: x.name));
+      }
       await _service.sendMedia(
         widget.chat.id,
-        bytes: bytes,
-        fileName: name,
+        files: files,
         replyTo: _replyingTo,
       );
       if (_replyingTo != null && mounted) setState(() => _replyingTo = null);
@@ -991,10 +1096,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       _showSnack('Редактирование доступно в течение 15 минут после отправки');
       return;
     }
+    if (_editingMessage == null) _draftBeforeEdit = _textCtrl.text;
     setState(() {
       _replyingTo = null;
       _editingMessage = m;
-      _textCtrl.text = m.text ?? '';
+      // Сообщения с портала приходят HTML-ем — в поле ввода только текст.
+      _textCtrl.text = HtmlTextUtils.toMultilineText(m.text ?? '');
       _textCtrl.selection = TextSelection.collapsed(
         offset: _textCtrl.text.length,
       );
@@ -1002,11 +1109,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _focus.requestFocus();
   }
 
-  void _cancelEdit() {
-    setState(() {
-      _editingMessage = null;
-      _textCtrl.clear();
-    });
+  void _cancelEdit() => setState(_finishEdit);
+
+  void _finishEdit() {
+    _editingMessage = null;
+    _textCtrl.text = _draftBeforeEdit;
+    _textCtrl.selection = TextSelection.collapsed(
+      offset: _draftBeforeEdit.length,
+    );
+    _draftBeforeEdit = '';
   }
 
   Future<void> _saveEdit() async {
@@ -1018,13 +1129,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final success = await _service.updateMessage(widget.chat.id, m.id, newText);
     if (!mounted) return;
     if (success) {
-      setState(() {
-        _editingMessage = null;
-        _textCtrl.clear();
-      });
+      setState(_finishEdit);
     } else {
       _showSnack(_service.lastActionError ?? 'Не удалось обновить сообщение');
     }
+  }
+
+  Future<void> _copyMessage(ChatMessage m) async {
+    final text = HtmlTextUtils.toMultilineText(m.text ?? '');
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    AppHaptics.light();
+    if (mounted) _showSnack('Текст скопирован');
   }
 
   Future<void> _deleteMessage(ChatMessage m) async {
@@ -1224,10 +1340,56 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 }
 
-enum _MsgAction { reply, forward, edit, delete, pin }
+/// Сколько фото из галереи уходит одним сообщением.
+const int _maxAttachmentsPerMessage = 10;
+
+enum _MsgAction { reply, copy, forward, edit, delete, pin }
+
+/// Реакции пока только локальные — собеседник их не видит и они пропадают
+/// с экрана, поэтому выключены до API на бэкенде (см. docs/BACKEND_CHAT_FIXES.md).
+const bool _kReactionsEnabled = false;
 
 /// Фиксированный набор быстрых реакций, как в iMessage/Telegram.
 const List<String> _kQuickReactions = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
+
+/// Полоска быстрых реакций над пузырём в меню долгого нажатия.
+class _ReactionsBar extends StatelessWidget {
+  const _ReactionsBar({required this.active, required this.onReact});
+
+  final List<String> active;
+  final ValueChanged<String> onReact;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppGlass(
+      borderRadius: BorderRadius.circular(26),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final emoji in _kQuickReactions)
+              GestureDetector(
+                onTap: () => onReact(emoji),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: active.contains(emoji)
+                        ? CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          )
+                        : null,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _ForwardTargetTile extends StatelessWidget {
   const _ForwardTargetTile({required this.chat, required this.onTap});
@@ -1474,7 +1636,9 @@ class _ChatTitleCapsule extends StatelessWidget {
     final online = chat.peerIsOnline;
     final (String? status, Color statusColor) = chat.isGroup
         ? (
-            chat.members.isEmpty ? null : '${chat.members.length} участников',
+            chat.members.isEmpty
+                ? null
+                : '${chat.members.length} ${ruPlural(chat.members.length, 'участник', 'участника', 'участников')}',
             secondary,
           )
         : switch (online) {
@@ -1529,6 +1693,33 @@ class _ChatTitleCapsule extends StatelessWidget {
 
 /// Мягкое затухание ленты у края экрана — как scroll edge effect в iOS 26:
 /// под шапкой и полем ввода сообщения растворяются в фоне.
+/// Круглая стеклянная кнопка «к последним сообщениям».
+class _ScrollDownButton extends StatelessWidget {
+  const _ScrollDownButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(20),
+        shadows: AppGlass.controlShadow,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(
+            CupertinoIcons.chevron_down,
+            size: 20,
+            color: CupertinoColors.label.resolveFrom(context),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EdgeFade extends StatelessWidget {
   const _EdgeFade.top({required this.height}) : fromTop = true;
   const _EdgeFade.bottom({required this.height}) : fromTop = false;
@@ -1747,6 +1938,7 @@ class _MessageTile extends StatelessWidget {
             )
           else
             _ChatFileCard(
+              file: m.files[i],
               name: m.files[i].originalName,
               subtitle: m.files[i].sizeLabel,
               isVideo: m.files[i].isVideo,
@@ -1797,8 +1989,13 @@ class _MessageTile extends StatelessWidget {
     );
   }
 
-  Future<void> _showActions(BuildContext context) async {
+  /// [context] — контекст пузыря (или значка реакций): от него меню
+  /// берёт прямоугольник, а [preview] рисуется поверх размытого фона.
+  Future<void> _showActions(BuildContext context, {Widget? preview}) async {
     if (m.isSending) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final anchor = box.localToGlobal(Offset.zero) & box.size;
     final canEdit =
         m.isOutgoing &&
         m.attachmentKind == ChatAttachmentKind.none &&
@@ -1806,84 +2003,58 @@ class _MessageTile extends StatelessWidget {
         m.canStillEdit;
     final canDelete = m.isOutgoing && m.canStillDelete;
 
-    await showCupertinoModalPopup<void>(
+    await showMessageContextMenu(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        message: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: _kQuickReactions.map((emoji) {
-              final active = m.reactions.contains(emoji);
-              return GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  onReact(emoji);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: active
-                        ? CupertinoColors.tertiarySystemFill.resolveFrom(
-                            context,
-                          )
-                        : null,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(emoji, style: const TextStyle(fontSize: 26)),
-                ),
-              );
-            }).toList(),
-          ),
+      anchor: anchor,
+      preview: preview,
+      alignEnd: m.isOutgoing,
+      reactions: !_kReactionsEnabled
+          ? null
+          : _ReactionsBar(
+              active: m.reactions,
+              onReact: (emoji) {
+                Navigator.of(context, rootNavigator: true).pop();
+                onReact(emoji);
+              },
+            ),
+      items: [
+        MessageMenuItem(
+          label: 'Ответить',
+          icon: CupertinoIcons.arrowshape_turn_up_left,
+          onTap: () => onLongMenu(_MsgAction.reply),
         ),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.pop(context);
-              onLongMenu(_MsgAction.reply);
-            },
-            child: const Text('Ответить'),
+        if (!m.isSticker && (m.text?.trim().isNotEmpty ?? false))
+          MessageMenuItem(
+            label: 'Копировать',
+            icon: CupertinoIcons.doc_on_doc,
+            onTap: () => onLongMenu(_MsgAction.copy),
           ),
-          if (!m.isCall)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.forward);
-              },
-              child: const Text('Переслать'),
-            ),
-          if (!m.isSystem)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.pin);
-              },
-              child: Text(m.isPinned ? 'Открепить' : 'Закрепить'),
-            ),
-          if (canEdit)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.edit);
-              },
-              child: const Text('Редактировать'),
-            ),
-          if (canDelete)
-            CupertinoActionSheetAction(
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.pop(context);
-                onLongMenu(_MsgAction.delete);
-              },
-              child: const Text('Удалить'),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
-        ),
-      ),
+        if (!m.isCall)
+          MessageMenuItem(
+            label: 'Переслать',
+            icon: CupertinoIcons.arrowshape_turn_up_right,
+            onTap: () => onLongMenu(_MsgAction.forward),
+          ),
+        if (!m.isSystem)
+          MessageMenuItem(
+            label: m.isPinned ? 'Открепить' : 'Закрепить',
+            icon: m.isPinned ? CupertinoIcons.pin_slash : CupertinoIcons.pin,
+            onTap: () => onLongMenu(_MsgAction.pin),
+          ),
+        if (canEdit)
+          MessageMenuItem(
+            label: 'Редактировать',
+            icon: CupertinoIcons.pencil,
+            onTap: () => onLongMenu(_MsgAction.edit),
+          ),
+        if (canDelete)
+          MessageMenuItem(
+            label: 'Удалить',
+            icon: CupertinoIcons.trash,
+            isDestructive: true,
+            onTap: () => onLongMenu(_MsgAction.delete),
+          ),
+      ],
     );
   }
 
@@ -1960,6 +2131,79 @@ class _MessageTile extends StatelessWidget {
         m.isPinned ||
         attachments.isNotEmpty;
 
+    // Тот же пузырь показывается поверх размытого фона в меню долгого нажатия.
+    final bubbleBox = Container(
+      width: m.isSticker ? _ChatSticker.bubbleSize : null,
+      padding: m.isSticker
+          ? EdgeInsets.zero
+          : _isMediaOnly
+          ? const EdgeInsets.all(3)
+          : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: m.isSticker
+          ? null
+          : BoxDecoration(
+              color: bubble,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(18),
+                topRight: const Radius.circular(18),
+                bottomLeft: Radius.circular(m.isOutgoing ? 18 : 6),
+                bottomRight: Radius.circular(m.isOutgoing ? 6 : 18),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: CupertinoColors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: onBubble),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (m.forwardOf != null)
+              _ForwardBlock(ref: m.forwardOf!, onBubble: onBubble),
+            if (m.replyTo != null)
+              _ReplyBlock(
+                ref: m.replyTo!,
+                isOutgoing: m.isOutgoing && !m.isSticker,
+              ),
+            if (m.isPinned)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      CupertinoIcons.pin_fill,
+                      size: 12,
+                      color: onBubble.withValues(alpha: 0.8),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Закреплено',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: onBubble.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ...attachments,
+            if (m.text != null && m.text!.trim().isNotEmpty)
+              Padding(
+                // Отступ только под цитатой/вложением —
+                // иначе над текстом поле больше, чем под ним.
+                padding: EdgeInsets.only(top: hasAboveText ? 4 : 0),
+                child: ChatMessageText(text: m.text!, color: onBubble),
+              ),
+          ],
+        ),
+      ),
+    );
+
     return _wrapHighlight(
       context,
       Align(
@@ -2006,97 +2250,13 @@ class _MessageTile extends StatelessWidget {
                       if (m.isSending) return;
                       onLongMenu(_MsgAction.reply);
                     },
-                    child: GestureDetector(
-                      onLongPress: () => _showActions(context),
-                      child: Container(
-                        width: m.isSticker ? _ChatSticker.bubbleSize : null,
-                        padding: m.isSticker
-                            ? EdgeInsets.zero
-                            : _isMediaOnly
-                            ? const EdgeInsets.all(3)
-                            : const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                        decoration: m.isSticker
-                            ? null
-                            : BoxDecoration(
-                                color: bubble,
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(18),
-                                  topRight: const Radius.circular(18),
-                                  bottomLeft: Radius.circular(
-                                    m.isOutgoing ? 18 : 6,
-                                  ),
-                                  bottomRight: Radius.circular(
-                                    m.isOutgoing ? 6 : 18,
-                                  ),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: CupertinoColors.black.withValues(
-                                      alpha: 0.04,
-                                    ),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                        child: DefaultTextStyle.merge(
-                          style: TextStyle(color: onBubble),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (m.forwardOf != null)
-                                _ForwardBlock(
-                                  ref: m.forwardOf!,
-                                  onBubble: onBubble,
-                                ),
-                              if (m.replyTo != null)
-                                _ReplyBlock(
-                                  ref: m.replyTo!,
-                                  isOutgoing: m.isOutgoing && !m.isSticker,
-                                ),
-                              if (m.isPinned)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        CupertinoIcons.pin_fill,
-                                        size: 12,
-                                        color: onBubble.withValues(alpha: 0.8),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Закреплено',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: onBubble.withValues(
-                                            alpha: 0.8,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ...attachments,
-                              if (m.text != null && m.text!.trim().isNotEmpty)
-                                Padding(
-                                  // Отступ только под цитатой/вложением —
-                                  // иначе над текстом поле больше, чем под ним.
-                                  padding: EdgeInsets.only(
-                                    top: hasAboveText ? 4 : 0,
-                                  ),
-                                  child: ChatMessageText(
-                                    text: m.text!,
-                                    color: onBubble,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
+                    child: Builder(
+                      builder: (bubbleContext) => GestureDetector(
+                        onLongPress: () {
+                          AppHaptics.medium();
+                          _showActions(bubbleContext, preview: bubbleBox);
+                        },
+                        child: bubbleBox,
                       ),
                     ),
                   ),
@@ -2240,7 +2400,7 @@ class _SwipeToReplyState extends State<_SwipeToReply>
     final armed = next <= -_threshold;
     if (armed != _armed) {
       _armed = armed;
-      HapticFeedback.mediumImpact();
+      AppHaptics.medium();
     }
   }
 
@@ -2301,6 +2461,15 @@ class _ForwardBlock extends StatelessWidget {
   final MessageReference ref;
   final Color onBubble;
 
+  String _authorName() {
+    final id = ref.authorId;
+    if (id == null) return ref.authorName;
+    final known = ChatUserNames.instance.nameFor(id);
+    if (known != null) return known;
+    ChatUserNames.instance.ensure(id);
+    return ref.authorName;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -2318,23 +2487,28 @@ class _ForwardBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              ref.sourceChatTitle != null
-                  ? 'Переслано из «${ref.sourceChatTitle!}»'
-                  : 'Переслано от ${ref.authorName}',
-              style: TextStyle(
-                fontSize: 11,
-                color: onBubble.withValues(alpha: 0.85),
-                fontWeight: FontWeight.w600,
+            ListenableBuilder(
+              listenable: ChatUserNames.instance,
+              builder: (context, _) => Text(
+                ref.sourceChatTitle != null
+                    ? 'Переслано из «${ref.sourceChatTitle!}»'
+                    : 'Переслано от ${_authorName()}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: onBubble.withValues(alpha: 0.85),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              ref.textPreview,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13),
-            ),
+            if (ref.textPreview.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                ref.textPreview,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
           ],
         ),
       ),
@@ -2595,12 +2769,16 @@ class _ChatImage extends StatelessWidget {
 }
 
 /// Документ/видео в пузыре: плашка с иконкой-расширением, именем и размером.
-/// Пока файл скачивается для шаринга — вместо иконки крутится индикатор.
+///
+/// Если передан [file], скачивание идёт как в Telegram: стрелка «скачать»,
+/// во время загрузки — кольцо прогресса с крестиком и «X из Y» под именем,
+/// повторный тап останавливает. Скачанный файл открывается сразу из кэша.
 class _ChatFileCard extends StatefulWidget {
   const _ChatFileCard({
     required this.name,
     required this.isVideo,
     required this.onBubble,
+    this.file,
     this.subtitle,
     this.onTap,
   });
@@ -2609,6 +2787,7 @@ class _ChatFileCard extends StatefulWidget {
   final String? subtitle;
   final bool isVideo;
   final Color onBubble;
+  final ChatFile? file;
   final Future<void> Function()? onTap;
 
   @override
@@ -2616,7 +2795,25 @@ class _ChatFileCard extends StatefulWidget {
 }
 
 class _ChatFileCardState extends State<_ChatFileCard> {
+  final _downloads = ChatFileDownloads.instance;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCached();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatFileCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file?.id != widget.file?.id) _checkCached();
+  }
+
+  void _checkCached() {
+    final file = widget.file;
+    if (file != null) unawaited(_downloads.checkCached(file));
+  }
 
   String get _extension {
     final dot = widget.name.lastIndexOf('.');
@@ -2626,25 +2823,92 @@ class _ChatFileCardState extends State<_ChatFileCard> {
   }
 
   Future<void> _handleTap() async {
+    final file = widget.file;
+    if (file != null && _downloads.isDownloading(file.id)) {
+      AppHaptics.selection();
+      _downloads.cancel(file.id);
+      return;
+    }
     final onTap = widget.onTap;
     if (onTap == null || _busy) return;
-    setState(() => _busy = true);
+    // С [file] ход загрузки рисует кольцо — свой индикатор не нужен.
+    if (file == null) setState(() => _busy = true);
     try {
       await onTap();
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _icon(bool downloaded) {
     final onBubble = widget.onBubble;
+    if (_busy) return CupertinoActivityIndicator(color: onBubble, radius: 9);
+    final IconData icon;
+    if (widget.file != null && !downloaded) {
+      icon = CupertinoIcons.arrow_down;
+    } else if (widget.isVideo) {
+      icon = CupertinoIcons.play_fill;
+    } else {
+      icon = CupertinoIcons.doc_text_fill;
+    }
+    return Icon(icon, size: 20, color: onBubble);
+  }
+
+  String _details(ChatFileDownloadProgress? progress) {
     final ext = _extension;
-    final details = [
+    if (progress != null) {
+      final received = ChatFile.formatBytes(progress.received);
+      final total = progress.total;
+      return total == null
+          ? received
+          : '$received из ${ChatFile.formatBytes(total)}';
+    }
+    return [
       if (ext.isNotEmpty) ext,
       if (widget.subtitle != null && widget.subtitle!.isNotEmpty)
         widget.subtitle!,
     ].join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final file = widget.file;
+    if (file == null) return _buildCard(context, null, true);
+    final progress = _downloads.progressOf(file.id);
+    return AnimatedBuilder(
+      animation: Listenable.merge([progress, _downloads.downloaded]),
+      builder: (context, _) => _buildCard(
+        context,
+        progress.value,
+        _downloads.downloaded.value.contains(file.id),
+      ),
+    );
+  }
+
+  Widget _buildCard(
+    BuildContext context,
+    ChatFileDownloadProgress? progress,
+    bool downloaded,
+  ) {
+    final onBubble = widget.onBubble;
+    final details = _details(progress);
+    final file = widget.file;
+    final iconCircle = Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: onBubble.withValues(alpha: 0.16),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: file == null
+          ? _icon(downloaded)
+          : ChatDownloadRing(
+              fileId: file.id,
+              color: onBubble,
+              idle: _icon(downloaded),
+            ),
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -2659,24 +2923,7 @@ class _ChatFileCardState extends State<_ChatFileCard> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: onBubble.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: _busy
-                  ? CupertinoActivityIndicator(color: onBubble, radius: 9)
-                  : Icon(
-                      widget.isVideo
-                          ? CupertinoIcons.play_fill
-                          : CupertinoIcons.doc_text_fill,
-                      size: 20,
-                      color: onBubble,
-                    ),
-            ),
+            iconCircle,
             const SizedBox(width: 10),
             Flexible(
               child: Column(
@@ -2700,6 +2947,7 @@ class _ChatFileCardState extends State<_ChatFileCard> {
                       style: TextStyle(
                         fontSize: 12,
                         color: onBubble.withValues(alpha: 0.7),
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],

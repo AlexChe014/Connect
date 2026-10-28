@@ -280,6 +280,14 @@ class AuthService {
       return null;
     }
   }
+
+  /// `id` текущего пользователя из кэша логина, `null` — если его там нет.
+  Future<int?> getStoredUserId() async {
+    final raw = (await getStoredUser())?['id'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw?.toString().trim() ?? '');
+  }
 }
 
 class AuthException implements Exception {

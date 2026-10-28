@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart'
     show Colors, RefreshIndicator, ScaffoldMessenger, SnackBar;
@@ -16,6 +18,7 @@ import '../widgets/app_title_bar.dart';
 import '../widgets/booking_glass_form.dart';
 import '../widgets/cupertino_prompt_dialog.dart';
 import 'document_detail_screen.dart';
+import '../services/haptics_service.dart';
 
 class DocumentsListScreen extends StatefulWidget {
   const DocumentsListScreen({super.key, required this.service});
@@ -70,6 +73,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         final items = await DocumentsRepository.instance.getAllDocuments(
           widget.service.id,
         );
+        DocumentPendingService.instance.updateService(widget.service.id, items);
         if (!mounted) return;
         setState(() {
           _documents = items;
@@ -87,6 +91,10 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
           }
           final items = await DocumentsRepository.instance.getAllDocuments(
             widget.service.id,
+          );
+          DocumentPendingService.instance.updateService(
+            widget.service.id,
+            items,
           );
           if (!mounted) return;
           setState(() {
@@ -322,22 +330,23 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      final guids = selected
-          .map(DocumentPayloadUtils.guid)
-          .whereType<String>()
-          .toList();
-      final numbers = selected
-          .map(DocumentPayloadUtils.number)
-          .whereType<String>()
-          .where((number) => number.trim().isNotEmpty)
-          .toList();
+      final guids = <String>[];
+      final numbersByGuid = <String, String>{};
+      for (final document in selected) {
+        final guid = DocumentPayloadUtils.guid(document);
+        if (guid == null) continue;
+        guids.add(guid);
+        final number = DocumentPayloadUtils.number(document)?.trim();
+        if (number != null && number.isNotEmpty) numbersByGuid[guid] = number;
+      }
 
       await DocumentsRepository.instance.acceptDocuments(
         serviceId: widget.service.id,
         guids: guids,
-        numbers: numbers.isEmpty ? null : numbers,
+        numbersByGuid: numbersByGuid,
       );
 
+      AppHaptics.success();
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
@@ -350,6 +359,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       );
       await _loadDocuments();
     } catch (e) {
+      AppHaptics.error();
       if (!mounted) return;
       final message = e is ApiException
           ? e.message
@@ -357,6 +367,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       ScaffoldMessenger.maybeOf(
         context,
       )?.showSnackBar(SnackBar(content: Text(message)));
+      // Бэкенд проводит документы по одному и обрывается на первой ошибке —
+      // часть уже подписана, перечитываем список, чтобы их не было на экране.
+      unawaited(_loadDocuments());
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -503,7 +516,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     if (_documents.isEmpty) {
       return RefreshIndicator.adaptive(
         edgeOffset: padding.top,
-        onRefresh: () => _loadDocuments(),
+        onRefresh: AppHaptics.onRefresh(() => _loadDocuments()),
         child: AppEmptyState(
           icon: CupertinoIcons.tray,
           message: widget.service.isSigningService
@@ -515,7 +528,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
 
     return RefreshIndicator.adaptive(
       edgeOffset: padding.top,
-      onRefresh: () => _loadDocuments(),
+      onRefresh: AppHaptics.onRefresh(() => _loadDocuments()),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [

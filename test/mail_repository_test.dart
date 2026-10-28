@@ -104,90 +104,126 @@ void main() {
     },
   );
 
-  Future<List<String>> sendFrom7({required int defaultId}) async {
-    final paths = <String>[];
+  /// Multipart-запросы, отправленные [action], с телами в latin1.
+  Future<List<(String, String)>> captureRequests(
+    Future<void> Function() action,
+  ) async {
+    final requests = <(String, String)>[];
     await http.runWithClient(
-      () async {
-        await repository.sendMail(
-          const SendMailRequest(
-            connectionId: 7,
-            to: 'a@b.ru',
-            subject: 'Subject',
-            body: 'Message',
-          ),
-        );
-      },
+      action,
       () => MockClient((request) async {
-        final path = request.url.path;
-        paths.add(path);
-        if (path.endsWith('/smtp/get/sendable')) {
-          return response([
-            {'id': 3, 'email': 'main@b.ru', 'is_default': defaultId == 3},
-            {'id': 7, 'email': 'second@b.ru', 'is_default': defaultId == 7},
-          ]);
-        }
-        if (path.contains('/smtp/set/')) return response({'id': 7});
-        expect(request.body, contains('Message'));
+        requests.add((request.url.path, latin1.decode(request.bodyBytes)));
         return response(true);
       }),
     );
-    return paths;
+    return requests;
   }
 
-  test(
-    'send selects intended SMTP connection and restores the previous default',
-    () async {
-      final paths = await sendFrom7(defaultId: 3);
-      expect(paths, hasLength(4));
-      expect(paths[0], endsWith('/smtp/get/sendable'));
-      expect(paths[1], endsWith('/smtp/set/7'));
-      expect(paths[2], endsWith('/smtp/send'));
-      expect(paths[3], endsWith('/smtp/set/3'));
-    },
-  );
-
-  test('send from the default connection does not switch it', () async {
-    final paths = await sendFrom7(defaultId: 7);
-    expect(paths, hasLength(2));
-    expect(paths.first, endsWith('/smtp/get/sendable'));
-    expect(paths.last, endsWith('/smtp/send'));
+  test('send goes once to all recipients from the chosen mailbox', () async {
+    final requests = await captureRequests(
+      () => repository.sendMail(
+        const SendMailRequest(
+          connectionId: 7,
+          to: 'a@b.ru, Иван <c@d.ru>',
+          subject: 'Subject',
+          body: 'Message',
+          cc: ['e@f.ru'],
+        ),
+      ),
+    );
+    expect(requests, hasLength(1));
+    final (path, body) = requests.single;
+    expect(path, endsWith('/smtp/send'));
+    expect(body, contains('name="to[0]"\r\n\r\na@b.ru'));
+    expect(body, contains('name="to[1]"\r\n\r\nc@d.ru'));
+    expect(body, contains('name="connection_id"\r\n\r\n7'));
+    expect(body, contains('name="cc[0]"\r\n\r\ne@f.ru'));
   });
-  test('forward to several recipients re-sends attachments to each', () async {
-    final sends = <http.BaseRequest>[];
+
+  test('reply sends edited recipients and subject to the reply route', () async {
+    final requests = await captureRequests(
+      () => repository.replyMail(
+        const ReplyMailRequest(
+          messageId: 2,
+          to: 'a@b.ru, c@d.ru',
+          subject: 'Re: Тема',
+          body: 'Ответ',
+        ),
+      ),
+    );
+    final (path, body) = requests.single;
+    expect(path, endsWith('/smtp/reply/2'));
+    expect(body, contains('name="to[1]"\r\n\r\nc@d.ru'));
+    expect(body, contains('name="subject"'));
+    expect(body, contains('name="body_text"'));
+  });
+
+  test('forward uses the forward route with the user text only', () async {
+    final requests = await captureRequests(
+      () => repository.forwardMail(
+        const ForwardMailRequest(
+          connectionId: 7,
+          messageId: 2,
+          to: 'a@b.ru, c@d.ru',
+          subject: 'Fwd',
+          body: 'Посмотри',
+          attachments: [
+            MailUpload(filename: 'a.pdf', bytes: [1, 2, 3]),
+          ],
+        ),
+      ),
+    );
+    expect(requests, hasLength(1));
+    final (path, body) = requests.single;
+    expect(path, endsWith('/smtp/forward/2'));
+    expect(body, contains('name="message"'));
+    expect(body, contains('name="to[1]"\r\n\r\nc@d.ru'));
+    expect(body, contains('filename="a.pdf"'));
+  });
+
+  test('bulk mark read sends ids in `emails`', () async {
+    Object? sent;
     await http.runWithClient(
-      () async {
-        await repository.forwardMail(
-          const ForwardMailRequest(
-            connectionId: 7,
-            messageId: 2,
-            to: 'a@b.ru, Иван <c@d.ru>',
-            subject: 'Fwd',
-            body: 'Message',
-            cc: ['e@f.ru'],
-            attachments: [
-              MailUpload(filename: 'a.pdf', bytes: [1, 2, 3]),
-            ],
-          ),
-        );
-      },
+      () => repository.markFewRead(connectionId: 1, ids: [5, 6]),
       () => MockClient((request) async {
-        final path = request.url.path;
-        if (path.endsWith('/smtp/get/sendable')) {
-          return response([
-            {'id': 7, 'email': 'second@b.ru', 'is_default': true},
-          ]);
-        }
-        sends.add(request);
+        sent = jsonDecode(request.body);
         return response(true);
       }),
     );
-    expect(sends, hasLength(2));
-    final bodies = sends.map((r) => latin1.decode((r as http.Request).bodyBytes));
-    expect(bodies.first, contains('a@b.ru'));
-    expect(bodies.first, contains('e@f.ru'));
-    expect(bodies.last, contains('c@d.ru'));
-    expect(bodies.last, isNot(contains('e@f.ru')));
-    expect(bodies, everyElement(contains('filename="a.pdf"')));
-    expect(bodies, everyElement(contains('name="connection_id"')));
+    expect(sent, {
+      'emails': [5, 6],
+    });
+  });
+
+  test('failed IMAP action (data: false) is an error', () async {
+    await http.runWithClient(() async {
+      await expectLater(
+        repository.deleteMessage(connectionId: 1, messageId: 2),
+        throwsA(isA<ApiException>()),
+      );
+    }, () => MockClient((_) async => response(false)));
+  });
+
+  test('letters deleted from trash are not listed', () async {
+    await http.runWithClient(
+      () async {
+        final page = await repository.getMessagesByFolder(
+          connectionId: 1,
+          folderId: 3,
+        );
+        expect(page.messages.map((m) => m.id), [1]);
+        expect(page.messages.single.isFlagged, isTrue);
+      },
+      () => MockClient(
+        (_) async => response({
+          'data': [
+            {'id': 1, 'subject': 'A', 'is_flagged': true},
+            {'id': 2, 'subject': 'B', 'is_deleted': true},
+          ],
+          'current_page': 1,
+          'last_page': 1,
+        }),
+      ),
+    );
   });
 }

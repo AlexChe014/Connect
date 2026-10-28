@@ -169,16 +169,30 @@ abstract final class NotificationTopics {
   static bool isBookingType(String? type) =>
       type != null && bookingOpenTypes.contains(type);
 
+  /// Бэкенд (`NotificationClientPayload::TYPE_MAP`) отдаёт клиенту в push и
+  /// в ленте не тип из БД, а короткий: `news_created` → `news`,
+  /// `new_documents` → `document`; письма из `createEmailNotification`
+  /// приходят как `email`. Сводим всё к одному имени, чтобы тап по любому
+  /// варианту вёл в один и тот же раздел.
+  static String canonicalType(String? type) => switch (type) {
+    'news' => 'news_created',
+    'document' => 'new_documents',
+    'email' || 'new_emails' => 'mail',
+    null => '',
+    _ => type,
+  };
+
   /// Категория по значению `data.type` push/ленты уведомлений — `null`,
   /// если тип не входит в каталог (например `chat_message`).
-  static NotificationTopic? byType(String type) {
+  static NotificationTopic? byType(String rawType) {
+    final type = canonicalType(rawType);
     if (type == 'meeting_invite' || type == 'booking_created') {
       return meetingInvite;
     }
     if (isSurveyType(type)) return survey;
     if (isBonusType(type)) return bonusProgram;
     switch (type) {
-      case 'new_emails':
+      case 'mail':
         return mailNew;
       case 'document_changes':
         return documentApproval;

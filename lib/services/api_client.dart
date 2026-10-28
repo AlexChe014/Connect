@@ -20,6 +20,30 @@ class ApiException implements Exception {
   String toString() => 'ApiException($statusCode): $message';
 }
 
+/// Пользователь сам остановил скачивание — это не ошибка, сообщать о ней
+/// не нужно.
+class DownloadCancelledException implements Exception {
+  const DownloadCancelledException();
+
+  @override
+  String toString() => 'DownloadCancelledException';
+}
+
+/// Позволяет оборвать [ApiClient.downloadToFile] на любом этапе: закрывает
+/// HTTP-клиент, и ожидание ответа или очередного куска сразу прерывается.
+class DownloadCancelToken {
+  bool _cancelled = false;
+  void Function()? _onCancel;
+
+  bool get isCancelled => _cancelled;
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    _onCancel?.call();
+  }
+}
+
 class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
@@ -251,6 +275,7 @@ class ApiClient {
           'len=${bytes.length} first-bytes=$preview',
           name: 'network.http.download',
         );
+        _throwIfJsonError(response);
         return bytes;
       }
       _noteResponseAuthOutcome(
@@ -270,10 +295,15 @@ class ApiClient {
     String url,
     File target, {
     void Function(int received, int? total)? onProgress,
+    DownloadCancelToken? cancelToken,
   }) async {
+    if (cancelToken?.isCancelled ?? false) {
+      throw const DownloadCancelledException();
+    }
     final uri = Uri.parse(url);
     final sessionGeneration = AuthService.instance.sessionGeneration;
     final client = http.Client();
+    cancelToken?._onCancel = client.close;
     final part = File('${target.path}.part');
     try {
       final request = http.Request('GET', uri)..headers.addAll(authHeaders);
@@ -300,6 +330,7 @@ class ApiClient {
         await for (final chunk in response.stream.timeout(
           Duration(seconds: ApiConfig.timeoutSeconds),
         )) {
+          if (cancelToken?.isCancelled ?? false) break;
           sink.add(chunk);
           received += chunk.length;
           onProgress?.call(received, response.contentLength);
@@ -307,13 +338,44 @@ class ApiClient {
       } finally {
         await sink.close();
       }
+      if (cancelToken?.isCancelled ?? false) {
+        throw const DownloadCancelledException();
+      }
       await part.rename(target.path);
     } catch (e, st) {
       if (await part.exists()) await part.delete();
+      // Закрытый клиент бросает ClientException — при отмене это ожидаемо.
+      if (cancelToken?.isCancelled ?? false) {
+        throw const DownloadCancelledException();
+      }
       throw _mapAndLog('HTTP download to file failed: $uri', e, st);
     } finally {
+      cancelToken?._onCancel = null;
       client.close();
     }
+  }
+
+  /// Laravel отдаёт ошибку кодом 200 с `{"success": false, "data": {"error"}}`
+  /// — без проверки такой JSON сохранялся бы как скачанный файл. Настоящий
+  /// .json-файл не трогаем: ошибкой считается только `success: false`.
+  void _throwIfJsonError(http.Response response) {
+    final contentType = response.headers['content-type'] ?? '';
+    if (!contentType.contains('json')) return;
+    Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    } catch (_) {
+      return;
+    }
+    if (decoded is! Map || decoded['success'] != false) return;
+    final data = decoded['data'];
+    final error = data is Map ? data['error'] : null;
+    throw ApiException(
+      response.statusCode,
+      error is String && error.trim().isNotEmpty
+          ? error
+          : 'Не удалось скачать файл',
+    );
   }
 
   Never _mapAndLog(String label, Object e, StackTrace st) {
