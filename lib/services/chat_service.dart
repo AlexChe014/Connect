@@ -1329,20 +1329,19 @@ class ChatService extends ChangeNotifier {
     );
   }
 
-  /// Копии сообщения, созданные сервером, или `null`, если на этом бэкенде
-  /// нет `POST /chat/messages/forward` — тогда пересылаем по-старому.
-  Future<List<ChatMessage>?> _forwardOnServer(
-    int chatId,
-    int messageId,
+  /// Копии сообщений по чатам, созданные сервером, или `null`, если на этом
+  /// бэкенде нет `POST /chat/messages/forward` — тогда пересылаем по-старому.
+  Future<Map<int, List<ChatMessage>>?> _forwardOnServer(
+    List<int> chatIds,
+    List<int> messageIds,
     int userId,
   ) async {
     try {
-      final byChat = await ChatRepository.instance.forwardMessages(
-        chatIds: [chatId],
-        messageIds: [messageId],
+      return await ChatRepository.instance.forwardMessages(
+        chatIds: chatIds,
+        messageIds: messageIds,
         currentUserId: userId,
       );
-      return byChat[chatId] ?? const [];
     } on ApiException catch (e) {
       if (e.statusCode == 404 || e.statusCode == 405) return null;
       rethrow;
@@ -1353,88 +1352,56 @@ class ChatService extends ChangeNotifier {
     String targetChatId,
     ChatMessage source, {
     required String sourceChatId,
+  }) => forwardMessages([targetChatId], [source], sourceChatId: sourceChatId);
+
+  /// Пересылает [sources] в каждый из [targetChatIds] одним запросом;
+  /// сообщения уходят в хронологическом порядке.
+  Future<bool> forwardMessages(
+    List<String> targetChatIds,
+    List<ChatMessage> sources, {
+    required String sourceChatId,
   }) async {
     final userId = _selfUserId;
-    final chatIntId = int.tryParse(targetChatId);
-    final sourceMessageId = int.tryParse(source.id);
-    if (userId == null || chatIntId == null || sourceMessageId == null) {
-      return false;
-    }
-
-    final stickerId = source.stickerId;
-    final text = source.text?.trim();
-    final hasText = text != null && text.isNotEmpty;
-    if (stickerId == null && !hasText && source.files.isEmpty) {
-      _lastActionError = 'Это сообщение нельзя переслать';
+    final chatIntIds = targetChatIds
+        .toSet()
+        .map(int.tryParse)
+        .whereType<int>()
+        .toList();
+    final forwardable = sources.where((m) => m.canForward).toList()
+      ..sort((a, b) {
+        final byTime = a.createdAt.compareTo(b.createdAt);
+        return byTime != 0
+            ? byTime
+            : int.parse(a.id).compareTo(int.parse(b.id));
+      });
+    if (userId == null || chatIntIds.isEmpty) return false;
+    if (forwardable.isEmpty) {
+      _lastActionError = sources.length > 1
+          ? 'Эти сообщения нельзя переслать'
+          : 'Это сообщение нельзя переслать';
       notifyListeners();
       return false;
     }
 
     try {
       _lastActionError = null;
-      final copies = await _forwardOnServer(chatIntId, sourceMessageId, userId);
-      if (copies != null) {
-        for (final copy in copies) {
-          _appendMessage(targetChatId, copy.copyWith(isRead: true));
+      final byChat = await _forwardOnServer(chatIntIds, [
+        for (final m in forwardable) int.parse(m.id),
+      ], userId);
+      if (byChat != null) {
+        for (final entry in byChat.entries) {
+          for (final copy in entry.value) {
+            _appendMessage(entry.key.toString(), copy.copyWith(isRead: true));
+          }
         }
         return true;
       }
 
-      final ChatMessage sent;
-      if (stickerId != null) {
-        sent = await ChatRepository.instance.sendSticker(
-          chatIntId,
-          stickerId: stickerId,
-          currentUserId: userId,
-          forwardedMessageId: sourceMessageId,
-        );
-      } else if (source.files.isNotEmpty) {
-        // Файл привязан к исходному чату — участники целевого могут не
-        // иметь к нему доступа, поэтому он загружается туда заново.
-        final copies = <ChatFile>[];
-        for (final file in source.files) {
-          final bytes = await ChatRepository.instance.downloadFile(file.id);
-          copies.add(
-            await ChatRepository.instance.uploadFile(
-              chatId: chatIntId,
-              bytes: bytes,
-              filename: file.originalName,
-            ),
-          );
+      for (final chatIntId in chatIntIds) {
+        for (final source in forwardable) {
+          await _forwardLegacy(chatIntId, source, userId);
         }
-        final withFiles = await ChatRepository.instance.sendMessage(
-          chatIntId,
-          text: text ?? '',
-          currentUserId: userId,
-          forwardedMessageId: sourceMessageId,
-          fileIds: [for (final f in copies) f.id],
-        );
-        sent = withFiles.files.isNotEmpty
-            ? withFiles
-            : withFiles.copyWith(files: copies);
-      } else {
-        sent = await ChatRepository.instance.sendTextMessage(
-          chatIntId,
-          text: text!,
-          currentUserId: userId,
-          forwardedMessageId: sourceMessageId,
-        );
       }
-
-      _appendMessage(
-        targetChatId,
-        sent.copyWith(
-          text: sent.text ?? (stickerId != null || !hasText ? null : text),
-          forwardOf:
-              sent.forwardOf ??
-              MessageReference(
-                messageId: source.id,
-                authorName: source.authorName,
-                textPreview: ChatMapper.snippet(source),
-              ),
-          isRead: true,
-        ),
-      );
       return true;
     } on ApiException catch (e) {
       _lastActionError = e.message;
@@ -1446,6 +1413,76 @@ class ChatService extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  /// Пересылка на бэкенде без `POST /chat/messages/forward`: копия
+  /// собирается на клиенте.
+  Future<void> _forwardLegacy(
+    int chatIntId,
+    ChatMessage source,
+    int userId,
+  ) async {
+    final targetChatId = chatIntId.toString();
+    final sourceMessageId = int.parse(source.id);
+    final stickerId = source.stickerId;
+    final text = source.text?.trim();
+    final hasText = text != null && text.isNotEmpty;
+
+    final ChatMessage sent;
+    if (stickerId != null) {
+      sent = await ChatRepository.instance.sendSticker(
+        chatIntId,
+        stickerId: stickerId,
+        currentUserId: userId,
+        forwardedMessageId: sourceMessageId,
+      );
+    } else if (source.files.isNotEmpty) {
+      // Файл привязан к исходному чату — участники целевого могут не
+      // иметь к нему доступа, поэтому он загружается туда заново.
+      final copies = <ChatFile>[];
+      for (final file in source.files) {
+        final bytes = await ChatRepository.instance.downloadFile(file.id);
+        copies.add(
+          await ChatRepository.instance.uploadFile(
+            chatId: chatIntId,
+            bytes: bytes,
+            filename: file.originalName,
+          ),
+        );
+      }
+      final withFiles = await ChatRepository.instance.sendMessage(
+        chatIntId,
+        text: text ?? '',
+        currentUserId: userId,
+        forwardedMessageId: sourceMessageId,
+        fileIds: [for (final f in copies) f.id],
+      );
+      sent = withFiles.files.isNotEmpty
+          ? withFiles
+          : withFiles.copyWith(files: copies);
+    } else {
+      sent = await ChatRepository.instance.sendTextMessage(
+        chatIntId,
+        text: text!,
+        currentUserId: userId,
+        forwardedMessageId: sourceMessageId,
+      );
+    }
+
+    _appendMessage(
+      targetChatId,
+      sent.copyWith(
+        text: sent.text ?? (stickerId != null || !hasText ? null : text),
+        forwardOf:
+            sent.forwardOf ??
+            MessageReference(
+              messageId: source.id,
+              authorName: source.authorName,
+              textPreview: ChatMapper.snippet(source),
+            ),
+        isRead: true,
+      ),
+    );
   }
 
   void _upsertLastMessage(String chatId) {

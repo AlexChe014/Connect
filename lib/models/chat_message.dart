@@ -111,6 +111,17 @@ class ChatMessage {
 
   bool get isCall => call != null;
 
+  /// Можно ли переслать: у сообщения есть серверный id и содержимое.
+  bool get canForward =>
+      !isSystem &&
+      !isCall &&
+      !isDeleted &&
+      !isSending &&
+      int.tryParse(id) != null &&
+      (stickerId != null ||
+          (text?.trim().isNotEmpty ?? false) ||
+          files.isNotEmpty);
+
   bool get hasMedia =>
       files.isNotEmpty ||
       (attachmentKind != ChatAttachmentKind.none &&

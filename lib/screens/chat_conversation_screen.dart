@@ -129,6 +129,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   final Map<String, GlobalKey> _messageKeys = {};
   bool _sendingAttachment = false;
 
+  /// Выбранные сообщения; режим выбора включён, пока набор не пуст.
+  final Set<String> _selectedIds = {};
+  bool get _selecting => _selectedIds.isNotEmpty;
+
   /// Пользователь отлистал больше экрана вверх — показываем кнопку «вниз».
   bool _showScrollDown = false;
   bool _sendingText = false;
@@ -513,248 +517,284 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final activeCall = _callService.bannerCallFor(widget.chat.id);
     final startingCall = _callService.isStartingCall;
 
-    return CupertinoPageScaffold(
-      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
-      navigationBar: CupertinoNavigationBar(
-        // Прозрачная: сообщения растворяются под ней в [_EdgeFade],
-        // а не обрезаются кромкой размытой полосы.
-        backgroundColor: AppColors.groupedBackground
-            .resolveFrom(context)
-            .withValues(alpha: 0),
-        automaticBackgroundVisibility: false,
-        enableBackgroundFilterBlur: false,
-        border: null,
-        middle: _ChatTitleCapsule(chat: c, onTap: _openSettings),
-        trailing: startingCall
-            ? const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: CupertinoActivityIndicator(),
-              )
-            : CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: _startVideoCall,
-                child: Icon(
-                  CupertinoIcons.video_camera,
-                  color: CupertinoColors.label.resolveFrom(context),
+    return PopScope(
+      // Назад в режиме выбора снимает выбор, а не закрывает чат.
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _clearSelection();
+      },
+      child: CupertinoPageScaffold(
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
+        navigationBar: CupertinoNavigationBar(
+          // Прозрачная: сообщения растворяются под ней в [_EdgeFade],
+          // а не обрезаются кромкой размытой полосы.
+          backgroundColor: AppColors.groupedBackground
+              .resolveFrom(context)
+              .withValues(alpha: 0),
+          automaticBackgroundVisibility: false,
+          enableBackgroundFilterBlur: false,
+          border: null,
+          leading: _selecting
+              ? CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _clearSelection,
+                  child: const Text('Отмена'),
+                )
+              : null,
+          middle: _selecting
+              ? Text('Выбрано: ${_selectedIds.length}')
+              : _ChatTitleCapsule(chat: c, onTap: _openSettings),
+          trailing: _selecting
+              ? null
+              : startingCall
+              ? const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: CupertinoActivityIndicator(),
+                )
+              : CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _startVideoCall,
+                  child: Icon(
+                    CupertinoIcons.video_camera,
+                    color: CupertinoColors.label.resolveFrom(context),
+                  ),
                 ),
-              ),
-      ),
-      child: DefaultTextStyle(
-        style: TextStyle(
-          fontFamily: '.SF Pro Text',
-          decoration: TextDecoration.none,
-          color: CupertinoColors.label.resolveFrom(context),
-          fontSize: 15,
         ),
-        child: Builder(
-          // Свой context — под скаффолдом, где в MediaQuery уже учтена
-          // высота полупрозрачной шапки.
-          builder: (context) => Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _focus.unfocus,
-                  child: loading && list.isEmpty
-                      ? const AppPageLoader()
-                      : loadError != null && list.isEmpty
-                      ? AppEmptyState(
-                          icon: CupertinoIcons.exclamationmark_triangle,
-                          message: loadError,
-                          onRetry: () => _service.loadMessages(
-                            widget.chat.id,
-                            force: true,
-                          ),
-                        )
-                      : list.isEmpty
-                      ? const AppEmptyState(
-                          icon: CupertinoIcons.chat_bubble_2,
-                          message: 'Пока нет сообщений — напишите первым',
-                        )
-                      : ListView.builder(
-                          controller: _listCtrl,
-                          reverse: true,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: EdgeInsets.fromLTRB(
-                            10,
-                            MediaQuery.paddingOf(context).top +
-                                _topOverlayHeight +
-                                10,
-                            10,
-                            _bottomOverlayHeight + 10,
-                          ),
-                          itemCount:
-                              list.length +
-                              (_service.hasOlderMessages(widget.chat.id)
-                                  ? 1
-                                  : 0),
-                          itemBuilder: (context, i) {
-                            if (i >= list.length) {
-                              // Конец перевёрнутого списка — верх истории.
-                              return const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: CupertinoActivityIndicator(),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 15,
+          ),
+          child: Builder(
+            // Свой context — под скаффолдом, где в MediaQuery уже учтена
+            // высота полупрозрачной шапки.
+            builder: (context) => Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _focus.unfocus,
+                    child: loading && list.isEmpty
+                        ? const AppPageLoader()
+                        : loadError != null && list.isEmpty
+                        ? AppEmptyState(
+                            icon: CupertinoIcons.exclamationmark_triangle,
+                            message: loadError,
+                            onRetry: () => _service.loadMessages(
+                              widget.chat.id,
+                              force: true,
+                            ),
+                          )
+                        : list.isEmpty
+                        ? const AppEmptyState(
+                            icon: CupertinoIcons.chat_bubble_2,
+                            message: 'Пока нет сообщений — напишите первым',
+                          )
+                        : ListView.builder(
+                            controller: _listCtrl,
+                            reverse: true,
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: EdgeInsets.fromLTRB(
+                              10,
+                              MediaQuery.paddingOf(context).top +
+                                  _topOverlayHeight +
+                                  10,
+                              10,
+                              _bottomOverlayHeight + 10,
+                            ),
+                            itemCount:
+                                list.length +
+                                (_service.hasOlderMessages(widget.chat.id)
+                                    ? 1
+                                    : 0),
+                            itemBuilder: (context, i) {
+                              if (i >= list.length) {
+                                // Конец перевёрнутого списка — верх истории.
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: CupertinoActivityIndicator(),
+                                );
+                              }
+                              _lastBuiltIndex = i;
+                              final chronologicalIndex = list.length - 1 - i;
+                              final m = list[chronologicalIndex];
+                              final previous = chronologicalIndex > 0
+                                  ? list[chronologicalIndex - 1]
+                                  : null;
+                              final next = chronologicalIndex < list.length - 1
+                                  ? list[chronologicalIndex + 1]
+                                  : null;
+                              final startsNewDay =
+                                  previous == null ||
+                                  !_sameDay(previous.createdAt, m.createdAt);
+                              final showAuthorHeader =
+                                  c.isGroup &&
+                                  !m.isOutgoing &&
+                                  !m.isSystem &&
+                                  (previous == null ||
+                                      startsNewDay ||
+                                      !_sameChatAuthor(previous, m));
+                              final localReactions = _localReactions[m.id];
+                              final displayMessage = localReactions == null
+                                  ? m
+                                  : m.copyWithReactions(localReactions);
+                              final tile = _MessageTile(
+                                m: displayMessage,
+                                showAuthorHeader: showAuthorHeader,
+                                showAvatarInHeader: showAuthorHeader,
+                                showTime: _showMessageTime(m, next),
+                                highlighted: m.id == _highlightedMessageId,
+                                selectionMode: _selecting,
+                                selected: _selectedIds.contains(m.id),
+                                onToggleSelect: () => _toggleSelected(m),
+                                onReact: (emoji) => _toggleReaction(m, emoji),
+                                onOpenFile: _openChatFile,
+                                onOpenImages: (images, index) =>
+                                    _openChatImages(m, images, index),
+                                onLongMenu: (action) {
+                                  if (action == _MsgAction.reply) {
+                                    setState(() {
+                                      _replyingTo = _refFromMessage(m);
+                                      _focus.requestFocus();
+                                    });
+                                  } else if (action == _MsgAction.copy) {
+                                    _copyMessage(m);
+                                  } else if (action == _MsgAction.forward) {
+                                    _openForwardTarget([m]);
+                                  } else if (action == _MsgAction.select) {
+                                    _toggleSelected(m);
+                                  } else if (action == _MsgAction.edit) {
+                                    _beginEditMessage(m);
+                                  } else if (action == _MsgAction.delete) {
+                                    _deleteMessage(m);
+                                  } else if (action == _MsgAction.pin) {
+                                    _togglePinMessage(m);
+                                  }
+                                },
                               );
-                            }
-                            _lastBuiltIndex = i;
-                            final chronologicalIndex = list.length - 1 - i;
-                            final m = list[chronologicalIndex];
-                            final previous = chronologicalIndex > 0
-                                ? list[chronologicalIndex - 1]
-                                : null;
-                            final next = chronologicalIndex < list.length - 1
-                                ? list[chronologicalIndex + 1]
-                                : null;
-                            final startsNewDay =
-                                previous == null ||
-                                !_sameDay(previous.createdAt, m.createdAt);
-                            final showAuthorHeader =
-                                c.isGroup &&
-                                !m.isOutgoing &&
-                                !m.isSystem &&
-                                (previous == null ||
-                                    startsNewDay ||
-                                    !_sameChatAuthor(previous, m));
-                            final localReactions = _localReactions[m.id];
-                            final displayMessage = localReactions == null
-                                ? m
-                                : m.copyWithReactions(localReactions);
-                            final tile = _MessageTile(
-                              m: displayMessage,
-                              showAuthorHeader: showAuthorHeader,
-                              showAvatarInHeader: showAuthorHeader,
-                              showTime: _showMessageTime(m, next),
-                              highlighted: m.id == _highlightedMessageId,
-                              onReact: (emoji) => _toggleReaction(m, emoji),
-                              onOpenFile: _openChatFile,
-                              onOpenImages: (images, index) =>
-                                  _openChatImages(m, images, index),
-                              onLongMenu: (action) {
-                                if (action == _MsgAction.reply) {
-                                  setState(() {
-                                    _replyingTo = _refFromMessage(m);
-                                    _focus.requestFocus();
-                                  });
-                                } else if (action == _MsgAction.copy) {
-                                  _copyMessage(m);
-                                } else if (action == _MsgAction.forward) {
-                                  _openForwardTarget(m);
-                                } else if (action == _MsgAction.edit) {
-                                  _beginEditMessage(m);
-                                } else if (action == _MsgAction.delete) {
-                                  _deleteMessage(m);
-                                } else if (action == _MsgAction.pin) {
-                                  _togglePinMessage(m);
-                                }
-                              },
-                            );
-                            final keyed = KeyedSubtree(
-                              key: _keyForMessage(m.id),
-                              child: tile,
-                            );
-                            final wrapped = startsNewDay
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      _DaySeparator(
-                                        label: _formatDayLabel(m.createdAt),
-                                      ),
-                                      keyed,
-                                    ],
-                                  )
-                                : keyed;
-                            if (i == _scrollToReversedIndex) {
-                              return KeyedSubtree(
-                                key: _scrollTargetKey,
-                                child: wrapped,
+                              final keyed = KeyedSubtree(
+                                key: _keyForMessage(m.id),
+                                child: tile,
                               );
-                            }
-                            return wrapped;
-                          },
-                        ),
+                              final wrapped = startsNewDay
+                                  ? Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _DaySeparator(
+                                          label: _formatDayLabel(m.createdAt),
+                                        ),
+                                        keyed,
+                                      ],
+                                    )
+                                  : keyed;
+                              if (i == _scrollToReversedIndex) {
+                                return KeyedSubtree(
+                                  key: _scrollTargetKey,
+                                  child: wrapped,
+                                );
+                              }
+                              return wrapped;
+                            },
+                          ),
+                  ),
                 ),
-              ),
-              _EdgeFade.top(
-                height:
-                    MediaQuery.paddingOf(context).top + _topOverlayHeight + 24,
-              ),
-              _EdgeFade.bottom(height: _bottomOverlayHeight + 24),
-              if (_showScrollDown)
+                _EdgeFade.top(
+                  height:
+                      MediaQuery.paddingOf(context).top +
+                      _topOverlayHeight +
+                      24,
+                ),
+                _EdgeFade.bottom(height: _bottomOverlayHeight + 24),
+                if (_showScrollDown)
+                  Positioned(
+                    right: 12,
+                    bottom: _bottomOverlayHeight + 10,
+                    child: _ScrollDownButton(onTap: _scrollToBottom),
+                  ),
                 Positioned(
-                  right: 12,
-                  bottom: _bottomOverlayHeight + 10,
-                  child: _ScrollDownButton(onTap: _scrollToBottom),
-                ),
-              Positioned(
-                top: MediaQuery.paddingOf(context).top,
-                left: 0,
-                right: 0,
-                child: _MeasureHeight(
-                  onChange: (h) {
-                    if (mounted && h != _topOverlayHeight) {
-                      setState(() => _topOverlayHeight = h);
-                    }
-                  },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_searchActive) _buildSearchBar(context),
-                      if (activeCall != null && !_searchActive)
-                        ChatActiveCallBanner(
-                          call: activeCall,
-                          isGroup: c.isGroup,
-                          peerName: c.title,
-                          joining: _joiningCall,
-                          onJoin: _joinActiveCall,
-                        ),
-                      if (!_searchActive) _buildPinnedBar(context),
-                    ],
+                  top: MediaQuery.paddingOf(context).top,
+                  left: 0,
+                  right: 0,
+                  child: _MeasureHeight(
+                    onChange: (h) {
+                      if (mounted && h != _topOverlayHeight) {
+                        setState(() => _topOverlayHeight = h);
+                      }
+                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_searchActive) _buildSearchBar(context),
+                        if (activeCall != null && !_searchActive)
+                          ChatActiveCallBanner(
+                            call: activeCall,
+                            isGroup: c.isGroup,
+                            peerName: c.title,
+                            joining: _joiningCall,
+                            onJoin: _joinActiveCall,
+                          ),
+                        if (!_searchActive) _buildPinnedBar(context),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _MeasureHeight(
-                  onChange: (h) {
-                    if (mounted && h != _bottomOverlayHeight) {
-                      setState(() => _bottomOverlayHeight = h);
-                    }
-                  },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_editingMessage != null)
-                        _EditBanner(
-                          text: _previewSnippet(_editingMessage!),
-                          onClose: _cancelEdit,
-                        )
-                      else if (_replyingTo != null)
-                        _ReplyBanner(
-                          ref: _replyingTo!,
-                          onClose: () => setState(() => _replyingTo = null),
-                        ),
-                      _Composer(
-                        textCtrl: _textCtrl,
-                        focus: _focus,
-                        onSend: _send,
-                        onAttach: _openAttachMenu,
-                        onStickers:
-                            _editingMessage != null ||
-                                !ChatStickers.imagesAvailable
-                            ? null
-                            : _openStickerPicker,
-                        isEditing: _editingMessage != null,
-                        isSendingAttachment: _sendingAttachment,
-                      ),
-                    ],
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _MeasureHeight(
+                    onChange: (h) {
+                      if (mounted && h != _bottomOverlayHeight) {
+                        setState(() => _bottomOverlayHeight = h);
+                      }
+                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_selecting)
+                          _SelectionBar(
+                            onForward: _forwardSelected,
+                            onCopy: _selectedTextMessages().isEmpty
+                                ? null
+                                : _copySelected,
+                            onDelete: _canDeleteSelected
+                                ? _deleteSelected
+                                : null,
+                          )
+                        else if (_editingMessage != null)
+                          _EditBanner(
+                            text: _previewSnippet(_editingMessage!),
+                            onClose: _cancelEdit,
+                          )
+                        else if (_replyingTo != null)
+                          _ReplyBanner(
+                            ref: _replyingTo!,
+                            onClose: () => setState(() => _replyingTo = null),
+                          ),
+                        if (!_selecting)
+                          _Composer(
+                            textCtrl: _textCtrl,
+                            focus: _focus,
+                            onSend: _send,
+                            onAttach: _openAttachMenu,
+                            onStickers:
+                                _editingMessage != null ||
+                                    !ChatStickers.imagesAvailable
+                                ? null
+                                : _openStickerPicker,
+                            isEditing: _editingMessage != null,
+                            isSendingAttachment: _sendingAttachment,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -914,65 +954,137 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
-  Future<void> _openForwardTarget(ChatMessage m) async {
+  Future<void> _openForwardTarget(List<ChatMessage> messages) async {
     final other = _service.chats.where((c) => c.id != widget.chat.id).toList();
     if (other.isEmpty) {
       _showSnack('Нет других чатов для пересылки');
       return;
     }
-    final id = await showModalBottomSheet<String>(
+    final ids = await showModalBottomSheet<List<String>>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: AppColors.groupedBackground.resolveFrom(context),
-      builder: (context) {
-        return SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.6,
-          child: SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
-                  child: Text(
-                    'Переслать в…',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: other.length,
-                    itemBuilder: (context, i) {
-                      final chat = other[i];
-                      return _ForwardTargetTile(
-                        chat: chat,
-                        onTap: () => Navigator.pop(context, chat.id),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      builder: (context) => _ForwardTargetSheet(chats: other),
     );
-    if (id == null) return;
-    final success = await _service.forwardMessage(
-      id,
-      m,
+    if (ids == null || ids.isEmpty) return;
+    final success = await _service.forwardMessages(
+      ids,
+      messages,
       sourceChatId: widget.chat.id,
     );
     if (!mounted) return;
+    if (success) _clearSelection();
     _showSnack(
       success
-          ? 'Сообщение переслано'
+          ? (messages.length > 1
+                ? 'Сообщения пересланы'
+                : 'Сообщение переслано')
           : (_service.lastActionError ?? 'Не удалось переслать сообщение'),
+    );
+  }
+
+  bool _isSelectable(ChatMessage m) => m.canForward;
+
+  void _toggleSelected(ChatMessage m) {
+    if (!_isSelectable(m)) return;
+    if (!_selectedIds.contains(m.id) &&
+        _selectedIds.length >= _maxForwardMessages) {
+      _showSnack('Можно выбрать не больше $_maxForwardMessages сообщений');
+      return;
+    }
+    AppHaptics.selection();
+    setState(() {
+      if (!_selectedIds.remove(m.id)) _selectedIds.add(m.id);
+    });
+    if (_selecting) _focus.unfocus();
+  }
+
+  void _clearSelection() {
+    if (!_selecting) return;
+    setState(_selectedIds.clear);
+  }
+
+  /// Выбранные сообщения в хронологическом порядке.
+  List<ChatMessage> _selectedMessages() => [
+    for (final m in _service.messagesFor(widget.chat.id))
+      if (_selectedIds.contains(m.id)) m,
+  ];
+
+  List<ChatMessage> _selectedTextMessages() => [
+    for (final m in _selectedMessages())
+      if (!m.isSticker && (m.text?.trim().isNotEmpty ?? false)) m,
+  ];
+
+  bool get _canDeleteSelected {
+    final selected = _selectedMessages();
+    return selected.isNotEmpty &&
+        selected.every((m) => m.isOutgoing && m.canStillDelete);
+  }
+
+  void _forwardSelected() {
+    final selected = _selectedMessages();
+    if (selected.isEmpty) return;
+    _openForwardTarget(selected);
+  }
+
+  Future<void> _copySelected() async {
+    final texts = [
+      for (final m in _selectedTextMessages())
+        HtmlTextUtils.toMultilineText(m.text!),
+    ].where((t) => t.isNotEmpty).toList();
+    if (texts.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: texts.join('\n\n')));
+    AppHaptics.light();
+    if (!mounted) return;
+    _clearSelection();
+    _showSnack(texts.length > 1 ? 'Тексты скопированы' : 'Текст скопирован');
+  }
+
+  Future<void> _deleteSelected() async {
+    final selected = _selectedMessages();
+    if (selected.isEmpty) return;
+    final n = selected.length;
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(
+          n > 1
+              ? 'Удалить $n ${ruPlural(n, 'сообщение', 'сообщения', 'сообщений')}?'
+              : 'Удалить сообщение?',
+        ),
+        content: Text(
+          n > 1
+              ? 'Сообщения будут удалены безвозвратно.'
+              : 'Сообщение будет удалено безвозвратно.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    var failed = 0;
+    for (final m in selected) {
+      if (!await _service.deleteMessage(widget.chat.id, m.id)) failed++;
+    }
+    if (!mounted) return;
+    _clearSelection();
+    _showSnack(
+      failed == 0
+          ? (n > 1 ? 'Сообщения удалены' : 'Сообщение удалено')
+          : (_service.lastActionError ??
+                'Не удалось удалить $failed '
+                    '${ruPlural(failed, 'сообщение', 'сообщения', 'сообщений')}'),
     );
   }
 
@@ -1343,7 +1455,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 /// Сколько фото из галереи уходит одним сообщением.
 const int _maxAttachmentsPerMessage = 10;
 
-enum _MsgAction { reply, copy, forward, edit, delete, pin }
+/// Лимиты `POST /chat/messages/forward` (в Node — те же 100 и 20).
+const int _maxForwardMessages = 100;
+const int _maxForwardChats = 20;
+
+enum _MsgAction { reply, copy, forward, select, edit, delete, pin }
 
 /// Реакции пока только локальные — собеседник их не видит и они пропадают
 /// с экрана, поэтому выключены до API на бэкенде (см. docs/BACKEND_CHAT_FIXES.md).
@@ -1391,10 +1507,177 @@ class _ReactionsBar extends StatelessWidget {
   }
 }
 
+/// Лист «Переслать в…»: можно отметить несколько чатов.
+class _ForwardTargetSheet extends StatefulWidget {
+  const _ForwardTargetSheet({required this.chats});
+
+  final List<Chat> chats;
+
+  @override
+  State<_ForwardTargetSheet> createState() => _ForwardTargetSheetState();
+}
+
+class _ForwardTargetSheetState extends State<_ForwardTargetSheet> {
+  final List<String> _picked = [];
+
+  void _toggle(String id) {
+    if (!_picked.contains(id) && _picked.length >= _maxForwardChats) {
+      AppHaptics.medium();
+      return;
+    }
+    AppHaptics.selection();
+    setState(() {
+      if (!_picked.remove(id)) _picked.add(id);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.6,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+              child: Text(
+                _picked.isEmpty
+                    ? 'Переслать в…'
+                    : 'Выбрано чатов: ${_picked.length}',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                itemCount: widget.chats.length,
+                itemBuilder: (context, i) {
+                  final chat = widget.chats[i];
+                  return _ForwardTargetTile(
+                    chat: chat,
+                    selected: _picked.contains(chat.id),
+                    onTap: () => _toggle(chat.id),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: CupertinoButton.filled(
+                onPressed: _picked.isEmpty
+                    ? null
+                    : () => Navigator.pop(context, List.of(_picked)),
+                child: const Text('Переслать'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Круглая галочка выбора, как в «Сообщениях».
+class _SelectionCheck extends StatelessWidget {
+  const _SelectionCheck({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      selected
+          ? CupertinoIcons.checkmark_alt_circle_fill
+          : CupertinoIcons.circle,
+      size: 24,
+      color: selected
+          ? AppColors.outgoingBubble
+          : CupertinoColors.tertiaryLabel.resolveFrom(context),
+    );
+  }
+}
+
+/// Панель действий над выбранными сообщениями вместо поля ввода.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({required this.onForward, this.onCopy, this.onDelete});
+
+  final VoidCallback onForward;
+  final VoidCallback? onCopy;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget action(
+      IconData icon,
+      String label,
+      VoidCallback? onTap, {
+      bool destructive = false,
+    }) {
+      final color = onTap == null
+          ? CupertinoColors.tertiaryLabel.resolveFrom(context)
+          : destructive
+          ? CupertinoColors.destructiveRed.resolveFrom(context)
+          : CupertinoColors.label.resolveFrom(context);
+      return Expanded(
+        child: CupertinoButton(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          minimumSize: const Size.square(44),
+          onPressed: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22, color: color),
+              const SizedBox(height: 2),
+              Text(label, style: TextStyle(fontSize: 11, color: color)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+        child: AppGlass(
+          borderRadius: BorderRadius.circular(22),
+          shadows: AppGlass.controlShadow,
+          child: Row(
+            children: [
+              action(
+                CupertinoIcons.arrowshape_turn_up_right,
+                'Переслать',
+                onForward,
+              ),
+              action(CupertinoIcons.doc_on_doc, 'Копировать', onCopy),
+              action(
+                CupertinoIcons.trash,
+                'Удалить',
+                onDelete,
+                destructive: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ForwardTargetTile extends StatelessWidget {
-  const _ForwardTargetTile({required this.chat, required this.onTap});
+  const _ForwardTargetTile({
+    required this.chat,
+    required this.selected,
+    required this.onTap,
+  });
 
   final Chat chat;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
@@ -1427,11 +1710,7 @@ class _ForwardTargetTile extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(
-                CupertinoIcons.chevron_forward,
-                size: 16,
-                color: CupertinoColors.tertiaryLabel.resolveFrom(context),
-              ),
+              _SelectionCheck(selected: selected),
             ],
           ),
         ),
@@ -1889,6 +2168,9 @@ class _MessageTile extends StatelessWidget {
     this.showAvatarInHeader = false,
     this.showTime = true,
     this.highlighted = false,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onToggleSelect,
   });
 
   final ChatMessage m;
@@ -1900,6 +2182,12 @@ class _MessageTile extends StatelessWidget {
   final bool showAvatarInHeader;
   final bool showTime;
   final bool highlighted;
+
+  /// Режим выбора: тап по строке переключает [selected], а меню, свайп
+  /// и открытие вложений выключены.
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onToggleSelect;
 
   /// Только картинки, без текста/цитаты/пересылки — такой пузырь рисуется
   /// почти без отступов, чтобы фото заполняло его целиком.
@@ -2035,6 +2323,12 @@ class _MessageTile extends StatelessWidget {
             icon: CupertinoIcons.arrowshape_turn_up_right,
             onTap: () => onLongMenu(_MsgAction.forward),
           ),
+        if (m.canForward)
+          MessageMenuItem(
+            label: 'Выбрать',
+            icon: CupertinoIcons.checkmark_circle,
+            onTap: () => onLongMenu(_MsgAction.select),
+          ),
         if (!m.isSystem)
           MessageMenuItem(
             label: m.isPinned ? 'Открепить' : 'Закрепить',
@@ -2060,6 +2354,25 @@ class _MessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final content = _buildContent(context);
+    if (!selectionMode) return content;
+    final selectable = m.canForward;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: selectable ? onToggleSelect : null,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 34,
+            child: selectable ? _SelectionCheck(selected: selected) : null,
+          ),
+          Expanded(child: IgnorePointer(child: content)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (m.isSystem) {
       return _wrapHighlight(
         context,
