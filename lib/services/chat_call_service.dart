@@ -278,6 +278,8 @@ class ChatCallService extends ChangeNotifier {
           session,
           callId: callId,
           endWhenLeave: true,
+          // Собеседник уже ответил и вошёл в комнату раньше нас.
+          peerAnswered: true,
           title: peer.title,
           avatarUrl: peer.avatarUrl,
         );
@@ -345,6 +347,9 @@ class ChatCallService extends ChangeNotifier {
         session,
         callId: call.callId,
         endWhenLeave: true,
+        // Возврат в свой звонок: собеседник уже на линии. Входящий —
+        // звонящий ждёт ответа и войдёт после нас.
+        peerAnswered: !call.isIncoming,
         title: peer.title,
         avatarUrl: peer.avatarUrl,
       );

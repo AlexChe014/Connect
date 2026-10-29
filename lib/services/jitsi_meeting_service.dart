@@ -61,6 +61,9 @@ class JitsiMeetingService extends ChangeNotifier {
   bool _leaveNotified = false;
   bool _inConference = false;
   bool _peerJoined = false;
+
+  /// 1:1: сервер уже сообщил, что собеседник ответил (см. [joinSession]).
+  bool _peerAnswered = false;
   Timer? _peerJoinTimer;
   Timer? _peerRejoinTimer;
   final List<Timer> _peerProbeTimers = [];
@@ -85,10 +88,18 @@ class JitsiMeetingService extends ChangeNotifier {
 
   /// [title]/[avatarUrl] — собеседник 1:1 для экрана звонка; без них
   /// берётся тема встречи или имя первого вошедшего участника.
+  ///
+  /// [peerAnswered] — 1:1, в который мы входим после того, как собеседник
+  /// принял звонок (звонящий). Он, скорее всего, уже в комнате, а о тех, кто
+  /// вошёл раньше нас, Jitsi SDK не сообщает (participantJoined не приходит,
+  /// retrieveParticipantsInfo на устройствах не помог). Поэтому разговор
+  /// начинается сразу после входа, без «Ожидания собеседника» и без
+  /// 40-секундного сторожа — завершение придёт от сервера или participantLeft.
   Future<void> joinSession(
     ConnectorSession session, {
     String? callId,
     bool endWhenLeave = false,
+    bool peerAnswered = false,
     JitsiLeaveCallback? onLeave,
     String? title,
     String? avatarUrl,
@@ -141,6 +152,7 @@ class JitsiMeetingService extends ChangeNotifier {
       _leaveNotified = false;
       _inConference = false;
       _peerJoined = false;
+      _peerAnswered = endWhenLeave && peerAnswered;
       _peerJoinTimer?.cancel();
       _peerRejoinTimer?.cancel();
       _cancelPeerProbes();
@@ -255,13 +267,15 @@ class JitsiMeetingService extends ChangeNotifier {
         _inConference = true;
         final c = _conference;
         if (c == null) return;
-        if (c.isDirect) {
-          if (!_peerJoined) c.phase = CallPhase.waiting;
+        if (c.isDirect && !_peerJoined && !_peerAnswered) {
+          c.phase = CallPhase.waiting;
         } else {
           c.phase = CallPhase.active;
           c.startedAt ??= DateTime.now();
         }
-        if (_endWhenLeave && !_peerJoined) _armPeerJoinWatchdog();
+        if (_endWhenLeave && !_peerJoined && !_peerAnswered) {
+          _armPeerJoinWatchdog();
+        }
         if (!_peerJoined) _probeExistingParticipants();
         unawaited(_jitsi.refreshAudioRoute());
         notifyListeners();
