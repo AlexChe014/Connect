@@ -663,6 +663,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 selectionMode: _selecting,
                                 selected: _selectedIds.contains(m.id),
                                 onToggleSelect: () => _toggleSelected(m),
+                                onOpenAuthor: _openAuthorChat,
                                 onReact: (emoji) => _toggleReaction(m, emoji),
                                 onOpenFile: _openChatFile,
                                 onOpenImages: (images, index) =>
@@ -1071,6 +1072,37 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     } finally {
       unawaited(recording.file.delete().catchError((_) => recording.file));
       if (mounted) setState(() => _sendingAttachment = false);
+    }
+  }
+
+  bool _openingAuthorChat = false;
+
+  /// Личный чат с автором пересланного сообщения — уже существующий или
+  /// новый. Свой собственный и текущий личный чат не открываем.
+  Future<void> _openAuthorChat(int userId) async {
+    if (_openingAuthorChat || userId == _service.selfUserId) return;
+    final c = _c;
+    if (!c.isGroup && c.peerUserId == userId) return;
+    _openingAuthorChat = true;
+    try {
+      final chat =
+          _service.findDirectChatForUser(userId) ??
+          await _service.createDirect(
+            fullName: ChatUserNames.instance.nameFor(userId) ?? 'Пользователь',
+            peerUserId: userId,
+          );
+      if (!mounted) return;
+      if (chat == null) {
+        _showSnack('Не удалось открыть чат');
+        return;
+      }
+      await Navigator.of(context).push<void>(
+        CupertinoPageRoute<void>(
+          builder: (context) => ChatConversationScreen(chat: chat),
+        ),
+      );
+    } finally {
+      _openingAuthorChat = false;
     }
   }
 
@@ -2429,9 +2461,13 @@ class _MessageTile extends StatelessWidget {
     this.selectionMode = false,
     this.selected = false,
     this.onToggleSelect,
+    this.onOpenAuthor,
   });
 
   final ChatMessage m;
+
+  /// Тап по имени в «Переслано от …» — личный чат с автором оригинала.
+  final ValueChanged<int>? onOpenAuthor;
   final void Function(_MsgAction) onLongMenu;
   final void Function(String emoji) onReact;
   final Future<void> Function(ChatFile file) onOpenFile;
@@ -2741,7 +2777,11 @@ class _MessageTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (m.forwardOf != null)
-              _ForwardBlock(ref: m.forwardOf!, onBubble: onBubble),
+              _ForwardBlock(
+                ref: m.forwardOf!,
+                onBubble: onBubble,
+                onAuthorTap: onOpenAuthor,
+              ),
             if (m.replyTo != null)
               _ReplyBlock(
                 ref: m.replyTo!,
@@ -3034,10 +3074,15 @@ class _SwipeToReplyState extends State<_SwipeToReply>
 }
 
 class _ForwardBlock extends StatelessWidget {
-  const _ForwardBlock({required this.ref, required this.onBubble});
+  const _ForwardBlock({
+    required this.ref,
+    required this.onBubble,
+    this.onAuthorTap,
+  });
 
   final MessageReference ref;
   final Color onBubble;
+  final ValueChanged<int>? onAuthorTap;
 
   String _authorName() {
     final id = ref.authorId;
@@ -3067,16 +3112,38 @@ class _ForwardBlock extends StatelessWidget {
           children: [
             ListenableBuilder(
               listenable: ChatUserNames.instance,
-              builder: (context, _) => Text(
-                ref.sourceChatTitle != null
-                    ? 'Переслано из «${ref.sourceChatTitle!}»'
-                    : 'Переслано от ${_authorName()}',
-                style: TextStyle(
+              builder: (context, _) {
+                final style = TextStyle(
                   fontSize: 11,
                   color: onBubble.withValues(alpha: 0.85),
                   fontWeight: FontWeight.w600,
-                ),
-              ),
+                );
+                if (ref.sourceChatTitle != null) {
+                  return Text(
+                    'Переслано из «${ref.sourceChatTitle!}»',
+                    style: style,
+                  );
+                }
+                final authorId = ref.authorId;
+                final label = Text.rich(
+                  TextSpan(
+                    text: 'Переслано от ',
+                    children: [
+                      TextSpan(
+                        text: _authorName(),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  style: style,
+                );
+                if (authorId == null || onAuthorTap == null) return label;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onAuthorTap!(authorId),
+                  child: label,
+                );
+              },
             ),
             if (ref.textPreview.isNotEmpty) ...[
               const SizedBox(height: 2),
