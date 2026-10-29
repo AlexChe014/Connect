@@ -7,12 +7,10 @@ import '../services/jitsi_meeting_service.dart';
 /// На прочих платформах — браузер с JWT.
 ///
 /// [title]/[avatarUrl] — собеседник 1:1 для экрана звонка.
-/// [peerAnswered] — см. [JitsiMeetingService.joinSession].
 Future<void> openConnectorSession(
   ConnectorSession session, {
   String? callId,
   bool endWhenLeave = false,
-  bool peerAnswered = false,
   String? title,
   String? avatarUrl,
 }) {
@@ -20,7 +18,6 @@ Future<void> openConnectorSession(
     session,
     callId: callId,
     endWhenLeave: endWhenLeave,
-    peerAnswered: peerAnswered,
     title: title,
     avatarUrl: avatarUrl,
     onLeave: endWhenLeave
