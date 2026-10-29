@@ -186,11 +186,13 @@ class _CallOverlayHostState extends State<CallOverlayHost> {
         Positioned.fill(
           child: IgnorePointer(
             ignoring: minimized,
-            child: TickerMode(
-              enabled: !minimized,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: minimized ? 0 : 1,
+            // TickerMode — внутри AnimatedOpacity: снаружи он остановил бы
+            // и саму анимацию исчезновения.
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 250),
+              opacity: minimized ? 0 : 1,
+              child: TickerMode(
+                enabled: !minimized,
                 child: const CallBackground(),
               ),
             ),
@@ -319,11 +321,13 @@ class _Stage extends StatelessWidget {
           // Аватар поверх кадра Jitsi: сам вид продолжает работать под ним.
           IgnorePointer(
             ignoring: !audioStage,
-            child: TickerMode(
-              enabled: audioStage,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 280),
-                opacity: audioStage ? 1 : 0,
+            // TickerMode — внутри: снаружи он замораживал исчезновение
+            // аватара, и тот навсегда закрывал включившееся видео.
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 280),
+              opacity: audioStage ? 1 : 0,
+              child: TickerMode(
+                enabled: audioStage,
                 child: CallAudioStage(conference: c, compact: minimized),
               ),
             ),
