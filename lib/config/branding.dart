@@ -14,10 +14,16 @@ abstract final class BrandingAssets {
 
   /// Запасной логотип, пока сеть не отдала `connect.light_logo` из настроек.
   static const String loginLogoPng = 'assets/branding/login_logo.png';
+
+  /// Тот же логотип с белыми буквами — для тёмной темы. Тот же холст и
+  /// поля, что у [loginLogoPng]: при смене темы логотип не прыгает.
+  static const String loginLogoDarkPng = 'assets/branding/login_logo_dark.png';
 }
 
 /// Главный логотип компании: `GET /settings/get?module=connect` → `light_logo`,
 /// с локальным ассетом, если URL ещё нет или картинка не загрузилась.
+/// В тёмной теме — всегда локальный [BrandingAssets.loginLogoDarkPng]:
+/// у `light_logo` чёрные буквы, а тёмного варианта сервер не отдаёт.
 class BrandingLoginLogo extends StatelessWidget {
   const BrandingLoginLogo({
     super.key,
@@ -34,7 +40,8 @@ class BrandingLoginLogo extends StatelessWidget {
       listenable: BrandingService.instance,
       builder: (context, _) {
         final url = BrandingService.instance.logoUrl?.trim();
-        if (url == null || url.isEmpty) {
+        final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+        if (dark || url == null || url.isEmpty) {
           return _AssetLogo(height: height, fit: fit);
         }
         return CachedNetworkImage(
@@ -59,8 +66,9 @@ class _AssetLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return Image.asset(
-      BrandingAssets.loginLogoPng,
+      dark ? BrandingAssets.loginLogoDarkPng : BrandingAssets.loginLogoPng,
       height: height,
       fit: fit,
       errorBuilder: (context, error, stackTrace) =>

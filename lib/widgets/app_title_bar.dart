@@ -232,9 +232,30 @@ class _TitleBar extends StatelessWidget {
           tag: _heroTag,
           transitionOnUserGestures: true,
           flightShuttleBuilder: _crossFade,
+          placeholderBuilder: _placeholder,
           child: content,
         ),
       ),
+    );
+  }
+
+  /// Шапка нижнего экрана после перелёта. Flutter прячет её, пока обратный
+  /// перелёт не прилетит именно в неё. Если за это время сменилась вкладка
+  /// (открыли чат из пуша — и меню переключилось на «Чаты»), перелёт уходит
+  /// в шапку другой вкладки, а у этой заголовок пропадал насовсем. Поэтому
+  /// пустое место — только пока экран в переходе или накрыт другим.
+  static Widget _placeholder(BuildContext context, Size size, Widget child) {
+    final route = ModalRoute.of(context);
+    if (route == null) return child;
+    return ListenableBuilder(
+      listenable: Listenable.merge([route.animation, route.secondaryAnimation]),
+      builder: (context, _) {
+        final settled =
+            route.isCurrent &&
+            (route.animation?.isCompleted ?? true) &&
+            (route.secondaryAnimation?.isDismissed ?? true);
+        return settled ? child : SizedBox.fromSize(size: size);
+      },
     );
   }
 

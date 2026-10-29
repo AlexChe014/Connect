@@ -534,7 +534,7 @@ class JitsiMeetingService extends ChangeNotifier {
     _cancelPeerProbes();
     if (c.phase != CallPhase.ending) c.phase = CallPhase.active;
     c.startedAt ??= DateTime.now();
-    _sendState(to: id);
+    _sendState();
     if (!wasJoined) {
       AppLogger.d('Jitsi: peer $id in the room', name: 'meeting');
     }
@@ -655,17 +655,22 @@ class JitsiMeetingService extends ChangeNotifier {
   /// Сообщаем собеседникам (нашим приложениям) про свои камеру и микрофон.
   /// [hello] — мы только вошли и ещё не знаем, кто в комнате: рассылаем всем
   /// и просим ответить (см. [_probeExistingParticipants]).
-  void _sendState({String? to, bool hello = false}) {
+  /// Всегда всем в комнате: адресные сообщения (по id из participantJoined
+  /// или senderId) до собеседника не доходили — заглушка с аватаром у него
+  /// не менялась на видео.
+  void _sendState({bool hello = false}) {
     final c = _conference;
+    // Список собеседников может быть пуст, хотя они в комнате (Jitsi не
+    // сообщает о тех, кто вошёл раньше нас), — всё равно рассылаем всем,
+    // иначе собеседник не узнает, что мы включили камеру.
     if (c == null || !_inConference) return;
-    if (c.participants.isEmpty && !hello) return;
     final message = jsonEncode({
       'type': _stateMessageType,
       'video': !c.videoMuted,
       'audio': !c.audioMuted,
       if (hello) 'hello': true,
     });
-    unawaited(_jitsi.sendEndpointTextMessage(to: to, message: message));
+    unawaited(_jitsi.sendEndpointTextMessage(message: message));
   }
 
   void _onStateMessage(String senderId, String message) {
@@ -689,7 +694,7 @@ class JitsiMeetingService extends ChangeNotifier {
     final audio = decoded['audio'];
     if (video is bool) participant.videoOn = video;
     if (audio is bool) participant.audioOn = audio;
-    if (decoded['hello'] == true) _sendState(to: senderId);
+    if (decoded['hello'] == true) _sendState();
     notifyListeners();
   }
 

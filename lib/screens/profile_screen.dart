@@ -14,6 +14,7 @@ import '../services/haptics_service.dart';
 import '../services/notification_unread_service.dart';
 import '../services/sign_out.dart';
 import '../utils/media_url_utils.dart';
+import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/app_loading.dart';
 import '../widgets/app_network_image.dart';
@@ -356,59 +357,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final department = _departmentLabel;
     final status = _statusLabel;
     final contactTiles = <Widget>[
-      if (birthday != null)
-        _contactTile(
-          icon: CupertinoIcons.gift_fill,
-          color: CupertinoColors.systemPink.resolveFrom(context),
-          title: 'Дата рождения',
-          value: DateFormat('dd.MM.yyyy').format(birthday),
-        ),
-      if ((email ?? '').isNotEmpty)
-        _contactTile(
-          icon: CupertinoIcons.mail_solid,
-          color: CupertinoColors.systemBlue.resolveFrom(context),
-          title: 'Email',
-          value: email!,
-        ),
       if ((phone ?? '').isNotEmpty)
-        // Номер с добавочным длинный — переносим его, а не обрезаем подпись.
-        _contactTile(
+        _infoRow(
           icon: CupertinoIcons.phone_fill,
           color: CupertinoColors.systemGreen.resolveFrom(context),
-          title: 'Телефон',
+          label: 'Телефон',
           value: phone!,
-          maxLines: 2,
         ),
-      if ((department ?? '').isNotEmpty)
-        _contactTile(
-          icon: CupertinoIcons.building_2_fill,
-          color: CupertinoColors.systemIndigo.resolveFrom(context),
-          title: 'Отдел',
-          value: department!,
+      if ((email ?? '').isNotEmpty)
+        _infoRow(
+          icon: CupertinoIcons.mail_solid,
+          color: CupertinoColors.systemBlue.resolveFrom(context),
+          label: 'Email',
+          value: email!,
+        ),
+      if (birthday != null)
+        _infoRow(
+          icon: CupertinoIcons.gift_fill,
+          color: CupertinoColors.systemPink.resolveFrom(context),
+          label: 'Дата рождения',
+          value: DateFormat('d MMMM yyyy', 'ru_RU').format(birthday),
         ),
     ];
 
     return SliverPadding(
-      padding: const EdgeInsets.only(top: 4, bottom: 32),
+      padding: EdgeInsets.only(
+        top: 8,
+        bottom: MediaQuery.paddingOf(context).bottom + 32,
+      ),
       sliver: SliverList.list(
         children: [
           _ProfileHeaderCard(
             avatarUrl: _avatarUrl,
             displayName: _displayName,
             position: position,
+            department: department,
             status: status,
             isBirthdayToday:
                 birthday != null && _isSameMonthDay(birthday, DateTime.now()),
           ),
           if (contactTiles.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            CupertinoListSection.insetGrouped(
-              header: const Text('Контакты', style: _sectionHeaderStyle),
+            const AppGlassSectionLabel('Контакты'),
+            AppGlassSection(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
               children: contactTiles,
             ),
           ],
-          CupertinoListSection.insetGrouped(
-            header: const Text('Ближайшие брони', style: _sectionHeaderStyle),
+          const AppGlassSectionLabel('Ближайшие брони'),
+          AppGlassSection(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
             children: _bookingsLoading
                 ? [
                     const Padding(
@@ -422,6 +419,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       title: Text(
                         'На ближайшие 7 дней бронирований нет',
                         style: TextStyle(
+                          fontSize: 15,
                           color: CupertinoColors.secondaryLabel.resolveFrom(
                             context,
                           ),
@@ -429,102 +427,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ]
-                : _upcomingBookings.map((b) {
-                    final timeLabel =
-                        '${DateFormat('dd.MM').format(b.datetimeStart)} • '
-                        '${_formatHm(b.datetimeStart)}—${_formatHm(b.datetimeEnd)}';
-                    final subtitleParts = <String>[
-                      timeLabel,
-                      if ((b.objectName ?? '').trim().isNotEmpty)
-                        b.objectName!.trim(),
-                    ];
-
-                    return GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () async {
-                        final changed = await BookingDetailSheet.show(
-                          context,
-                          bookingId: b.id,
-                        );
-                        if (changed == true && mounted) {
-                          await _loadUpcomingBookings();
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        child: DefaultTextStyle(
-                          style: TextStyle(
-                            fontFamily: '.SF Pro Text',
-                            decoration: TextDecoration.none,
-                            color: CupertinoColors.label.resolveFrom(context),
-                            fontSize: 16,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              b.objectImageUrl != null
-                                  ? AppNetworkImage(
-                                      url: b.objectImageUrl,
-                                      width: 29,
-                                      height: 29,
-                                      borderRadius: 7,
-                                      errorIcon: CupertinoIcons.location_solid,
-                                    )
-                                  : _iconBadge(
-                                      CupertinoIcons.location_solid,
-                                      CupertinoColors.systemRed.resolveFrom(
-                                        context,
-                                      ),
-                                    ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      b.theme,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        subtitleParts.join(' • '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: CupertinoColors.secondaryLabel
-                                              .resolveFrom(context),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Icon(
-                                  CupertinoIcons.chevron_forward,
-                                  size: 16,
-                                  color: CupertinoColors.tertiaryLabel
-                                      .resolveFrom(context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                : _upcomingBookings.map(_bookingTile).toList(),
           ),
-          CupertinoListSection.insetGrouped(
+          AppGlassSection(
+            margin: const EdgeInsets.fromLTRB(16, 28, 16, 8),
             children: [
               CupertinoListTile(
                 title: Center(
@@ -554,33 +460,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Заголовки секций: у insetGrouped по умолчанию 20 pt жирным — почти
-  /// как крупный заголовок экрана.
-  static const TextStyle _sectionHeaderStyle = TextStyle(
-    fontSize: 18,
-    fontWeight: FontWeight.w700,
-  );
+  Widget _bookingTile(UserBooking b) {
+    final timeLabel =
+        '${DateFormat('dd.MM').format(b.datetimeStart)} • '
+        '${_formatHm(b.datetimeStart)}—${_formatHm(b.datetimeEnd)}';
+    final subtitleParts = <String>[
+      timeLabel,
+      if ((b.objectName ?? '').trim().isNotEmpty) b.objectName!.trim(),
+    ];
+    return CupertinoListTile(
+      leading: b.objectImageUrl != null
+          ? AppNetworkImage(
+              url: b.objectImageUrl,
+              width: 29,
+              height: 29,
+              borderRadius: 7,
+              errorIcon: CupertinoIcons.location_solid,
+            )
+          : _iconBadge(
+              CupertinoIcons.location_solid,
+              CupertinoColors.systemRed.resolveFrom(context),
+            ),
+      title: Text(
+        b.theme,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        subtitleParts.join(' • '),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 13,
+          color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        ),
+      ),
+      trailing: const CupertinoListTileChevron(),
+      onTap: () async {
+        final changed = await BookingDetailSheet.show(context, bookingId: b.id);
+        if (changed == true && mounted) await _loadUpcomingBookings();
+      },
+    );
+  }
 
-  /// Строка «Контактов»: 15 pt вместо системных 17 — данные справочные,
-  /// крупный шрифт делал блок тяжелее карточки с именем.
-  Widget _contactTile({
+  /// Строка «Контактов» как в карточке сотрудника: подпись мелко сверху,
+  /// значение под ней — длинный email или номер с добавочным не обрезаются.
+  /// Долгое нажатие копирует значение.
+  Widget _infoRow({
     required IconData icon,
     required Color color,
-    required String title,
+    required String label,
     required String value,
-    int maxLines = 1,
   }) {
-    return CupertinoListTile(
-      leading: _iconBadge(icon, color),
-      title: Text(title, style: const TextStyle(fontSize: 15)),
-      additionalInfo: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 220),
-        child: Text(
-          value,
-          textAlign: TextAlign.right,
-          maxLines: maxLines,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 15),
+    return GestureDetector(
+      onLongPress: () {
+        Clipboard.setData(ClipboardData(text: value));
+        AppHaptics.selection();
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('Скопировано')));
+      },
+      child: CupertinoListTile(
+        leading: _iconBadge(icon, color),
+        title: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: CupertinoColors.secondaryLabel.resolveFrom(context),
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            value,
+            // CupertinoListTile форсирует subtitle в 1 строку с "…", если
+            // не переопределить maxLines явно.
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              color: CupertinoColors.label.resolveFrom(context),
+            ),
+          ),
         ),
       ),
     );
@@ -657,10 +619,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   decoration: BoxDecoration(
                     color: CupertinoColors.systemRed.resolveFrom(context),
                     borderRadius: BorderRadius.circular(9),
-                    border: Border.all(
-                      color: AppColors.groupedBackground.resolveFrom(context),
-                      width: 1.5,
-                    ),
                   ),
                   child: Text(
                     count > 99 ? '99+' : '$count',
@@ -681,26 +639,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      backgroundColor: AppColors.groupedBackground.resolveFrom(context),
-      child: SafeArea(
-        top: false,
-        bottom: false,
-        child: RefreshIndicator.adaptive(
-          onRefresh: AppHaptics.onRefresh(_loadProfile),
-          child: CustomScrollView(
-            slivers: [
-              AppSliverTitleBar(
-                title: const Text('Профиль'),
-                backgroundColor: AppColors.groupedBackground.resolveFrom(
-                  context,
-                ),
-                trailing: ListenableBuilder(
-                  listenable: NotificationUnreadService.instance,
-                  builder: (context, _) => _buildNotificationsButton(context),
+    return AppGlassBarBlur(
+      builder: (context, blur) => CupertinoPageScaffold(
+        backgroundColor: AppColors.groupedBackground.resolveFrom(context),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            fontFamily: '.SF Pro Text',
+            decoration: TextDecoration.none,
+            color: CupertinoColors.label.resolveFrom(context),
+            fontSize: 16,
+          ),
+          child: Stack(
+            children: [
+              const AppGlassGlow(height: 360),
+              SafeArea(
+                top: false,
+                bottom: false,
+                child: RefreshIndicator.adaptive(
+                  onRefresh: AppHaptics.onRefresh(_loadProfile),
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      AppSliverTitleBar(
+                        title: const Text('Профиль'),
+                        blur: blur,
+                        trailing: ListenableBuilder(
+                          listenable: NotificationUnreadService.instance,
+                          builder: (context, _) =>
+                              _buildNotificationsButton(context),
+                        ),
+                      ),
+                      _buildSliverBody(context),
+                    ],
+                  ),
                 ),
               ),
-              _buildSliverBody(context),
             ],
           ),
         ),
@@ -714,6 +687,7 @@ class _ProfileHeaderCard extends StatelessWidget {
     required this.avatarUrl,
     required this.displayName,
     this.position,
+    this.department,
     this.status,
     this.isBirthdayToday = false,
   });
@@ -721,94 +695,107 @@ class _ProfileHeaderCard extends StatelessWidget {
   final String? avatarUrl;
   final String displayName;
   final String? position;
+  final String? department;
   final String? status;
   final bool isBirthdayToday;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.groupedSurface.resolveFrom(context),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                MemberAvatar(
-                  displayName: displayName,
-                  avatarUrl: avatarUrl,
-                  radius: 30,
-                ),
-                if (isBirthdayToday) const BirthdayBadge(radius: 30),
-              ],
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(24),
+        shadows: AppGlass.controlShadow,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  Text(
-                    displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: '.SF Pro Text',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      height: 1.2,
-                      color: CupertinoColors.label.resolveFrom(context),
-                    ),
+                  MemberAvatar(
+                    displayName: displayName,
+                    avatarUrl: avatarUrl,
+                    radius: 34,
                   ),
-                  if ((position ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                  if (isBirthdayToday) const BirthdayBadge(radius: 34),
+                ],
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      position!,
-                      maxLines: 2,
+                      displayName,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: '.SF Pro Text',
-                        fontSize: 14,
-                        color: CupertinoColors.secondaryLabel.resolveFrom(
-                          context,
-                        ),
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                        color: CupertinoColors.label.resolveFrom(context),
                       ),
                     ),
-                  ],
-                  if ((status ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: CupertinoColors.activeBlue
-                            .resolveFrom(context)
-                            .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        status!,
+                    if ((position ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        position!,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: CupertinoColors.activeBlue.resolveFrom(
+                          fontSize: 14,
+                          color: CupertinoColors.secondaryLabel.resolveFrom(
                             context,
                           ),
                         ),
                       ),
-                    ),
+                    ],
+                    if ((department ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        department!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: CupertinoColors.tertiaryLabel.resolveFrom(
+                            context,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if ((status ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.tertiarySystemFill.resolveFrom(
+                            context,
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          status!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

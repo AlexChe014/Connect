@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../config/app_theme.dart';
+import '../config/home_tabs.dart';
 import '../models/news_item.dart';
 import '../repositories/news_repository.dart';
 import '../services/paginated.dart';
@@ -30,6 +31,7 @@ class NewsFeedScreen extends StatefulWidget {
     this.trailing,
     this.headerSlivers = const [],
     this.onRefresh,
+    this.homeTab,
   });
 
   final bool showAppBar;
@@ -45,6 +47,10 @@ class NewsFeedScreen extends StatefulWidget {
 
   /// Что ещё обновить жестом «потянуть вниз», кроме самой ленты.
   final Future<void> Function()? onRefresh;
+
+  /// Вкладка нижнего меню, в которой лежит лента: повторный тап по ней
+  /// прокручивает в начало.
+  final int? homeTab;
 
   @override
   State<NewsFeedScreen> createState() => _NewsFeedScreenState();
@@ -64,11 +70,21 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
   final Set<String> _fullyVisibleIds = <String>{};
   bool _openedNewsFromPush = false;
 
+  /// Кнопка «наверх» — когда ушли от начала дальше пары экранов.
+  bool _showScrollToTop = false;
+  StreamSubscription<int>? _reselectSub;
+
   @override
   void initState() {
     super.initState();
     _loadInitial();
     _scrollController.addListener(_onScroll);
+    final tab = widget.homeTab;
+    if (tab != null) {
+      _reselectSub = HomeTabs.reselected
+          .where((index) => index == tab)
+          .listen((_) => _scrollToTop());
+    }
   }
 
   /// Лента с прошлого раза — сразу, свежая подменяет её, когда придёт.
@@ -88,6 +104,7 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   @override
   void dispose() {
+    _reselectSub?.cancel();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -96,6 +113,10 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    final show = pos.pixels > pos.viewportDimension * 2;
+    if (show != _showScrollToTop) setState(() => _showScrollToTop = show);
+
     if (_isInitialLoading || _isLoadingMore) return;
     if (_nextPageUrl == null) return;
 
@@ -103,6 +124,21 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
     if (position.pixels >= position.maxScrollExtent - 240) {
       _loadMore();
     }
+  }
+
+  /// Плавно в начало. Издалека — сначала прыжок поближе: анимация через
+  /// десятки постов шла бы долго и подгружала бы все картинки по пути.
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels <= 0) return;
+    final near = pos.viewportDimension * 1.5;
+    if (pos.pixels > near) _scrollController.jumpTo(near);
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   /// [quiet] — без снекбара об ошибке, если на экране уже есть лента
@@ -434,7 +470,62 @@ class _NewsFeedScreenState extends State<NewsFeedScreen> {
                   ),
                 ),
               ),
+              Positioned(
+                right: 16,
+                // Над плавающим нижним меню: его высота уже в padding.bottom.
+                bottom: MediaQuery.paddingOf(context).bottom + 12,
+                child: _ScrollToTopButton(
+                  visible: _showScrollToTop,
+                  onTap: () {
+                    AppHaptics.selection();
+                    _scrollToTop();
+                  },
+                ),
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Круглая стеклянная кнопка со стрелкой вверх; появляется и прячется
+/// с лёгким масштабом.
+class _ScrollToTopButton extends StatelessWidget {
+  const _ScrollToTopButton({required this.visible, required this.onTap});
+
+  final bool visible;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: AnimatedScale(
+          scale: visible ? 1 : 0.8,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: Semantics(
+            button: true,
+            label: 'Наверх',
+            child: AppGlass(
+              borderRadius: BorderRadius.circular(22),
+              shadows: AppGlass.controlShadow,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(44, 44),
+                onPressed: onTap,
+                child: Icon(
+                  CupertinoIcons.arrow_up,
+                  size: 20,
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ),
           ),
         ),
       ),

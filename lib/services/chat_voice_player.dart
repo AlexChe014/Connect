@@ -49,6 +49,9 @@ class ChatVoicePlayer {
 
   static const List<double> speeds = [1, 1.5, 2];
 
+  /// [ChatVoicePlayback.fileId] для своего ещё не отправленного голосового.
+  static const int draftId = -1;
+
   /// `null` — ничего не выбрано.
   final ValueNotifier<ChatVoicePlayback?> current = ValueNotifier(null);
 
@@ -96,24 +99,32 @@ class ChatVoicePlayer {
   bool isCurrent(int fileId) => current.value?.fileId == fileId;
 
   /// Играть или поставить на паузу [file]; другое голосовое останавливается.
-  Future<void> toggle(ChatFile file) async {
+  Future<void> toggle(ChatFile file) => _toggle(
+    file.id,
+    () async => (await ChatFileDownloads.instance.download(file))?.path,
+  );
+
+  /// То же для локального файла — прослушать запись перед отправкой.
+  Future<void> toggleDraft(String path) => _toggle(draftId, () async => path);
+
+  Future<void> _toggle(int id, Future<String?> Function() resolve) async {
     final p = current.value;
     final player = _player;
-    if (p != null && p.fileId == file.id && player != null && !p.loading) {
+    if (p != null && p.fileId == id && player != null && !p.loading) {
       await player.playOrPause();
       return;
     }
-    await _open(file);
+    await _open(id, resolve);
   }
 
-  Future<void> _open(ChatFile file) async {
+  Future<void> _open(int id, Future<String?> Function() resolve) async {
     final generation = ++_openGeneration;
     await _player?.stop();
-    current.value = ChatVoicePlayback(fileId: file.id, loading: true);
+    current.value = ChatVoicePlayback(fileId: id, loading: true);
 
-    final local = await ChatFileDownloads.instance.download(file);
+    final path = await resolve();
     if (generation != _openGeneration) return;
-    if (local == null) {
+    if (path == null) {
       current.value = null; // Скачивание отменили.
       return;
     }
@@ -121,7 +132,7 @@ class ChatVoicePlayer {
     await _activateSession();
     final player = _ensurePlayer();
     await player.setRate(speed.value);
-    await player.open(Media(local.path));
+    await player.open(Media(path));
     if (generation != _openGeneration) return;
     _update((p) => p.copyWith(loading: false));
   }

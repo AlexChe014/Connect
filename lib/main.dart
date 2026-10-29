@@ -329,7 +329,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   void _selectTab(int index) {
     AppHaptics.selection();
-    if (index == _currentIndex) return;
+    if (index == _currentIndex) {
+      HomeTabs.notifyReselected(index);
+      return;
+    }
     setState(() {
       _currentIndex = index;
       _loadedTabs.add(index);

@@ -18,6 +18,8 @@ class ChatMessageText extends StatefulWidget {
     this.maxLines,
     this.overflow,
     this.paragraphSpacing = 6,
+    this.mentions = const {},
+    this.onMentionTap,
   });
 
   final String text;
@@ -28,6 +30,10 @@ class ChatMessageText extends StatefulWidget {
 
   /// Отступ после абзаца `<p>` в HTML-тексте.
   final double paragraphSpacing;
+
+  /// Имя участника → id: `@имя` в тексте выделяется, тап — [onMentionTap].
+  final Map<String, int> mentions;
+  final ValueChanged<int>? onMentionTap;
 
   @override
   State<ChatMessageText> createState() => _ChatMessageTextState();
@@ -142,12 +148,51 @@ class _ChatMessageTextState extends State<ChatMessageText> {
     );
   }
 
+  /// Ссылки и `@упоминания` одним проходом; длинные имена — первыми,
+  /// чтобы «@Анна Петрова» не обрезалось до «@Анна».
+  RegExp _tokenRegExp() {
+    if (widget.mentions.isEmpty) return _urlRegExp;
+    final names = widget.mentions.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    return RegExp(
+      '${_urlRegExp.pattern}|@(${names.map(RegExp.escape).join('|')})',
+      caseSensitive: false,
+    );
+  }
+
+  int? _mentionUserId(String name) {
+    final lower = name.toLowerCase();
+    for (final e in widget.mentions.entries) {
+      if (e.key.toLowerCase() == lower) return e.value;
+    }
+    return null;
+  }
+
   List<InlineSpan> _linkSpans(String text, Color color) {
     final spans = <InlineSpan>[];
     var start = 0;
-    for (final match in _urlRegExp.allMatches(text)) {
+    for (final match in _tokenRegExp().allMatches(text)) {
       if (match.start > start) {
         spans.add(TextSpan(text: text.substring(start, match.start)));
+      }
+      final mentioned = match.groupCount >= 2 ? match.group(2) : null;
+      if (mentioned != null) {
+        final userId = _mentionUserId(mentioned);
+        TapGestureRecognizer? recognizer;
+        final onTap = widget.onMentionTap;
+        if (userId != null && onTap != null) {
+          recognizer = TapGestureRecognizer()..onTap = () => onTap(userId);
+          _recognizers.add(recognizer);
+        }
+        spans.add(
+          TextSpan(
+            text: match.group(0),
+            style: const TextStyle(fontWeight: FontWeight.w600),
+            recognizer: recognizer,
+          ),
+        );
+        start = match.end;
+        continue;
       }
       final url = match.group(0)!;
       final recognizer = TapGestureRecognizer()..onTap = () => _openUrl(url);

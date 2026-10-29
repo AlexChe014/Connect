@@ -139,6 +139,112 @@ class ChatVoiceMessage extends StatelessWidget {
   }
 }
 
+/// Своё записанное, но ещё не отправленное голосовое: прослушать
+/// перед отправкой. Волна тянется на всю доступную ширину.
+class ChatVoiceDraft extends StatelessWidget {
+  const ChatVoiceDraft({
+    super.key,
+    required this.path,
+    required this.duration,
+    required this.levels,
+  });
+
+  final String path;
+  final Duration duration;
+  final List<double> levels;
+
+  @override
+  Widget build(BuildContext context) {
+    final player = ChatVoicePlayer.instance;
+    final label = CupertinoColors.label.resolveFrom(context);
+    return ValueListenableBuilder<ChatVoicePlayback?>(
+      valueListenable: player.current,
+      builder: (context, playback, _) {
+        final active = playback?.fileId == ChatVoicePlayer.draftId
+            ? playback
+            : null;
+        final total = active != null && active.duration > Duration.zero
+            ? active.duration
+            : duration;
+        final progress = active == null || total <= Duration.zero
+            ? 0.0
+            : (active.position.inMilliseconds / total.inMilliseconds).clamp(
+                0.0,
+                1.0,
+              );
+        return Row(
+          children: [
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: () => player.toggleDraft(path),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  color: AppColors.outgoingBubble,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: active?.loading == true
+                    ? const CupertinoActivityIndicator(
+                        radius: 7,
+                        color: CupertinoColors.white,
+                      )
+                    : Icon(
+                        active?.playing == true
+                            ? CupertinoIcons.pause_fill
+                            : CupertinoIcons.play_fill,
+                        size: 16,
+                        color: CupertinoColors.white,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (d) => player.seekFraction(
+                    ChatVoicePlayer.draftId,
+                    d.localPosition.dx / constraints.maxWidth,
+                  ),
+                  onHorizontalDragUpdate: (d) => player.seekFraction(
+                    ChatVoicePlayer.draftId,
+                    d.localPosition.dx / constraints.maxWidth,
+                  ),
+                  child: CustomPaint(
+                    size: Size(constraints.maxWidth, 24),
+                    painter: _WaveformPainter(
+                      levels: levels,
+                      progress: progress,
+                      played: AppColors.outgoingBubble,
+                      pending: label.withValues(alpha: 0.25),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              ChatVoiceMessage.formatDuration(
+                active != null && active.position > Duration.zero
+                    ? active.position
+                    : total,
+              ),
+              style: TextStyle(
+                fontSize: 15,
+                color: label,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 14),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _LoadingIndicator extends StatelessWidget {
   const _LoadingIndicator({required this.file, required this.color});
 

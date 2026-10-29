@@ -53,6 +53,20 @@ class ChatVoiceRecorder {
 
   bool get isRecording => elapsed.value != null;
 
+  /// Дошли до [maxDuration]; без обработчика запись просто останавливается
+  /// (и теряется), поэтому экран чата сам её отправляет.
+  VoidCallback? onMaxDuration;
+
+  /// Заранее создаёт нативный рекордер, чтобы первое нажатие на микрофон
+  /// не ждало его инициализации. Доступ при этом не запрашивается.
+  Future<void> warmUp() async {
+    try {
+      await (_recorder ??= AudioRecorder()).hasPermission(request: false);
+    } catch (e) {
+      debugPrint('ChatVoiceRecorder warmUp: $e');
+    }
+  }
+
   /// `false` — нет доступа к микрофону или запись не запустилась.
   Future<bool> start() async {
     if (isRecording) return true;
@@ -92,7 +106,15 @@ class ChatVoiceRecorder {
       if (started == null) return;
       final d = DateTime.now().difference(started);
       elapsed.value = d;
-      if (d >= maxDuration) unawaited(stop());
+      if (d < maxDuration) return;
+      _ticker?.cancel();
+      _ticker = null;
+      final handler = onMaxDuration;
+      if (handler != null) {
+        handler();
+      } else {
+        unawaited(stop());
+      }
     });
     return true;
   }

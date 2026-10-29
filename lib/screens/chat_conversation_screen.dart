@@ -17,6 +17,7 @@ import 'package:connect/services/chat_file_downloads.dart';
 import 'package:connect/services/chat_realtime_service.dart';
 import 'package:connect/services/chat_service.dart';
 import 'package:connect/services/chat_user_names.dart';
+import 'package:connect/services/chat_voice_player.dart';
 import 'package:connect/services/chat_voice_recorder.dart';
 import 'package:connect/services/crash_reporting_service.dart';
 import 'package:connect/utils/chat_file_share.dart';
@@ -31,13 +32,14 @@ import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
 import 'package:connect/widgets/chat_download_ring.dart';
 import 'package:connect/widgets/chat_message_text.dart';
+import 'package:connect/widgets/chat_link_preview.dart';
 import 'package:connect/widgets/chat_voice_message.dart';
+import 'package:connect/widgets/mail_glass.dart' show MailGlassIconButton;
 import 'package:connect/widgets/message_context_menu.dart';
 import 'package:connect/widgets/read_receipt.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/rendering.dart' show RenderProxyBox;
 import 'package:flutter/material.dart'
     show Colors, ScaffoldMessenger, SnackBar, showModalBottomSheet;
@@ -133,12 +135,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   bool _sendingAttachment = false;
 
   final _voice = ChatVoiceRecorder.instance;
-  double _voiceDragDx = 0;
+  Offset _voiceDrag = Offset.zero;
 
   /// Палец ещё на микрофоне — если отпустили раньше, чем запись
   /// стартовала (диалог доступа), её сразу отменяем.
   bool _voicePressed = false;
+  bool _voiceStarting = false;
   bool _voiceCancelled = false;
+
+  /// Смахнули вверх на замок — запись идёт без пальца, отправка кнопкой.
+  bool _voiceLocked = false;
+
+  /// Остановили запись на замке — слушаем перед отправкой.
+  ChatVoiceRecording? _voiceDraft;
 
   /// Выбранные сообщения; режим выбора включён, пока набор не пуст.
   final Set<String> _selectedIds = {};
@@ -146,6 +155,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   /// Пользователь отлистал больше экрана вверх — показываем кнопку «вниз».
   bool _showScrollDown = false;
+
+  /// Первое непрочитанное при входе — над ним плашка «Новые сообщения».
+  /// Берётся до [ChatService.markChatRead], иначе флаги уже сброшены.
+  String? _unreadDividerId;
+  bool _unreadCaptured = false;
+
+  /// Входящие ниже экрана — счётчик на кнопке «вниз».
+  int _unseenBelow = 0;
+  String? _tailMessageId;
+  bool _jumpingToDate = false;
+
+  /// Набирают `@имя` в группе: начало `@` в тексте и подходящие участники.
+  int? _mentionStart;
+  List<ChatMemberSummary> _mentionSuggestions = const [];
   bool _sendingText = false;
 
   /// Высоты плавающих стеклянных панелей над лентой (поиск, звонок,
@@ -174,6 +197,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     _callService.addListener(_onCallState);
     _callService.watchChat(widget.chat.id);
     _service.setActiveChat(widget.chat.id);
+    _voice.onMaxDuration = _finishVoice;
+    unawaited(_voice.warmUp());
     _service
         .loadMessages(widget.chat.id, force: true)
         .whenComplete(() => _service.markChatRead(widget.chat.id));
@@ -201,6 +226,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       _textCtrl.selection = TextSelection.collapsed(offset: draft.length);
     }
     _textCtrl.addListener(_onDraftTextChanged);
+    _textCtrl.addListener(_onMentionInput);
     _listCtrl.addListener(_onListScroll);
   }
 
@@ -213,6 +239,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (showScrollDown != _showScrollDown) {
       setState(() => _showScrollDown = showScrollDown);
     }
+    if (_unseenBelow > 0 && pos.pixels < 40) {
+      setState(() => _unseenBelow = 0);
+    }
     if (pos.maxScrollExtent - pos.pixels > pos.viewportDimension * 2) return;
     final chatId = widget.chat.id;
     if (!_service.hasOlderMessages(chatId) || _service.isLoadingOlder(chatId)) {
@@ -223,6 +252,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   /// Лента перевёрнута: низ (свежие сообщения) — это offset 0.
   void _scrollToBottom() {
+    if (_unseenBelow > 0) setState(() => _unseenBelow = 0);
     if (!_listCtrl.hasClients || _listCtrl.offset <= 0) return;
     final far = _listCtrl.offset > _listCtrl.position.viewportDimension * 3;
     if (far) {
@@ -235,6 +265,68 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
         curve: Curves.easeOut,
       );
     }
+  }
+
+  static final _mentionTokenRe = RegExp(r'(?:^|\s)@([^\s@]{0,30})$');
+
+  /// Слово с `@` перед курсором — подсказываем участников группы.
+  void _onMentionInput() {
+    final value = _textCtrl.value;
+    final cursor = value.selection.baseOffset;
+    int? start;
+    var suggestions = const <ChatMemberSummary>[];
+    if (_c.isGroup && value.selection.isCollapsed && cursor >= 0) {
+      final match = _mentionTokenRe.firstMatch(value.text.substring(0, cursor));
+      if (match != null) {
+        final query = match.group(1)!.toLowerCase();
+        start = cursor - query.length - 1;
+        final self = _service.selfUserId;
+        suggestions = _c.members
+            .where(
+              (m) =>
+                  m.userId != self &&
+                  m.displayName.trim().isNotEmpty &&
+                  (query.isEmpty ||
+                      m.displayName
+                          .toLowerCase()
+                          .split(RegExp(r'\s+'))
+                          .any((w) => w.startsWith(query))),
+            )
+            .take(6)
+            .toList();
+      }
+    }
+    if (start == _mentionStart &&
+        listEquals(suggestions, _mentionSuggestions)) {
+      return;
+    }
+    setState(() {
+      _mentionStart = suggestions.isEmpty ? null : start;
+      _mentionSuggestions = suggestions;
+    });
+  }
+
+  void _insertMention(ChatMemberSummary member) {
+    final start = _mentionStart;
+    final value = _textCtrl.value;
+    final cursor = value.selection.baseOffset;
+    if (start == null || cursor < start) return;
+    final insert = '@${member.displayName.trim()} ';
+    _textCtrl.value = TextEditingValue(
+      text: value.text.replaceRange(start, cursor, insert),
+      selection: TextSelection.collapsed(offset: start + insert.length),
+    );
+    AppHaptics.selection();
+  }
+
+  /// Имя участника → id: по ним в тексте подсвечиваются `@упоминания`.
+  Map<String, int> get _mentionTargets {
+    final c = _c;
+    if (!c.isGroup) return const {};
+    return {
+      for (final m in c.members)
+        if (m.displayName.trim().isNotEmpty) m.displayName.trim(): m.userId,
+    };
   }
 
   void _onDraftTextChanged() {
@@ -258,7 +350,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     if (_editingMessage == null) {
       unawaited(_service.setDraftText(widget.chat.id, _textCtrl.text));
     }
+    if (_voice.onMaxDuration == _finishVoice) _voice.onMaxDuration = null;
+    unawaited(_voice.cancel());
+    _discardVoiceDraft();
     _textCtrl.removeListener(_onDraftTextChanged);
+    _textCtrl.removeListener(_onMentionInput);
     _textCtrl.dispose();
     _searchCtrl.dispose();
     _focus.dispose();
@@ -287,6 +383,10 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
 
   void _onMsg() {
     if (!mounted) return;
+    // Синхронно: сразу после загрузки сервис помечает чат прочитанным,
+    // и к следующему кадру флаги непрочитанных уже сброшены.
+    _captureUnreadAnchor();
+    _countNewIncoming();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {});
@@ -357,13 +457,50 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     }
   }
 
+  void _captureUnreadAnchor() {
+    if (_unreadCaptured) return;
+    final list = _service.messagesFor(widget.chat.id);
+    if (list.isEmpty || _service.isMessagesLoading(widget.chat.id)) return;
+    _unreadCaptured = true;
+    _tailMessageId = list.last.id;
+    final idx = list.indexWhere((m) => !m.isOutgoing && !m.isRead);
+    if (idx < 0) return;
+    _unreadDividerId = list[idx].id;
+    if (idx < list.length - 1) {
+      _unseenBelow = list
+          .skip(idx)
+          .where((m) => !m.isOutgoing && !m.isSystem)
+          .length;
+    }
+  }
+
+  /// Пришли новые входящие, пока лента отлистана вверх.
+  void _countNewIncoming() {
+    if (!_unreadCaptured) return;
+    final list = _service.messagesFor(widget.chat.id);
+    if (list.isEmpty) return;
+    final tail = list.last.id;
+    if (tail == _tailMessageId) return;
+    final prevIdx = _tailMessageId == null
+        ? -1
+        : list.lastIndexWhere((m) => m.id == _tailMessageId);
+    _tailMessageId = tail;
+    if (prevIdx < 0 || !_showScrollDown) return;
+    _unseenBelow += list
+        .skip(prevIdx + 1)
+        .where((m) => !m.isOutgoing && !m.isSystem)
+        .length;
+  }
+
   void _scheduleInitialScroll() {
     if (_didInitialScroll) return;
 
     final list = _service.messagesFor(widget.chat.id);
     if (list.isEmpty || _service.isMessagesLoading(widget.chat.id)) return;
 
-    final unreadIdx = list.indexWhere((m) => !m.isOutgoing && !m.isRead);
+    final unreadIdx = _unreadDividerId == null
+        ? -1
+        : list.indexWhere((m) => m.id == _unreadDividerId);
     if (unreadIdx < 0 || unreadIdx >= list.length - 1) {
       // reverse: true — по умолчанию открывается снизу (последнее сообщение).
       _didInitialScroll = true;
@@ -507,6 +644,93 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     return false;
   }
 
+  /// Тап по плашке даты — календарь, как в Telegram.
+  Future<void> _pickDate(DateTime current) async {
+    if (_jumpingToDate) return;
+    final now = DateTime.now();
+    var picked = current.toLocal();
+    final confirmed = await showCupertinoModalPopup<bool>(
+      context: context,
+      builder: (ctx) => Container(
+        height: 320,
+        color: CupertinoColors.systemBackground.resolveFrom(ctx),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  CupertinoButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Отмена'),
+                  ),
+                  const Spacer(),
+                  CupertinoButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      'Перейти',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.date,
+                  initialDateTime: picked.isAfter(now) ? now : picked,
+                  maximumDate: now,
+                  dateOrder: DatePickerDateOrder.dmy,
+                  onDateTimeChanged: (d) => picked = d,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed == true && mounted) await _jumpToDate(picked);
+  }
+
+  /// Первое сообщение выбранного дня или ближайшее после него; старую
+  /// историю догружаем страницами, пока не дойдём до даты.
+  Future<void> _jumpToDate(DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final chatId = widget.chat.id;
+    setState(() => _jumpingToDate = true);
+    try {
+      for (var page = 0; page < 40; page++) {
+        final list = _service.messagesFor(chatId);
+        if (list.isEmpty || !list.first.createdAt.toLocal().isAfter(start)) {
+          break;
+        }
+        if (!_service.hasOlderMessages(chatId)) break;
+        await _service.loadOlderMessages(chatId);
+        if (!mounted) return;
+        if (_service.olderLoadFailed(chatId)) {
+          _showSnack('Не удалось загрузить историю');
+          return;
+        }
+      }
+      final list = _service.messagesFor(chatId);
+      if (list.isEmpty) return;
+      final target = list.firstWhere(
+        (m) => !m.createdAt.toLocal().isBefore(start),
+        orElse: () => list.last,
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      if (!_sameDay(target.createdAt, start) &&
+          target.createdAt.toLocal().isAfter(start)) {
+        _showSnack(
+          'В этот день сообщений нет — показываю ближайшие после него',
+        );
+      }
+      await _scrollToMessage(target.id);
+    } finally {
+      if (mounted) setState(() => _jumpingToDate = false);
+    }
+  }
+
   void _prevSearchResult() {
     if (_searchCursor <= 0) return;
     setState(() => _searchCursor--);
@@ -525,6 +749,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     final loading = _service.isMessagesLoading(widget.chat.id);
     final loadError = _service.messagesError(widget.chat.id);
     final c = _c;
+    final mentionTargets = _mentionTargets;
     final activeCall = _callService.bannerCallFor(widget.chat.id);
     final startingCall = _callService.isStartingCall;
 
@@ -551,24 +776,32 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                   onPressed: _clearSelection,
                   child: const Text('Отмена'),
                 )
-              : null,
+              // Стеклянный кружок в высоту капсулы с именем — как кнопка
+              // звонка справа.
+              : MailGlassIconButton(
+                  icon: CupertinoIcons.chevron_back,
+                  size: 40,
+                  onPressed: () => Navigator.maybePop(context),
+                ),
           middle: _selecting
               ? Text('Выбрано: ${_selectedIds.length}')
               : _ChatTitleCapsule(chat: c, onTap: _openSettings),
           trailing: _selecting
               ? null
               : startingCall
-              ? const Padding(
-                  padding: EdgeInsets.only(right: 8),
-                  child: CupertinoActivityIndicator(),
-                )
-              : CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: _startVideoCall,
-                  child: Icon(
-                    CupertinoIcons.video_camera,
-                    color: CupertinoColors.label.resolveFrom(context),
+              ? AppGlass(
+                  borderRadius: BorderRadius.circular(20),
+                  shadows: AppGlass.controlShadow,
+                  child: const SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: CupertinoActivityIndicator(),
                   ),
+                )
+              : MailGlassIconButton(
+                  icon: CupertinoIcons.video_camera,
+                  size: 40,
+                  onPressed: _startVideoCall,
                 ),
         ),
         child: DefaultTextStyle(
@@ -664,6 +897,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 selected: _selectedIds.contains(m.id),
                                 onToggleSelect: () => _toggleSelected(m),
                                 onOpenAuthor: _openAuthorChat,
+                                mentions: mentionTargets,
                                 onReact: (emoji) => _toggleReaction(m, emoji),
                                 onOpenFile: _openChatFile,
                                 onOpenImages: (images, index) =>
@@ -693,14 +927,19 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 key: _keyForMessage(m.id),
                                 child: tile,
                               );
-                              final wrapped = startsNewDay
+                              final unreadDivider = m.id == _unreadDividerId;
+                              final wrapped = startsNewDay || unreadDivider
                                   ? Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        _DaySeparator(
-                                          label: _formatDayLabel(m.createdAt),
-                                        ),
+                                        if (startsNewDay)
+                                          _DaySeparator(
+                                            label: _formatDayLabel(m.createdAt),
+                                            onTap: () => _pickDate(m.createdAt),
+                                          ),
+                                        if (unreadDivider)
+                                          const _UnreadDivider(),
                                         keyed,
                                       ],
                                     )
@@ -723,11 +962,30 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                       24,
                 ),
                 _EdgeFade.bottom(height: _bottomOverlayHeight + 24),
+                if (_jumpingToDate)
+                  Positioned(
+                    top:
+                        MediaQuery.paddingOf(context).top +
+                        _topOverlayHeight +
+                        12,
+                    left: 0,
+                    right: 0,
+                    child: const Center(
+                      child: _GlassCapsule(
+                        margin: EdgeInsets.zero,
+                        padding: EdgeInsets.all(10),
+                        child: CupertinoActivityIndicator(radius: 9),
+                      ),
+                    ),
+                  ),
                 if (_showScrollDown)
                   Positioned(
                     right: 12,
                     bottom: _bottomOverlayHeight + 10,
-                    child: _ScrollDownButton(onTap: _scrollToBottom),
+                    child: _ScrollDownButton(
+                      onTap: _scrollToBottom,
+                      unseen: _unseenBelow,
+                    ),
                   ),
                 Positioned(
                   top: MediaQuery.paddingOf(context).top,
@@ -789,6 +1047,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                             ref: _replyingTo!,
                             onClose: () => setState(() => _replyingTo = null),
                           ),
+                        if (!_selecting && _mentionSuggestions.isNotEmpty)
+                          _MentionSuggestions(
+                            members: _mentionSuggestions,
+                            onSelect: _insertMention,
+                          ),
                         if (!_selecting)
                           _Composer(
                             textCtrl: _textCtrl,
@@ -808,7 +1071,17 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 : _startVoice,
                             onVoiceMove: _moveVoice,
                             onVoiceEnd: _endVoice,
-                            voiceDragDx: _voiceDragDx,
+                            onVoiceSend: _finishVoice,
+                            onVoiceCancel: _cancelLockedVoice,
+                            onVoiceStop: _stopVoiceToDraft,
+                            voiceDraft: _voiceDraft,
+                            onVoiceDraftSend: _sendVoiceDraft,
+                            onVoiceDraftDelete: () {
+                              AppHaptics.medium();
+                              setState(_discardVoiceDraft);
+                            },
+                            voiceDrag: _voiceDrag,
+                            voiceLocked: _voiceLocked,
                           ),
                       ],
                     ),
@@ -1008,14 +1281,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
   }
 
   Future<void> _startVoice() async {
+    if (_voiceLocked) return;
     if (_callService.isBusy) {
       _showSnack('Во время звонка записать голосовое нельзя');
       return;
     }
     _voicePressed = true;
     _voiceCancelled = false;
+    // Повторное касание, пока прошлый старт ещё идёт: второй не запускаем.
+    if (_voiceStarting || _voice.isRecording) return;
+    _voiceStarting = true;
     _focus.unfocus();
-    final ok = await _voice.start();
+    final bool ok;
+    try {
+      ok = await _voice.start();
+    } finally {
+      _voiceStarting = false;
+    }
     if (!mounted) return;
     if (!ok) {
       _voicePressed = false;
@@ -1023,34 +1305,114 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
       return;
     }
     if (!_voicePressed) {
+      // Отпустили раньше, чем рекордер успел включиться — это был тап.
       await _voice.cancel();
+      _showVoiceHint();
       return;
     }
     AppHaptics.medium();
   }
 
-  void _moveVoice(double dx) {
-    if (!_voice.isRecording || _voiceCancelled) return;
-    if (dx <= -_voiceCancelDistance) {
+  void _showVoiceHint() => _showSnack(
+    'Удерживайте микрофон, чтобы записать голосовое, '
+    'или смахните вверх на замок',
+  );
+
+  void _moveVoice(Offset d) {
+    if (!_voice.isRecording || _voiceCancelled || _voiceLocked) return;
+    if (d.dx <= -_voiceCancelDistance) {
       _voiceCancelled = true;
       AppHaptics.medium();
       unawaited(_voice.cancel());
-      setState(() => _voiceDragDx = 0);
+      setState(() => _voiceDrag = Offset.zero);
       return;
     }
-    setState(() => _voiceDragDx = dx.clamp(-_voiceCancelDistance, 0));
+    if (d.dy <= -_voiceLockDistance) {
+      AppHaptics.medium();
+      setState(() {
+        _voiceLocked = true;
+        _voiceDrag = Offset.zero;
+      });
+      return;
+    }
+    // Ведут в одну сторону — вторую подсказку не дёргаем.
+    final horizontal = d.dx.abs() > d.dy.abs();
+    setState(
+      () => _voiceDrag = Offset(
+        horizontal ? d.dx.clamp(-_voiceCancelDistance, 0) : 0,
+        horizontal ? 0 : d.dy.clamp(-_voiceLockDistance, 0),
+      ),
+    );
   }
 
+  /// Палец отпустили. На замке запись продолжается.
   Future<void> _endVoice() async {
     _voicePressed = false;
-    if (_voiceDragDx != 0) setState(() => _voiceDragDx = 0);
-    if (_voiceCancelled || !_voice.isRecording) return;
+    if (_voiceDrag != Offset.zero) setState(() => _voiceDrag = Offset.zero);
+    if (_voiceLocked || _voiceCancelled || !_voice.isRecording) return;
+    await _finishVoice();
+  }
+
+  void _cancelLockedVoice() {
+    AppHaptics.medium();
+    setState(() => _voiceLocked = false);
+    unawaited(_voice.cancel());
+  }
+
+  /// Останавливает запись и отправляет — по отпусканию, кнопкой на замке
+  /// или по лимиту длительности.
+  Future<void> _finishVoice() async {
+    if (_voiceLocked) setState(() => _voiceLocked = false);
+    if (!_voice.isRecording) return;
     final recording = await _voice.stop();
-    if (!mounted) return;
-    if (recording == null) {
-      _showSnack('Удерживайте микрофон, чтобы записать голосовое');
+    if (!mounted) {
+      unawaited(recording?.file.delete().catchError((_) => recording.file));
       return;
     }
+    if (recording == null) {
+      _showVoiceHint();
+      return;
+    }
+    await _sendVoiceRecording(recording);
+  }
+
+  /// «Стоп» на замке: запись не уходит сразу, её можно прослушать.
+  Future<void> _stopVoiceToDraft() async {
+    if (_voiceLocked) setState(() => _voiceLocked = false);
+    if (!_voice.isRecording) return;
+    final recording = await _voice.stop();
+    if (!mounted) {
+      unawaited(recording?.file.delete().catchError((_) => recording.file));
+      return;
+    }
+    if (recording == null) {
+      _showVoiceHint();
+      return;
+    }
+    setState(() => _voiceDraft = recording);
+  }
+
+  Future<void> _sendVoiceDraft() async {
+    final draft = _voiceDraft;
+    if (draft == null) return;
+    setState(() => _voiceDraft = null);
+    if (ChatVoicePlayer.instance.isCurrent(ChatVoicePlayer.draftId)) {
+      unawaited(ChatVoicePlayer.instance.stop());
+    }
+    await _sendVoiceRecording(draft);
+  }
+
+  void _discardVoiceDraft() {
+    final draft = _voiceDraft;
+    if (draft == null) return;
+    _voiceDraft = null;
+    if (ChatVoicePlayer.instance.isCurrent(ChatVoicePlayer.draftId)) {
+      unawaited(ChatVoicePlayer.instance.stop());
+    }
+    unawaited(draft.file.delete().catchError((_) => draft.file));
+  }
+
+  Future<void> _sendVoiceRecording(ChatVoiceRecording recording) async {
     setState(() => _sendingAttachment = true);
     _scrollToBottom();
     try {
@@ -1579,6 +1941,7 @@ const int _maxAttachmentsPerMessage = 10;
 
 /// Насколько увести палец влево, чтобы отменить запись голосового.
 const double _voiceCancelDistance = 110;
+const double _voiceLockDistance = 80;
 
 /// Лимиты `POST /chat/messages/forward` (в Node — те же 100 и 20).
 const int _maxForwardMessages = 100;
@@ -2099,24 +2462,141 @@ class _ChatTitleCapsule extends StatelessWidget {
 /// под шапкой и полем ввода сообщения растворяются в фоне.
 /// Круглая стеклянная кнопка «к последним сообщениям».
 class _ScrollDownButton extends StatelessWidget {
-  const _ScrollDownButton({required this.onTap});
+  const _ScrollDownButton({required this.onTap, this.unseen = 0});
 
   final VoidCallback onTap;
+
+  /// Новые входящие ниже экрана; 0 — бейдж скрыт.
+  final int unseen;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          AppGlass(
+            borderRadius: BorderRadius.circular(20),
+            shadows: AppGlass.controlShadow,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                CupertinoIcons.chevron_down,
+                size: 20,
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+          ),
+          if (unseen > 0)
+            Positioned(
+              top: -9,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                height: 20,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.outgoingBubble,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  unseen > 99 ? '99+' : '$unseen',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: CupertinoColors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Участники группы под набранным `@` — как в Telegram.
+class _MentionSuggestions extends StatelessWidget {
+  const _MentionSuggestions({required this.members, required this.onSelect});
+
+  final List<ChatMemberSummary> members;
+  final ValueChanged<ChatMemberSummary> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 2),
       child: AppGlass(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         shadows: AppGlass.controlShadow,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(
-            CupertinoIcons.chevron_down,
-            size: 20,
-            color: CupertinoColors.label.resolveFrom(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final m in members)
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  minimumSize: Size.zero,
+                  onPressed: () => onSelect(m),
+                  child: Row(
+                    children: [
+                      MemberAvatar(
+                        displayName: m.displayName,
+                        avatarUrl: m.avatarUrl,
+                        radius: 14,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          m.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: CupertinoColors.label.resolveFrom(context),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Новые сообщения» над первым непрочитанным при входе в чат.
+class _UnreadDivider extends StatelessWidget {
+  const _UnreadDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: AppGlass(
+        borderRadius: BorderRadius.circular(12),
+        shadows: null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Text(
+            'Новые сообщения',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: secondary,
+            ),
           ),
         ),
       ),
@@ -2168,7 +2648,14 @@ class _Composer extends StatelessWidget {
     this.onVoiceStart,
     this.onVoiceMove,
     this.onVoiceEnd,
-    this.voiceDragDx = 0,
+    this.onVoiceSend,
+    this.onVoiceCancel,
+    this.onVoiceStop,
+    this.voiceDraft,
+    this.onVoiceDraftSend,
+    this.onVoiceDraftDelete,
+    this.voiceDrag = Offset.zero,
+    this.voiceLocked = false,
   });
 
   final TextEditingController textCtrl;
@@ -2184,11 +2671,24 @@ class _Composer extends StatelessWidget {
   /// Запись голосового: нажали микрофон / ведут палец / отпустили.
   /// `null` — микрофон скрыт (например, при правке).
   final VoidCallback? onVoiceStart;
-  final ValueChanged<double>? onVoiceMove;
+  final ValueChanged<Offset>? onVoiceMove;
   final VoidCallback? onVoiceEnd;
 
-  /// Насколько палец ушёл влево — подсказка «отмена» уезжает вслед.
-  final double voiceDragDx;
+  /// Запись на замке: отправить / отменить кнопками.
+  final VoidCallback? onVoiceSend;
+  final VoidCallback? onVoiceCancel;
+
+  /// «Стоп» на замке — к прослушиванию перед отправкой.
+  final VoidCallback? onVoiceStop;
+
+  /// Записанное голосовое на прослушивании; `null` — его нет.
+  final ChatVoiceRecording? voiceDraft;
+  final VoidCallback? onVoiceDraftSend;
+  final VoidCallback? onVoiceDraftDelete;
+
+  /// Куда ушёл палец: влево — к отмене, вверх — к замку.
+  final Offset voiceDrag;
+  final bool voiceLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -2213,10 +2713,42 @@ class _Composer extends StatelessWidget {
               Expanded(
                 child: _VoiceRecordingIndicator(
                   elapsed: recorded,
-                  dragDx: voiceDragDx,
+                  dragDx: voiceDrag.dx,
+                  onCancel: voiceLocked ? onVoiceCancel : null,
+                  onStop: voiceLocked ? onVoiceStop : null,
                 ),
               )
-            else ...[
+            else if (voiceDraft != null) ...[
+              AppGlass(
+                borderRadius: BorderRadius.circular(20),
+                shadows: AppGlass.controlShadow,
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size.square(40),
+                  onPressed: onVoiceDraftDelete,
+                  child: Icon(
+                    CupertinoIcons.trash,
+                    size: 20,
+                    color: CupertinoColors.systemRed.resolveFrom(context),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: AppGlass(
+                  borderRadius: BorderRadius.circular(20),
+                  shadows: AppGlass.controlShadow,
+                  child: SizedBox(
+                    height: 40,
+                    child: ChatVoiceDraft(
+                      path: voiceDraft!.file.path,
+                      duration: voiceDraft!.duration,
+                      levels: voiceDraft!.levels,
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
               AppGlass(
                 borderRadius: BorderRadius.circular(20),
                 shadows: AppGlass.controlShadow,
@@ -2276,12 +2808,34 @@ class _Composer extends StatelessWidget {
               listenable: textCtrl,
               builder: (context, _) {
                 final hasText = textCtrl.text.trim().isNotEmpty;
+                if (voiceDraft != null) {
+                  return GestureDetector(
+                    onTap: isSendingAttachment ? null : onVoiceDraftSend,
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.outgoingBubble,
+                      ),
+                      child: const Icon(
+                        CupertinoIcons.arrow_up,
+                        size: 20,
+                        color: CupertinoColors.white,
+                      ),
+                    ),
+                  );
+                }
                 if ((!hasText || recorded != null) && onVoiceStart != null) {
                   return _VoiceRecordButton(
                     recording: recorded != null,
+                    locked: voiceLocked,
+                    dragDy: voiceDrag.dy,
                     onStart: onVoiceStart!,
                     onMove: onVoiceMove,
                     onEnd: onVoiceEnd,
+                    onSend: onVoiceSend,
                   );
                 }
                 return GestureDetector(
@@ -2319,60 +2873,160 @@ class _Composer extends StatelessWidget {
   }
 }
 
-/// Микрофон: удерживать — запись, отпустить — отправка, влево — отмена.
-class _VoiceRecordButton extends StatelessWidget {
+/// Микрофон: удерживать — запись, отпустить — отправка, влево — отмена,
+/// вверх на замок — запись без пальца (тогда кнопка отправляет).
+class _VoiceRecordButton extends StatefulWidget {
   const _VoiceRecordButton({
     required this.recording,
+    required this.locked,
+    required this.dragDy,
     required this.onStart,
     this.onMove,
     this.onEnd,
+    this.onSend,
   });
 
   final bool recording;
+  final bool locked;
+  final double dragDy;
   final VoidCallback onStart;
-  final ValueChanged<double>? onMove;
+  final ValueChanged<Offset>? onMove;
   final VoidCallback? onEnd;
+  final VoidCallback? onSend;
+
+  @override
+  State<_VoiceRecordButton> createState() => _VoiceRecordButtonState();
+}
+
+class _VoiceRecordButtonState extends State<_VoiceRecordButton> {
+  /// Палец, который держит запись. На сырых событиях, а не через
+  /// LongPress: распознаватель мог проиграть арену или отвалиться от
+  /// лишнего сдвига, и запись не начиналась с первого раза.
+  int? _pointer;
+  Offset _origin = Offset.zero;
+
+  /// Касание началось уже на замке — по отпусканию это «Отправить».
+  bool _sendTap = false;
+
+  void _down(PointerDownEvent e) {
+    if (_pointer != null) return;
+    _pointer = e.pointer;
+    _origin = e.position;
+    _sendTap = widget.locked;
+    if (!_sendTap) widget.onStart();
+  }
+
+  void _move(PointerMoveEvent e) {
+    if (e.pointer != _pointer || _sendTap) return;
+    widget.onMove?.call(e.position - _origin);
+  }
+
+  void _up(PointerEvent e) {
+    if (e.pointer != _pointer) return;
+    _pointer = null;
+    if (_sendTap) {
+      _sendTap = false;
+      if (e is PointerUpEvent && widget.locked) widget.onSend?.call();
+      return;
+    }
+    widget.onEnd?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return RawGestureDetector(
-      gestures: {
-        // Короткая задержка, как в Telegram: запись стартует почти сразу,
-        // но случайное касание при прокрутке её не запускает.
-        LongPressGestureRecognizer:
-            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-              () => LongPressGestureRecognizer(
-                duration: const Duration(milliseconds: 150),
+    final recording = widget.recording;
+    final locked = widget.locked;
+    final button = AnimatedScale(
+      scale: recording && !locked ? 1.35 : 1,
+      duration: const Duration(milliseconds: 160),
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: recording && !locked
+              ? CupertinoColors.systemRed.resolveFrom(context)
+              : AppColors.outgoingBubble,
+        ),
+        child: Icon(
+          locked ? CupertinoIcons.arrow_up : CupertinoIcons.mic_fill,
+          size: 20,
+          color: CupertinoColors.white,
+        ),
+      ),
+    );
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.bottomCenter,
+      children: [
+        Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _down,
+          onPointerMove: _move,
+          onPointerUp: _up,
+          onPointerCancel: _up,
+          child: button,
+        ),
+        // Замок над микрофоном, пока палец держит запись.
+        Positioned(
+          bottom: 40 + 22,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: recording && !locked ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: Transform.translate(
+                offset: Offset(0, widget.dragDy * 0.5),
+                child: _VoiceLockHint(
+                  progress: (-widget.dragDy / _voiceLockDistance).clamp(0, 1),
+                ),
               ),
-              (r) {
-                r
-                  ..onLongPressStart = ((_) => onStart())
-                  ..onLongPressMoveUpdate = ((d) {
-                    onMove?.call(d.offsetFromOrigin.dx);
-                  })
-                  ..onLongPressEnd = ((_) => onEnd?.call())
-                  ..onLongPressCancel = (() => onEnd?.call());
-              },
             ),
-      },
-      child: AnimatedScale(
-        scale: recording ? 1.35 : 1,
-        duration: const Duration(milliseconds: 160),
-        child: Container(
-          width: 40,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: recording
-                ? CupertinoColors.systemRed.resolveFrom(context)
-                : AppColors.outgoingBubble,
           ),
-          child: const Icon(
-            CupertinoIcons.mic_fill,
-            size: 20,
-            color: CupertinoColors.white,
-          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Капсула «замок + стрелка вверх», как в Telegram.
+class _VoiceLockHint extends StatelessWidget {
+  const _VoiceLockHint({required this.progress});
+
+  /// 0 — палец на месте, 1 — дотянули до замка.
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
+    return AppGlass(
+      borderRadius: BorderRadius.circular(18),
+      shadows: AppGlass.controlShadow,
+      child: SizedBox(
+        width: 36,
+        height: 64 - progress * 20,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              progress >= 1
+                  ? CupertinoIcons.lock_fill
+                  : CupertinoIcons.lock_open_fill,
+              size: 18,
+              color: Color.lerp(secondary, AppColors.outgoingBubble, progress),
+            ),
+            if (progress < 0.6) ...[
+              const SizedBox(height: 6),
+              Opacity(
+                opacity: 1 - progress / 0.6,
+                child: Icon(
+                  CupertinoIcons.chevron_up,
+                  size: 13,
+                  color: secondary,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -2381,10 +3035,21 @@ class _VoiceRecordButton extends StatelessWidget {
 
 /// Вместо поля ввода во время записи: точка, таймер и «‹ Отмена».
 class _VoiceRecordingIndicator extends StatelessWidget {
-  const _VoiceRecordingIndicator({required this.elapsed, required this.dragDx});
+  const _VoiceRecordingIndicator({
+    required this.elapsed,
+    required this.dragDx,
+    this.onCancel,
+    this.onStop,
+  });
 
   final Duration elapsed;
   final double dragDx;
+
+  /// Запись на замке — вместо подсказки свайпа кнопка «Отмена».
+  final VoidCallback? onCancel;
+
+  /// Запись на замке — остановить и прослушать.
+  final VoidCallback? onStop;
 
   @override
   Widget build(BuildContext context) {
@@ -2417,29 +3082,58 @@ class _VoiceRecordingIndicator extends StatelessWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            Expanded(
-              child: Transform.translate(
-                offset: Offset(dragDx * 0.6, 0),
-                child: Opacity(
-                  opacity: (1 + dragDx / _voiceCancelDistance).clamp(0.2, 1),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        CupertinoIcons.chevron_left,
-                        size: 14,
-                        color: secondary,
+            if (onCancel != null)
+              Expanded(
+                child: Center(
+                  child: CupertinoButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 40),
+                    onPressed: onCancel,
+                    child: Text(
+                      'Отмена',
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: CupertinoColors.systemRed.resolveFrom(context),
                       ),
-                      const SizedBox(width: 2),
-                      Text(
-                        'Влево — отмена',
-                        style: TextStyle(fontSize: 14, color: secondary),
-                      ),
-                    ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: Transform.translate(
+                  offset: Offset(dragDx * 0.6, 0),
+                  child: Opacity(
+                    opacity: (1 + dragDx / _voiceCancelDistance).clamp(0.2, 1),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          CupertinoIcons.chevron_left,
+                          size: 14,
+                          color: secondary,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          'Влево — отмена',
+                          style: TextStyle(fontSize: 14, color: secondary),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            if (onStop != null)
+              CupertinoButton(
+                padding: const EdgeInsets.only(right: 10),
+                minimumSize: const Size(40, 40),
+                onPressed: onStop,
+                child: Icon(
+                  CupertinoIcons.stop_circle_fill,
+                  size: 28,
+                  color: CupertinoColors.systemRed.resolveFrom(context),
+                ),
+              ),
           ],
         ),
       ),
@@ -2462,9 +3156,13 @@ class _MessageTile extends StatelessWidget {
     this.selected = false,
     this.onToggleSelect,
     this.onOpenAuthor,
+    this.mentions = const {},
   });
 
   final ChatMessage m;
+
+  /// Участники группы для подсветки `@имя`; тап — личный чат.
+  final Map<String, int> mentions;
 
   /// Тап по имени в «Переслано от …» — личный чат с автором оригинала.
   final ValueChanged<int>? onOpenAuthor;
@@ -2739,6 +3437,11 @@ class _MessageTile extends StatelessWidget {
         ? CupertinoColors.white
         : CupertinoColors.label.resolveFrom(context);
     final attachments = _buildAttachments(context, onBubble);
+    // Превью только у обычного текста: у файлов и стикеров своя карточка.
+    final text = m.text;
+    final linkPreviewUri = attachments.isEmpty && text != null && !m.isDeleted
+        ? ChatLinkPreview.firstUrlIn(text)
+        : null;
     final hasAboveText =
         m.forwardOf != null ||
         m.replyTo != null ||
@@ -2815,8 +3518,15 @@ class _MessageTile extends StatelessWidget {
                 // Отступ только под цитатой/вложением —
                 // иначе над текстом поле больше, чем под ним.
                 padding: EdgeInsets.only(top: hasAboveText ? 4 : 0),
-                child: ChatMessageText(text: m.text!, color: onBubble),
+                child: ChatMessageText(
+                  text: m.text!,
+                  color: onBubble,
+                  mentions: mentions,
+                  onMentionTap: onOpenAuthor,
+                ),
               ),
+            if (linkPreviewUri != null)
+              ChatLinkPreview(uri: linkPreviewUri, onBubble: onBubble),
           ],
         ),
       ),
@@ -3608,26 +4318,32 @@ class _ChatFileCardState extends State<_ChatFileCard> {
 
 /// Плашка с датой по центру ленты — отделяет сообщения разных дней.
 class _DaySeparator extends StatelessWidget {
-  const _DaySeparator({required this.label});
+  const _DaySeparator({required this.label, this.onTap});
 
   final String label;
+
+  /// Тап — выбрать дату и перейти к ней.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 8),
       child: Center(
-        child: AppGlass(
-          borderRadius: BorderRadius.circular(12),
-          shadows: null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+        child: GestureDetector(
+          onTap: onTap,
+          child: AppGlass(
+            borderRadius: BorderRadius.circular(12),
+            shadows: null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
               ),
             ),
           ),

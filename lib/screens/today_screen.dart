@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 
 import '../config/app_theme.dart';
+import '../config/home_tabs.dart';
 import '../models/bonus_program/point_operation.dart';
 import '../models/bookings/create_booking_request.dart';
 import '../models/bookings/user_booking.dart';
@@ -526,6 +527,7 @@ class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
 
     return NewsFeedScreen(
       title: 'Главная',
+      homeTab: HomeTabs.today,
       openNewsId: widget.openNewsId,
       onRefresh: _refresh,
       trailing: Row(
