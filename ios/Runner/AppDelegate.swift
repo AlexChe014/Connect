@@ -333,7 +333,10 @@ import flutter_callkit_incoming
 
     info["id"] = callId
     info["nameCaller"] = callerName
-    info["handle"] = topic ?? callerName
+    // normalHandle: иначе плагин кладёт в handle base64 со всеми данными
+    // звонка — iOS показывает его в «Недавних» как «Профиль в соцсети».
+    info["handle"] = callerName
+    info["normalHandle"] = 1
     info["type"] = isVideo ? 1 : 0
     info["avatar"] = avatar
     info["duration"] = AppDelegate.incomingRingTimeoutMs

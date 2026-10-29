@@ -261,7 +261,7 @@ class IncomingCallService {
       nameCaller: payload.callerName,
       appName: 'Connect',
       avatar: payload.callerAvatar,
-      handle: payload.topic ?? payload.callerName,
+      handle: payload.callerName,
       type: payload.isVideo ? 1 : 0,
       duration: CallConfig.incomingRingTimeout.inMilliseconds,
       extra: payload.toExtra(),
@@ -292,6 +292,9 @@ class IncomingCallService {
         isShowFullLockedScreen: true,
       ),
       ios: const IOSParams(
+        // Без normalHandle плагин кладёт в handle base64 со всеми данными
+        // звонка — iOS показывает его в «Недавних» как «Профиль в соцсети».
+        normalHandle: 1,
         handleType: 'generic',
         supportsVideo: true,
         maximumCallGroups: 1,
