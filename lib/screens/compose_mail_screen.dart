@@ -11,10 +11,12 @@ import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
 import '../services/api_client.dart';
 import '../services/mail_contacts_service.dart';
+import '../services/mail_name_resolver.dart';
 import '../widgets/app_glass.dart';
 import '../widgets/app_icon_badge.dart';
 import '../widgets/booking_glass_form.dart';
 import '../utils/file_size_format.dart';
+import '../utils/mail_reply_body.dart';
 import '../widgets/mail_glass.dart';
 import '../widgets/mail_recipient_field.dart';
 import '../widgets/staff_user_picker_sheet.dart';
@@ -192,7 +194,6 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     super.initState();
     final replyTo = widget.replyTo;
     final forwardOf = widget.forwardOf;
-    final dateFormat = DateFormat('d MMMM yyyy, HH:mm', 'ru_RU');
     final to = replyTo != null ? _replyRecipients(replyTo) : const <String>[];
     _toController = MailRecipientController([
       ...widget.initialTo,
@@ -208,17 +209,9 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       _subjectController.text = _replyPrefix.hasMatch(replyTo.subject)
           ? replyTo.subject
           : 'Re: ${replyTo.subject}';
-      final quote = replyTo.previewBody;
-      if (quote.isNotEmpty) {
-        final date = replyTo.date;
-        final header = date == null
-            ? '${replyTo.from} пишет:'
-            : '${dateFormat.format(date.toLocal())}, ${replyTo.from} пишет:';
-        _bodyController.text = '\n\n$header\n$quote';
-      }
     } else if (forwardOf != null) {
       // Тему «Fwd: …» и исходное письмо с вложениями сервер добавляет сам —
-      // здесь только текст пользователя (см. [_buildForwardedCard]).
+      // здесь только текст пользователя (см. [_buildOriginalCard]).
       _subjectController.text = 'Fwd: ${forwardOf.subject}';
     }
     _initialTo = _toController.snapshot;
@@ -394,12 +387,17 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
       // /mail/smtp/reply/{email} отправляет с ящика исходного письма и
       // связывает ответ с перепиской.
       if (replyTo != null) {
+        final body = MailReplyBody.build(
+          userText: _bodyController.text,
+          original: replyTo,
+        );
         await MailRepository.instance.replyMail(
           ReplyMailRequest(
             messageId: replyTo.id,
             to: _toValue,
             subject: _subjectController.text.trim(),
-            body: _bodyController.text,
+            body: body.text,
+            bodyHtml: body.html,
             cc: cc,
             bcc: bcc,
             attachments: files,
@@ -617,6 +615,8 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           textCapitalization: TextCapitalization.sentences,
           placeholder: widget.forwardOf != null
               ? 'Комментарий к пересылаемому письму'
+              : widget.replyTo != null
+              ? 'Текст ответа'
               : 'Текст письма',
           decoration: const BoxDecoration(),
           padding: const EdgeInsets.all(16),
@@ -630,13 +630,19 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
     );
   }
 
-  /// Что будет переслано: исходное письмо целиком (с оформлением и
-  /// вложениями) сервер добавит под текстом пользователя.
-  Widget _buildForwardedCard(BuildContext context, MailMessage message) {
+  /// Исходное письмо отдельно от поля нового текста. При отправке оно идёт
+  /// под разделителем: при пересылке его добавляет сервер (с оформлением и
+  /// вложениями), при ответе — [MailReplyBody].
+  Widget _buildOriginalCard(
+    BuildContext context,
+    MailMessage message, {
+    required bool forwarding,
+  }) {
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     final date = message.date;
-    final sender = mailDisplayName(message.from);
+    final sender = MailNameResolver.instance.displayName(message.from);
     final attachments = message.attachments.length;
+    final preview = message.previewBody;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: AppGlass(
@@ -650,13 +656,15 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
               Row(
                 children: [
                   Icon(
-                    CupertinoIcons.arrowshape_turn_up_right,
+                    forwarding
+                        ? CupertinoIcons.arrowshape_turn_up_right
+                        : CupertinoIcons.arrowshape_turn_up_left,
                     size: 15,
                     color: secondary,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Пересылаемое письмо',
+                    forwarding ? 'Пересылаемое письмо' : 'Исходное письмо',
                     style: TextStyle(fontSize: 13, color: secondary),
                   ),
                 ],
@@ -686,7 +694,16 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 13, color: secondary),
               ),
-              if (attachments > 0) ...[
+              if (preview.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  preview,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, color: secondary),
+                ),
+              ],
+              if (forwarding && attachments > 0) ...[
                 const SizedBox(height: 2),
                 Text(
                   attachments == 1
@@ -770,8 +787,12 @@ class _ComposeMailScreenState extends State<ComposeMailScreen> {
           _buildHeaderFields(context),
           if (error != null) BookingFootnote(error, isError: true),
           _buildBody(context),
-          if (widget.forwardOf != null)
-            _buildForwardedCard(context, widget.forwardOf!),
+          if (widget.forwardOf ?? widget.replyTo case final original?)
+            _buildOriginalCard(
+              context,
+              original,
+              forwarding: widget.forwardOf != null,
+            ),
           _buildAttachments(context),
         ],
       ),

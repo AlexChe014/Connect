@@ -18,6 +18,9 @@ class BonusProgramRoutes {
   static String get shopRequestUrl =>
       '${ApiConfig.baseUrl}$_prefix/shop/request';
 
+  static String get myRewardRequestsUrl =>
+      '${ApiConfig.baseUrl}$_prefix/reward-requests/my';
+
   static String get rouletteConfigUrl =>
       '${ApiConfig.baseUrl}$_prefix/roulette/config';
 

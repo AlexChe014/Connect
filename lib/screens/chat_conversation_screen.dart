@@ -6,6 +6,7 @@ import 'package:connect/config/routes/chat_routes.dart';
 import 'package:connect/models/chat.dart';
 import 'package:connect/models/chat/chat_call_record.dart';
 import 'package:connect/models/chat/chat_file.dart';
+import 'package:connect/models/chat/chat_read_receipts.dart';
 import 'package:connect/models/chat/chat_sticker.dart';
 import 'package:connect/models/chat/pinned_chat_message.dart';
 import 'package:connect/models/chat_message.dart';
@@ -27,6 +28,7 @@ import 'package:connect/utils/ru_plural.dart';
 import 'package:connect/config/app_theme.dart';
 import 'package:connect/widgets/app_empty_state.dart';
 import 'package:connect/widgets/app_glass.dart';
+import 'package:connect/widgets/chat_read_receipts_sheet.dart';
 import 'package:connect/widgets/app_loading.dart';
 import 'package:connect/widgets/chat_active_call_banner.dart';
 import 'package:connect/widgets/chat_avatar.dart';
@@ -896,6 +898,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                 selectionMode: _selecting,
                                 selected: _selectedIds.contains(m.id),
                                 onToggleSelect: () => _toggleSelected(m),
+                                readersLabel: _readersLabel(c, m),
                                 onOpenAuthor: _openAuthorChat,
                                 mentions: mentionTargets,
                                 onReact: (emoji) => _toggleReaction(m, emoji),
@@ -914,6 +917,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
                                     _openForwardTarget([m]);
                                   } else if (action == _MsgAction.select) {
                                     _toggleSelected(m);
+                                  } else if (action == _MsgAction.readers) {
+                                    showChatReadReceiptsSheet(
+                                      context,
+                                      chatId: c.id,
+                                      messageId: m.id,
+                                    );
                                   } else if (action == _MsgAction.edit) {
                                     _beginEditMessage(m);
                                   } else if (action == _MsgAction.delete) {
@@ -1909,6 +1918,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen>
     );
   }
 
+  /// Подпись пункта «кто прочитал» в меню своего сообщения в группе.
+  String? _readersLabel(Chat c, ChatMessage m) {
+    final sent = int.tryParse(m.id) != null && !m.isSending;
+    if (!c.isGroup || !m.isOutgoing || !sent) return null;
+    if (m.isSystem || m.isCall || m.isDeleted) return null;
+    // Без статусов (только что отправлено) считать ещё нечего: шторка
+    // при открытии сама запросит их у сервера.
+    if (m.recipientReads.isEmpty) return 'Кто прочитал';
+    final receipts = ChatReadReceipts.of(
+      m,
+      c.members,
+      selfUserId: _service.selfUserId,
+    );
+    return 'Прочитали: ${receipts.read.length} из ${receipts.total}';
+  }
+
   Future<void> _showPinnedList(List<PinnedChatMessage> pinned) async {
     final selected = await showCupertinoModalPopup<String>(
       context: context,
@@ -1947,7 +1972,7 @@ const double _voiceLockDistance = 80;
 const int _maxForwardMessages = 100;
 const int _maxForwardChats = 20;
 
-enum _MsgAction { reply, copy, forward, select, edit, delete, pin }
+enum _MsgAction { reply, copy, forward, select, readers, edit, delete, pin }
 
 /// Реакции пока только локальные — собеседник их не видит и они пропадают
 /// с экрана, поэтому выключены до API на бэкенде (см. docs/BACKEND_CHAT_FIXES.md).
@@ -3157,9 +3182,13 @@ class _MessageTile extends StatelessWidget {
     this.onToggleSelect,
     this.onOpenAuthor,
     this.mentions = const {},
+    this.readersLabel,
   });
 
   final ChatMessage m;
+
+  /// Пункт меню «кто прочитал»; null — пункта нет.
+  final String? readersLabel;
 
   /// Участники группы для подсветки `@имя`; тап — личный чат.
   final Map<String, int> mentions;
@@ -3327,6 +3356,12 @@ class _MessageTile extends StatelessWidget {
             label: 'Выбрать',
             icon: CupertinoIcons.checkmark_circle,
             onTap: () => onLongMenu(_MsgAction.select),
+          ),
+        if (readersLabel case final label?)
+          MessageMenuItem(
+            label: label,
+            icon: CupertinoIcons.checkmark_alt_circle,
+            onTap: () => onLongMenu(_MsgAction.readers),
           ),
         if (!m.isSystem)
           MessageMenuItem(

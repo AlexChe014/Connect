@@ -7,6 +7,7 @@ class RewardRequest {
   final String status;
   final String? hrComment;
   final String? itemName;
+  final DateTime? createdAt;
 
   const RewardRequest({
     required this.id,
@@ -14,11 +15,22 @@ class RewardRequest {
     required this.status,
     this.hrComment,
     this.itemName,
+    this.createdAt,
   });
 
   bool get isPending => status == 'pending';
 
   bool get isApproved => status == 'approved';
+
+  bool get isRejected => status == 'rejected';
+
+  String get statusLabel => switch (status) {
+    'approved' => 'Одобрена',
+    'rejected' => 'Отклонена',
+    _ => 'На рассмотрении',
+  };
+
+  String get typeLabel => type == 'roulette' ? 'Приз колеса' : 'Магазин';
 
   factory RewardRequest.fromJson(Map<String, dynamic> json) {
     String? itemName;
@@ -35,6 +47,7 @@ class RewardRequest {
       status: (json['status'] ?? 'pending').toString(),
       hrComment: json['hr_comment']?.toString(),
       itemName: itemName,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
     );
   }
 }

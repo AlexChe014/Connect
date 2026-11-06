@@ -75,20 +75,14 @@ class _BonusShopScreenState extends State<BonusShopScreen> {
 
     setState(() => _isBusy = true);
     try {
-      final request = await BonusProgramRepository.instance.requestShopItem(
-        item.id,
-      );
+      await BonusProgramRepository.instance.requestShopItem(item.id);
       if (!mounted) return;
       await showBonusCelebration(
         context,
         title: '🎉 Ура!',
         message: 'Спасибо за покупку!\n«${item.name}»',
-        status: request.isApproved
-            ? 'Товар уже выдан'
-            : 'Заявка на выдачу отправлена на согласование',
-        statusColor: request.isApproved
-            ? CupertinoColors.systemGreen.resolveFrom(context)
-            : CupertinoColors.systemOrange.resolveFrom(context),
+        status: 'Заявка на выдачу отправлена на согласование',
+        statusColor: CupertinoColors.systemOrange.resolveFrom(context),
         photoUrl: item.photoUrl,
       );
     } catch (e) {

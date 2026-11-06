@@ -5,6 +5,7 @@ import 'package:flutter/material.dart'
     show Colors, RefreshIndicator, ScaffoldMessenger, SnackBar;
 
 import '../config/app_theme.dart';
+import '../models/documents/document_bulk_result.dart';
 import '../models/documents/document_service.dart';
 import '../repositories/documents_repository.dart';
 import '../services/api_client.dart';
@@ -332,32 +333,45 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     try {
       final guids = <String>[];
       final numbersByGuid = <String, String>{};
+      final labelsByGuid = <String, String>{};
       for (final document in selected) {
         final guid = DocumentPayloadUtils.guid(document);
         if (guid == null) continue;
         guids.add(guid);
         final number = DocumentPayloadUtils.number(document)?.trim();
         if (number != null && number.isNotEmpty) numbersByGuid[guid] = number;
+        labelsByGuid[guid] = number != null && number.isNotEmpty
+            ? '№ $number'
+            : DocumentPayloadUtils.title(document);
       }
 
-      await DocumentsRepository.instance.acceptDocuments(
+      final result = await DocumentsRepository.instance.acceptDocuments(
         serviceId: widget.service.id,
         guids: guids,
         numbersByGuid: numbersByGuid,
       );
 
-      AppHaptics.success();
-      if (!mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.service.isSigningService
-                ? 'Документы подписаны'
-                : 'Документы согласованы',
+      if (result.allSucceeded) {
+        AppHaptics.success();
+        if (!mounted) return;
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.service.isSigningService
+                  ? 'Документы подписаны'
+                  : 'Документы согласованы',
+            ),
           ),
-        ),
-      );
-      await _loadDocuments();
+        );
+        await _loadDocuments();
+        return;
+      }
+
+      AppHaptics.error();
+      if (!mounted) return;
+      // Прошедшие документы должны уйти из списка уже под диалогом.
+      unawaited(_loadDocuments());
+      await _showBulkFailures(result, labelsByGuid);
     } catch (e) {
       AppHaptics.error();
       if (!mounted) return;
@@ -367,12 +381,41 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       ScaffoldMessenger.maybeOf(
         context,
       )?.showSnackBar(SnackBar(content: Text(message)));
-      // Бэкенд проводит документы по одному и обрывается на первой ошибке —
-      // часть уже подписана, перечитываем список, чтобы их не было на экране.
+      // Ответ мог потеряться уже после обработки на сервере: перечитываем
+      // список, чтобы проведённых документов не было на экране.
       unawaited(_loadDocuments());
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  Future<void> _showBulkFailures(
+    DocumentBulkResult result,
+    Map<String, String> labelsByGuid,
+  ) {
+    final signing = widget.service.isSigningService;
+    final done = result.succeeded.length;
+    final title = done == 0
+        ? (signing
+              ? 'Не удалось подписать документы'
+              : 'Не удалось согласовать документы')
+        : '${signing ? 'Подписано' : 'Согласовано'} $done из ${result.total}';
+    return showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(result.describeFailures(labelsByGuid)),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Плавающая стеклянная панель массового действия над списком.

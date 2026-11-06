@@ -9,6 +9,7 @@ import '../models/bonus_program/point_balance.dart';
 import '../models/bonus_program/point_operation.dart';
 import '../models/bonus_program/point_transfer.dart';
 import '../models/bonus_program/point_transfer_config.dart';
+import '../models/bonus_program/reward_request.dart';
 import '../models/bonus_program/roulette_config.dart';
 import '../models/bonus_program/roulette_prize.dart';
 import '../models/bonus_program/roulette_spin.dart';
@@ -67,6 +68,24 @@ class BonusProgramRepository {
       decoded,
       defaultErrorMessage: 'Не удалось получить историю операций',
       mapItem: PointOperation.fromJson,
+    );
+  }
+
+  /// Заявки текущего сотрудника на товары магазина и призы колеса.
+  Future<Paginated<RewardRequest>> getMyRewardRequests({
+    String? url,
+    int page = 1,
+  }) async {
+    final decoded = url != null
+        ? await ApiClient.instance.get(url)
+        : await ApiClient.instance.get(
+            BonusProgramRoutes.myRewardRequestsUrl,
+            queryParameters: {'page': page.toString()},
+          );
+    return ApiPaginatedEnvelope.unwrapPaginated<RewardRequest>(
+      decoded,
+      defaultErrorMessage: 'Не удалось получить заявки',
+      mapItem: RewardRequest.fromJson,
     );
   }
 

@@ -20,6 +20,7 @@ import '../repositories/users_repository.dart';
 import '../services/api_client.dart';
 import '../services/crash_reporting_service.dart';
 import '../services/mail_contacts_service.dart';
+import '../services/mail_name_resolver.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
 import '../widgets/app_glass.dart';
@@ -543,10 +544,16 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
 
   /// «Ерофеева Гулия, мне и ещё 2» — получатели одной строкой.
   String _recipientsSummary(MailMessage message) {
-    final names = [
-      ...MailMessage.splitAddresses(message.to),
-      ...MailMessage.splitAddresses(message.cc),
-    ].map((a) => _isOwn(a) ? 'мне' : mailDisplayName(a)).toList();
+    final names =
+        [
+              ...MailMessage.splitAddresses(message.to),
+              ...MailMessage.splitAddresses(message.cc),
+            ]
+            .map(
+              (a) =>
+                  _isOwn(a) ? 'мне' : MailNameResolver.instance.displayName(a),
+            )
+            .toList();
     if (names.isEmpty) return '';
     if (names.length <= 2) return names.join(', ');
     return '${names.take(2).join(', ')} и ещё ${names.length - 2}';
@@ -569,7 +576,8 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
   Widget _buildHeaderCard(BuildContext context, MailMessage message) {
     final label = CupertinoColors.label.resolveFrom(context);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
-    final senderName = mailDisplayName(message.from);
+    final names = MailNameResolver.instance;
+    final senderName = names.displayName(message.from);
     final recipients = _recipientsSummary(message);
     final detailStyle = TextStyle(fontSize: 13, height: 1.35, color: label);
 
@@ -614,13 +622,13 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                             TextSpan(
                               text: _isOwn(address)
                                   ? 'мне'
-                                  : mailDisplayName(address),
+                                  : names.displayName(address),
                               style: TextStyle(
                                 color: tint,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            if (mailDisplayName(address) !=
+                            if (names.displayName(address) !=
                                 mailEmailOnly(address))
                               TextSpan(
                                 text: '  ${mailEmailOnly(address)}',
@@ -981,7 +989,11 @@ class _MailMessageScreenState extends State<MailMessageScreen> {
                       MailFloatingBar.reservedHeight(context) + 8,
                     ),
                     children: [
-                      _buildHeaderCard(context, message),
+                      ListenableBuilder(
+                        listenable: MailNameResolver.instance,
+                        builder: (context, _) =>
+                            _buildHeaderCard(context, message),
+                      ),
                       const SizedBox(height: 10),
                       AppFlatGlassCard(
                         // HTML-письмо сам WebView отбивает от краёв, лишний

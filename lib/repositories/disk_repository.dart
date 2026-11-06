@@ -410,9 +410,11 @@ class DiskRepository {
       DiskRoutes.deleteShareUrl,
       queryParameters: {'share_id': shareId.toString()},
     );
-    ApiEnvelope.unwrapData(
+    // Сервер отвечает `data: false`, если Nextcloud доступ не закрыл.
+    final closed = ApiEnvelope.unwrapDataBool(
       decoded,
-      defaultErrorMessage: 'Не удалось отозвать доступ',
+      defaultErrorMessage: 'Не удалось закрыть доступ',
     );
+    if (!closed) throw ApiException(200, 'Не удалось закрыть доступ');
   }
 }

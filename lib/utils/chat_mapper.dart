@@ -230,6 +230,7 @@ class ChatMapper {
       isRead: _isReadForUser(json, currentUserId, senderId),
       authorAvatarUrl: authorAvatarUrl,
       readByRecipients: _isReadByRecipients(json, currentUserId, senderId),
+      recipientReads: _recipientReads(json, currentUserId, senderId),
     );
     return isDeleted ? message.copyWithDeleted() : message;
   }
@@ -631,6 +632,28 @@ class ChatMapper {
       if (!_statusIsRead(map)) return false;
     }
     return true;
+  }
+
+  /// Для исходящих сообщений: кто из получателей прочитал. Node заводит
+  /// статус и отправителю, поэтому он отфильтрован.
+  static Map<int, bool> _recipientReads(
+    Map<String, dynamic> json,
+    int currentUserId,
+    int? senderId,
+  ) {
+    if (senderId != currentUserId) return const {};
+    final statuses = json['statuses'];
+    if (statuses is! List) return const {};
+
+    final reads = <int, bool>{};
+    for (final item in statuses) {
+      final map = _asJsonMap(item);
+      if (map == null) continue;
+      final userId = _parseInt(map['user_id']);
+      if (userId == null || userId == senderId) continue;
+      reads[userId] = _statusIsRead(map);
+    }
+    return reads;
   }
 
   static bool _parseBool(Object? value, {bool defaultValue = false}) {

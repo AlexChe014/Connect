@@ -14,6 +14,7 @@ import '../models/mail/mail_connection.dart';
 import '../models/mail/mail_folder.dart';
 import '../models/mail/mail_message.dart';
 import '../repositories/mail_repository.dart';
+import '../services/mail_name_resolver.dart';
 import '../services/mail_sync_notice_service.dart';
 import '../services/mail_unread_service.dart';
 import '../widgets/app_empty_state.dart';
@@ -464,8 +465,8 @@ class _MailInboxScreenState extends State<MailInboxScreen>
     );
   }
 
-  /// Серверный поиск по всем ящикам пользователя — оставляем только
-  /// текущий ящик.
+  /// Серверный поиск по текущему ящику. Фильтр на клиенте — страховка: старая
+  /// версия бэкенда не знает `connection_id` и ищет по всем ящикам.
   Future<void> _runSearch(String query, {int page = 1}) async {
     final version = page == 1 ? ++_searchVersion : _searchVersion;
     final connectionId = _connection.id;
@@ -474,6 +475,7 @@ class _MailInboxScreenState extends State<MailInboxScreen>
       final result = await MailRepository.instance.searchMessages(
         query,
         page: page,
+        connectionId: connectionId,
       );
       if (!mounted ||
           version != _searchVersion ||
@@ -1299,14 +1301,20 @@ class _MessageTile extends StatelessWidget {
   final SwipeGroupController swipeGroup;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: MailNameResolver.instance,
+    builder: (context, _) => _buildTile(context),
+  );
+
+  Widget _buildTile(BuildContext context) {
     final isUnread = showUnread && !message.isRead;
     final label = CupertinoColors.label.resolveFrom(context);
     final secondary = CupertinoColors.secondaryLabel.resolveFrom(context);
     final recipients = MailMessage.splitAddresses(message.to);
+    final names = MailNameResolver.instance;
     final person = showRecipient
-        ? (recipients.isEmpty ? '' : mailDisplayName(recipients.first))
-        : mailDisplayName(message.from);
+        ? (recipients.isEmpty ? '' : names.displayName(recipients.first))
+        : names.displayName(message.from);
     final String senderLabel;
     if (person.isEmpty) {
       senderLabel = showRecipient

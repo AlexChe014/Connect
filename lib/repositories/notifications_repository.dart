@@ -48,8 +48,12 @@ class NotificationsRepository {
   }
 
   /// Число непрочитанных: `count` из `/unread`, иначе длина списка.
+  /// `with_items=0` — сам список бейджу не нужен, сервер его не выгружает.
   Future<int> getUnreadCount() async {
-    final decoded = await ApiClient.instance.get(NotificationRoutes.unreadUrl);
+    final decoded = await ApiClient.instance.get(
+      NotificationRoutes.unreadUrl,
+      queryParameters: const {'with_items': '0'},
+    );
     final data = ApiEnvelope.unwrapDataMap(
       decoded,
       defaultErrorMessage:

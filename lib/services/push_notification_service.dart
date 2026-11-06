@@ -543,6 +543,7 @@ class PushNotificationService {
     }
     switch (NotificationTopics.canonicalType(data['type'])) {
       case 'chat_message':
+      case 'chat_call_missed':
         final chatId = data['chat_id'];
         if (chatId != null && chatId.isNotEmpty) {
           AppNavigationService.storePendingChat(chatId);

@@ -31,6 +31,23 @@ void main() {
     }, () => MockClient((_) async => response(true)));
   });
 
+  test('search is limited to the mailbox only when one is given', () async {
+    final queries = <Map<String, String>>[];
+    await http.runWithClient(
+      () async {
+        await repository.searchMessages('счёт', connectionId: 7);
+        await repository.searchMessages('счёт');
+      },
+      () => MockClient((request) async {
+        queries.add(request.url.queryParameters);
+        return response({'data': <Object>[]});
+      }),
+    );
+
+    expect(queries.first['connection_id'], '7');
+    expect(queries.last.containsKey('connection_id'), isFalse);
+  });
+
   test('failed read acknowledgement propagates an error', () async {
     await http.runWithClient(() async {
       await expectLater(
@@ -140,23 +157,28 @@ void main() {
     expect(body, contains('name="cc[0]"\r\n\r\ne@f.ru'));
   });
 
-  test('reply sends edited recipients and subject to the reply route', () async {
-    final requests = await captureRequests(
-      () => repository.replyMail(
-        const ReplyMailRequest(
-          messageId: 2,
-          to: 'a@b.ru, c@d.ru',
-          subject: 'Re: Тема',
-          body: 'Ответ',
+  test(
+    'reply sends edited recipients and subject to the reply route',
+    () async {
+      final requests = await captureRequests(
+        () => repository.replyMail(
+          const ReplyMailRequest(
+            messageId: 2,
+            to: 'a@b.ru, c@d.ru',
+            subject: 'Re: Тема',
+            body: 'Ответ',
+            bodyHtml: '<div>ok</div>',
+          ),
         ),
-      ),
-    );
-    final (path, body) = requests.single;
-    expect(path, endsWith('/smtp/reply/2'));
-    expect(body, contains('name="to[1]"\r\n\r\nc@d.ru'));
-    expect(body, contains('name="subject"'));
-    expect(body, contains('name="body_text"'));
-  });
+      );
+      final (path, body) = requests.single;
+      expect(path, endsWith('/smtp/reply/2'));
+      expect(body, contains('name="to[1]"\r\n\r\nc@d.ru'));
+      expect(body, contains('name="subject"'));
+      expect(body, contains('name="body_text"'));
+      expect(body, contains('name="body_html"\r\n\r\n<div>ok</div>'));
+    },
+  );
 
   test('forward uses the forward route with the user text only', () async {
     final requests = await captureRequests(

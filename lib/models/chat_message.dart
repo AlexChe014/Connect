@@ -47,6 +47,7 @@ class ChatMessage {
     this.isRead = true,
     this.authorAvatarUrl,
     this.readByRecipients = false,
+    this.recipientReads = const {},
     this.reactions = const <String>[],
     this.isEdited = false,
     this.isDeleted = false,
@@ -82,6 +83,10 @@ class ChatMessage {
 
   /// Для исходящих сообщений: прочитано ли всеми получателями (двойная галочка).
   final bool readByRecipients;
+
+  /// Для исходящих: кто из получателей прочитал (`user_id` → прочитал ли),
+  /// из `statuses`. Пусто — сервер ещё не прислал (только что отправлено).
+  final Map<int, bool> recipientReads;
 
   /// Эмодзи-реакции текущего пользователя на сообщение (локальные, без синхронизации с сервером).
   final List<String> reactions;
@@ -146,6 +151,7 @@ class ChatMessage {
     bool? isRead,
     String? authorAvatarUrl,
     bool? readByRecipients,
+    Map<int, bool>? recipientReads,
     List<String>? reactions,
     bool? isEdited,
     bool? isDeleted,
@@ -173,6 +179,7 @@ class ChatMessage {
       isRead: isRead ?? this.isRead,
       authorAvatarUrl: authorAvatarUrl ?? this.authorAvatarUrl,
       readByRecipients: readByRecipients ?? this.readByRecipients,
+      recipientReads: recipientReads ?? this.recipientReads,
       reactions: reactions ?? this.reactions,
       isEdited: isEdited ?? this.isEdited,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -192,6 +199,36 @@ class ChatMessage {
 
   ChatMessage copyWithReadState({bool? isRead, bool? readByRecipients}) {
     return copyWith(isRead: isRead, readByRecipients: readByRecipients);
+  }
+
+  /// Исходящее после события «[readerId] прочитал чат». Двойная галочка, как
+  /// и при разборе `statuses`, значит «прочитали все получатели». Если
+  /// статусов ещё нет, отсчёт идёт от [recipients]; без них (личный чат, где
+  /// читать больше некому) сообщение считается прочитанным.
+  ChatMessage copyWithReadBy(
+    int readerId, {
+    Iterable<int> recipients = const [],
+  }) {
+    final reads = recipientReads.isNotEmpty
+        ? Map<int, bool>.of(recipientReads)
+        : {for (final id in recipients) id: false};
+    if (reads.isEmpty) return copyWith(readByRecipients: true);
+    // Нет в статусах — вступил в чат позже этого сообщения.
+    if (reads.containsKey(readerId)) reads[readerId] = true;
+    return copyWith(
+      recipientReads: reads,
+      readByRecipients: reads.values.every((read) => read),
+    );
+  }
+
+  /// Статусы для замены [previous] этим сообщением: прочтение не отменяется,
+  /// а ответ без `statuses` не стирает уже известные.
+  Map<int, bool> recipientReadsMergedWith(ChatMessage previous) {
+    if (recipientReads.isEmpty) return previous.recipientReads;
+    return {
+      for (final entry in recipientReads.entries)
+        entry.key: entry.value || (previous.recipientReads[entry.key] ?? false),
+    };
   }
 
   ChatMessage copyWithReactions(List<String> reactions) {

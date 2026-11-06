@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_theme.dart';
 import '../models/disk/disk_entry.dart';
+import '../models/disk/disk_share.dart';
 import '../models/staff_user.dart';
 import '../repositories/disk_repository.dart';
 import '../services/api_client.dart';
@@ -812,6 +813,80 @@ class _DiskScreenState extends State<DiskScreen> {
     }
   }
 
+  Future<void> _showFileRecipients(DiskFile file) async {
+    if (_task != null) return;
+    _setTask(_DiskTask('Загрузка доступов'));
+    final List<DiskShare> shares;
+    try {
+      shares = await DiskRepository.instance.listShares(file.path);
+    } catch (e) {
+      if (mounted) _showError('Не удалось получить список доступов', e);
+      return;
+    } finally {
+      _setTask(null);
+    }
+    if (!mounted) return;
+    if (shares.isEmpty) {
+      _showMessage('Этим файлом ни с кем не делились');
+      return;
+    }
+    // Лист показывает получателей, тап по строке — закрыть доступ.
+    final picked = await showCupertinoModalPopup<DiskShare>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('Кому доступен файл'),
+        message: const Text('Нажмите на строку, чтобы закрыть доступ'),
+        actions: [
+          for (final share in shares)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, share),
+              child: Text(share.recipientLabel),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Готово'),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _revokeShare(file, picked);
+  }
+
+  Future<void> _revokeShare(DiskFile file, DiskShare share) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Закрыть доступ?'),
+        content: Text(
+          share.isPublicLink
+              ? 'Ссылка на «${file.name}» перестанет работать.'
+              : '${share.recipientLabel} больше не увидит «${file.name}».',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Закрыть доступ'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await DiskRepository.instance.deleteShare(share.id);
+      if (!mounted) return;
+      _showMessage('Доступ закрыт: ${share.recipientLabel}');
+      unawaited(_load(silent: true));
+    } catch (e) {
+      if (mounted) _showError('Не удалось закрыть доступ', e);
+    }
+  }
+
   Future<void> _showFolderActions(DiskFolder folder) async {
     AppHaptics.medium();
     await showCupertinoModalPopup<void>(
@@ -870,7 +945,7 @@ class _DiskScreenState extends State<DiskScreen> {
             child: const Text('Отправить…'),
           ),
           // Чужим файлом Nextcloud делиться дальше не даёт.
-          if (!DiskRepository.instance.isForeign(file.owner))
+          if (!DiskRepository.instance.isForeign(file.owner)) ...[
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.pop(context);
@@ -878,6 +953,14 @@ class _DiskScreenState extends State<DiskScreen> {
               },
               child: const Text('Поделиться с сотрудником'),
             ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(context);
+                _showFileRecipients(file);
+              },
+              child: const Text('Кому доступен'),
+            ),
+          ],
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.pop(context);

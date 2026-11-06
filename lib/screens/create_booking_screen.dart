@@ -333,7 +333,7 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
             subtitle: (a.description ?? '').isNotEmpty
                 ? Text(a.description!)
                 : null,
-            additionalInfo: _AdditionStepper(
+            additionalInfo: BookingAdditionStepper(
               quantity: qty,
               onDecrement: qty > 0
                   ? () => setState(() {
@@ -462,66 +462,6 @@ class _CreateBookingScreenState extends State<CreateBookingScreen> {
         ),
         ..._buildAdditions(),
       ],
-    );
-  }
-}
-
-/// Счётчик доп. услуги — капсула «− n +», как системный степпер.
-class _AdditionStepper extends StatelessWidget {
-  const _AdditionStepper({
-    required this.quantity,
-    required this.onDecrement,
-    required this.onIncrement,
-  });
-
-  final int quantity;
-  final VoidCallback? onDecrement;
-  final VoidCallback onIncrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = CupertinoColors.label.resolveFrom(context);
-    Widget button(IconData icon, VoidCallback? onTap) {
-      return CupertinoButton(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        minimumSize: Size.zero,
-        onPressed: onTap,
-        child: Icon(
-          icon,
-          size: 16,
-          color: onTap == null
-              ? CupertinoColors.tertiaryLabel.resolveFrom(context)
-              : label,
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: CupertinoColors.tertiarySystemFill.resolveFrom(context),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          button(CupertinoIcons.minus, onDecrement),
-          SizedBox(
-            width: 22,
-            child: Text(
-              '$quantity',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: quantity > 0
-                    ? label
-                    : CupertinoColors.secondaryLabel.resolveFrom(context),
-              ),
-            ),
-          ),
-          button(CupertinoIcons.plus, onIncrement),
-        ],
-      ),
     );
   }
 }

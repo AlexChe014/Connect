@@ -13,6 +13,7 @@ import '../widgets/app_glass.dart';
 import '../widgets/bonus_glass.dart';
 import 'bonus_achievements_form_screen.dart';
 import 'bonus_history_screen.dart';
+import 'bonus_requests_screen.dart';
 import 'bonus_roulette_screen.dart';
 import 'bonus_shop_screen.dart';
 import 'bonus_transfer_screen.dart';
@@ -204,6 +205,34 @@ class _BonusProgramScreenState extends State<BonusProgramScreen> {
             ),
           ),
         ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+          child: AppFlatGlassCard(
+            child: CupertinoButton(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              minimumSize: Size.zero,
+              onPressed: () => _open(const BonusRequestsScreen()),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Мои заявки',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: CupertinoColors.label.resolveFrom(context),
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    CupertinoIcons.chevron_forward,
+                    size: 16,
+                    color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         _SectionHeader(
           title: 'Последние операции',
           onAll: _recent.isEmpty

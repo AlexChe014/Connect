@@ -967,6 +967,7 @@ class ChatService extends ChangeNotifier {
             replyTo: list[idx].replyTo,
             forwardOf: list[idx].forwardOf,
             readByRecipients: list[idx].readByRecipients,
+            recipientReads: list[idx].recipientReads,
             reactions: list[idx].reactions,
             isEdited: true,
             files: updated.files.isNotEmpty ? updated.files : list[idx].files,
@@ -1679,16 +1680,27 @@ class ChatService extends ChangeNotifier {
 
     final list = _messages[chatId];
     if (list == null) return;
+    final chatIdx = _chats.indexWhere((c) => c.id == chatId);
+    // В группе один прочитавший — ещё не «прочитано всеми». Только что
+    // отправленные сообщения приходят без статусов: считаем от состава чата.
+    final recipients = chatIdx >= 0 && _chats[chatIdx].isGroup
+        ? [
+            for (final member in _chats[chatIdx].members)
+              if (member.userId != _selfUserId) member.userId,
+          ]
+        : const <int>[];
     var changed = false;
     for (var i = 0; i < list.length; i++) {
       final m = list[i];
       if (m.isOutgoing && !m.readByRecipients) {
-        list[i] = m.copyWithReadState(readByRecipients: true);
+        list[i] = m.copyWithReadBy(readerId, recipients: recipients);
         changed = true;
       }
     }
-    if (changed && list.isNotEmpty && list.last.isOutgoing) {
-      final chatIdx = _chats.indexWhere((c) => c.id == chatId);
+    if (changed &&
+        list.isNotEmpty &&
+        list.last.isOutgoing &&
+        list.last.readByRecipients) {
       if (chatIdx >= 0 && !_chats[chatIdx].lastMessageReadByRecipients) {
         _chats[chatIdx] = _chats[chatIdx].copyWithPreview(
           lastMessageReadByRecipients: true,
@@ -1724,6 +1736,7 @@ class ChatService extends ChangeNotifier {
         reactions: prev.reactions,
         isPinned: incoming.isPinned || prev.isPinned,
         readByRecipients: incoming.readByRecipients || prev.readByRecipients,
+        recipientReads: incoming.recipientReadsMergedWith(prev),
       );
     } else {
       var message = incoming;

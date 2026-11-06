@@ -1,4 +1,5 @@
 import 'package:connect/config/routes/documents_routes.dart';
+import 'package:connect/models/documents/document_bulk_result.dart';
 import 'package:connect/models/documents/document_service.dart';
 import 'package:connect/services/api_client.dart';
 import 'package:connect/services/api_envelope.dart';
@@ -226,7 +227,7 @@ class DocumentsRepository {
     );
   }
 
-  Future<List<Map<String, dynamic>>> acceptDocuments({
+  Future<DocumentBulkResult> acceptDocuments({
     required int serviceId,
     required List<String> guids,
     String? comment,
@@ -259,12 +260,7 @@ class DocumentsRepository {
       DocumentsRoutes.acceptDocumentsUrl(serviceId),
       fields: fields,
     );
-    return _parseJsonObjectList(
-      ApiEnvelope.unwrapData(
-        decoded,
-        defaultErrorMessage: 'Не удалось согласовать документы',
-      ),
-    );
+    return DocumentBulkResult.fromResponse(decoded, requestedGuids: guids);
   }
 
   List<DocumentService> _parseServiceList(

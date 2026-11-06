@@ -6,11 +6,17 @@ class UpdateBookingRequest {
   final String? description;
   final String? link;
   final List<int>? userIds;
+  final bool? isPrivate;
+
+  /// Новый объект брони. Занятость на этот интервал проверяет бэкенд.
+  final int? modelType;
+  final int? modelId;
 
   /// Обновить всю серию повторяющихся броней (`update_all=1`).
   final bool? updateAll;
 
   /// Доп. услуги: ключ — id услуги, значение — количество (`add[id]`).
+  /// См. [additionsPayload].
   final Map<int, int>? additions;
 
   const UpdateBookingRequest({
@@ -20,9 +26,32 @@ class UpdateBookingRequest {
     this.description,
     this.link,
     this.userIds,
+    this.isPrivate,
+    this.modelType,
+    this.modelId,
     this.updateAll,
     this.additions,
   });
+
+  /// Что отправить в [additions]: `null`, если заказ не менялся. Бэкенд
+  /// заменяет заказ присланным списком, а пустой список в form-data не
+  /// передать — поэтому снятые разом услуги уходят с количеством 0.
+  static Map<int, int>? additionsPayload(
+    Map<int, int> original,
+    Map<int, int> current,
+  ) {
+    final selected = {
+      for (final entry in current.entries)
+        if (entry.value > 0) entry.key: entry.value,
+    };
+    final unchanged =
+        selected.length == original.length &&
+        selected.entries.every((e) => original[e.key] == e.value);
+    if (unchanged) return null;
+    return selected.isNotEmpty
+        ? selected
+        : {for (final id in original.keys) id: 0};
+  }
 
   List<MapEntry<String, String>> toFormEntries() {
     final entries = <MapEntry<String, String>>[];
@@ -59,6 +88,15 @@ class UpdateBookingRequest {
       }
     }
 
+    if (isPrivate case final private?) {
+      entries.add(MapEntry('is_private', private ? '1' : '0'));
+    }
+
+    if (modelType != null && modelId != null) {
+      entries.add(MapEntry('model_type', '$modelType'));
+      entries.add(MapEntry('model_id', '$modelId'));
+    }
+
     if (updateAll == true) {
       entries.add(const MapEntry('update_all', '1'));
     }
@@ -66,9 +104,7 @@ class UpdateBookingRequest {
     final adds = additions;
     if (adds != null) {
       for (final entry in adds.entries) {
-        if (entry.value > 0) {
-          entries.add(MapEntry('add[${entry.key}]', entry.value.toString()));
-        }
+        entries.add(MapEntry('add[${entry.key}]', entry.value.toString()));
       }
     }
 

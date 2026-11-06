@@ -184,6 +184,9 @@ class ReplyMailRequest {
   final String subject;
   final String? body;
 
+  /// HTML-версия [body] с отделённой цитатой (см. `MailReplyBody`).
+  final String? bodyHtml;
+
   /// Копия и скрытая копия — голые адреса (`a@x`), сервер валидирует
   /// `cc.*`/`bcc.*` как email.
   final List<String> cc;
@@ -195,6 +198,7 @@ class ReplyMailRequest {
     required this.to,
     required this.subject,
     this.body,
+    this.bodyHtml,
     this.cc = const [],
     this.bcc = const [],
     this.attachments = const [],
@@ -520,13 +524,21 @@ class MailRepository {
     return MailMessage.fromJson(data).copyWith(id: messageId);
   }
 
-  /// Поиск писем по теме и адресам среди всех подключений пользователя
-  /// (`GET /mail/search`) — работает по уже синхронизированным данным,
-  /// без обращения к IMAP.
-  Future<MailSearchPage> searchMessages(String query, {int page = 1}) async {
+  /// Поиск писем по теме и адресам (`GET /mail/search`) — среди всех подключений
+  /// пользователя или только в [connectionId]. Работает по уже
+  /// синхронизированным данным, без обращения к IMAP.
+  Future<MailSearchPage> searchMessages(
+    String query, {
+    int page = 1,
+    int? connectionId,
+  }) async {
     final decoded = await ApiClient.instance.get(
       MailRoutes.searchUrl,
-      queryParameters: {'q': query, 'page': '$page'},
+      queryParameters: {
+        'q': query,
+        'page': '$page',
+        if (connectionId != null) 'connection_id': '$connectionId',
+      },
     );
     final errorMessage = 'Не удалось выполнить поиск по почте';
     final data = _unwrapMailData(decoded, errorMessage);
@@ -765,6 +777,7 @@ class MailRepository {
         ..._multipartList('to', _recipients(request.to)),
         'subject': request.subject,
         if (body != null && body.isNotEmpty) 'body_text': request.body!,
+        if (request.bodyHtml != null) 'body_html': request.bodyHtml!,
         ..._multipartList('cc', request.cc),
         ..._multipartList('bcc', request.bcc),
       },

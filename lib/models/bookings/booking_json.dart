@@ -1,3 +1,5 @@
+import 'create_booking_request.dart';
+
 /// Общие хелперы парсинга ответов бронирований.
 class BookingJson {
   BookingJson._();
@@ -63,7 +65,11 @@ class BookingJson {
 
   static String? objectNameFromJson(Map<String, dynamic> json) {
     final object = json['object'];
-    if (object is Map) return (object['name'] as String?)?.trim();
-    return null;
+    if (object is! Map) return null;
+    // У встречи без комнаты объект служебный, его имя — не место.
+    if (parseInt(object['model']) == CreateBookingRequest.meetingModelType) {
+      return null;
+    }
+    return (object['name'] as String?)?.trim();
   }
 }

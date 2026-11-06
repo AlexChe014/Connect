@@ -5,6 +5,7 @@ class DiskShare {
   final String path;
   final String? url;
   final String? displaynameOwner;
+  final String? shareWithDisplayname;
   final int? permissions;
   final String? expiration;
   final String? note;
@@ -15,6 +16,7 @@ class DiskShare {
     required this.path,
     this.url,
     this.displaynameOwner,
+    this.shareWithDisplayname,
     this.permissions,
     this.expiration,
     this.note,
@@ -23,6 +25,14 @@ class DiskShare {
   /// `share_type == 3` — публичная ссылка, `0` — конкретный сотрудник.
   bool get isPublicLink => shareType == 3;
 
+  /// Кому открыт доступ — для показа пользователю. Логин Nextcloud
+  /// (`share_with`) сюда намеренно не попадает: это служебная учётка.
+  String get recipientLabel {
+    if (isPublicLink) return 'Публичная ссылка';
+    final name = shareWithDisplayname?.trim();
+    return name == null || name.isEmpty ? 'Сотрудник' : name;
+  }
+
   factory DiskShare.fromJson(Map<String, dynamic> json) {
     return DiskShare(
       id: _parseInt(json['id']) ?? 0,
@@ -30,6 +40,7 @@ class DiskShare {
       path: (json['path'] ?? '').toString(),
       url: json['url']?.toString(),
       displaynameOwner: json['displayname_owner']?.toString(),
+      shareWithDisplayname: json['share_with_displayname']?.toString(),
       permissions: _parseInt(json['permissions']),
       expiration: json['expiration']?.toString(),
       note: json['note']?.toString(),

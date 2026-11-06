@@ -12,8 +12,7 @@ import 'package:connect/repositories/mail_repository.dart';
 import 'package:connect/repositories/news_repository.dart';
 import 'package:connect/screens/bonus_history_screen.dart';
 import 'package:connect/screens/bonus_program_screen.dart';
-import 'package:connect/screens/bonus_roulette_screen.dart';
-import 'package:connect/screens/bonus_shop_screen.dart';
+import 'package:connect/screens/bonus_requests_screen.dart';
 import 'package:connect/screens/booking_detail_sheet.dart';
 import 'package:connect/screens/calendar_screen.dart';
 import 'package:connect/screens/chat_conversation_screen.dart';
@@ -449,6 +448,7 @@ class AppNavigationService {
     }
     switch (NotificationTopics.canonicalType(data['type']?.toString())) {
       case 'chat_message':
+      case 'chat_call_missed':
         final chatId = data['chat_id']?.toString();
         if (chatId != null && chatId.isNotEmpty) {
           await openChatById(chatId);
@@ -532,9 +532,10 @@ class AppNavigationService {
         push(switch (type) {
           'bonus_program_point_transfer_received' ||
           'bonus_program_point_transfer_hr' => const BonusHistoryScreen(),
-          'bonus_program_shop_request_moderated' => const BonusShopScreen(),
+          // Комментарий модератора виден только в «Моих заявках».
+          'bonus_program_shop_request_moderated' ||
           'bonus_program_roulette_prize_request_moderated' =>
-            const BonusRouletteScreen(),
+            const BonusRequestsScreen(),
           // Заявки для ответственных модерируются только на портале.
           _ => const BonusProgramScreen(),
         });

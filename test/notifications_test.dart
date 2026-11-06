@@ -82,12 +82,18 @@ void main() {
     });
 
     test('иконки новых типов', () {
-      expect(NotificationTopics.byType('new_emails'), NotificationTopics.mailNew);
+      expect(
+        NotificationTopics.byType('new_emails'),
+        NotificationTopics.mailNew,
+      );
       expect(
         NotificationTopics.byType('document_changes'),
         NotificationTopics.documentApproval,
       );
-      expect(NotificationTopics.byType('survey_invite'), NotificationTopics.survey);
+      expect(
+        NotificationTopics.byType('survey_invite'),
+        NotificationTopics.survey,
+      );
     });
   });
 
@@ -122,6 +128,17 @@ void main() {
       await service.refresh();
       expect(service.unreadCount, 3);
     });
+  });
+
+  test('missed call push leads to its chat', () async {
+    AppNavigationService.takePendingChatId();
+    // Без авторизации переход откладывается — так виден выбранный чат.
+    await AppNavigationService.openFromData({
+      'type': 'chat_call_missed',
+      'call_id': 5,
+      'chat_id': '42',
+    });
+    expect(AppNavigationService.takePendingChatId(), '42');
   });
 
   group('NotificationTopics.canonicalType', () {

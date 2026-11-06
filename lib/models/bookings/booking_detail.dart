@@ -2,8 +2,8 @@ import 'package:connect/models/bookings/bookable_object.dart';
 import 'package:connect/models/staff_user.dart';
 
 import 'booking_json.dart';
-import 'create_booking_request.dart';
 import 'booking_recurring.dart';
+import 'create_booking_request.dart';
 
 /// Полная карточка брони (`GET /booking/get/{id}`).
 class BookingDetail {
@@ -33,6 +33,12 @@ class BookingDetail {
   /// Ответ участника на приглашение: `pending` / `accepted` / `rejected`.
   final Map<int, String> participantStatuses;
 
+  /// Заказанные доп. услуги: id услуги → количество (`additions`).
+  final Map<int, int> additionQuantities;
+
+  /// Пространство (этаж) объекта — по нему ищутся другие свободные объекты.
+  final int? spaceId;
+
   const BookingDetail({
     required this.id,
     required this.datetimeStart,
@@ -54,6 +60,8 @@ class BookingDetail {
     this.creatorId,
     this.ownerId,
     this.participantStatuses = const {},
+    this.additionQuantities = const {},
+    this.spaceId,
   });
 
   /// Менять и удалять бронь может только создатель или организатор — так
@@ -63,13 +71,6 @@ class BookingDetail {
     if (creatorId == null && ownerId == null) return true;
     return userId != null && (userId == creatorId || userId == ownerId);
   }
-
-  /// Перенос по времени. `POST /booking/update` не проверяет занятость
-  /// объекта (в отличие от создания), поэтому переговорную, место или
-  /// парковку переносить нельзя — можно лишь встречу без объекта
-  /// (`model_type` 6, как и при создании — без проверки занятости).
-  bool get canReschedule =>
-      modelType == null || modelType == CreateBookingRequest.meetingModelType;
 
   String? statusOf(int userId) => participantStatuses[userId];
 
@@ -83,12 +84,13 @@ class BookingDetail {
   bool get isRecurring =>
       isRecurrent || (recurring != null && (recurring!.type ?? '').isNotEmpty);
 
+  /// Название места; пустая строка, если места нет: у встречи без комнаты
+  /// объект служебный, и показывать его имя как место незачем.
   String get displayObjectName {
+    if (modelType == CreateBookingRequest.meetingModelType) return '';
     final fromObject = object?.name.trim();
     if (fromObject != null && fromObject.isNotEmpty) return fromObject;
-    final name = objectName?.trim();
-    if (name != null && name.isNotEmpty) return name;
-    return 'Объект бронирования';
+    return objectName?.trim() ?? '';
   }
 
   factory BookingDetail.fromJson(Map<String, dynamic> json) {
@@ -136,6 +138,17 @@ class BookingDetail {
     if (objectRaw is Map) {
       object = BookableObject.fromJson(objectRaw.cast<String, dynamic>());
     }
+    final spaceRaw = objectRaw is Map ? objectRaw['space'] : null;
+
+    final additionQuantities = <int, int>{};
+    final additionsRaw = json['additions'];
+    if (additionsRaw is List) {
+      for (final item in additionsRaw.whereType<Map>()) {
+        final id = BookingJson.parseInt(item['id']);
+        final count = BookingJson.parseInt(item['count']) ?? 0;
+        if (id != null && count > 0) additionQuantities[id] = count;
+      }
+    }
 
     return BookingDetail(
       id: BookingJson.parseInt(json['id']) ?? 0,
@@ -145,7 +158,11 @@ class BookingDetail {
           ? (json['theme'] as String).trim()
           : 'Без темы',
       description: json['description'] as String?,
-      isPrivate: BookingJson.parseInt(json['is_private']) == 1,
+      isPrivate: BookingJson.parseBool(json['is_private']),
+      additionQuantities: additionQuantities,
+      spaceId:
+          (spaceRaw is Map ? BookingJson.parseInt(spaceRaw['id']) : null) ??
+          object?.spaceId,
       isPassed: json['is_passed'] == true,
       objectName: BookingJson.objectNameFromJson(json) ?? object?.name,
       object: object,

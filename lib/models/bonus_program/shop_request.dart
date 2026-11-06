@@ -8,10 +8,6 @@ class ShopRequest {
 
   const ShopRequest({required this.id, required this.status, this.itemName});
 
-  bool get isPending => status == 'pending';
-
-  bool get isApproved => status == 'approved';
-
   factory ShopRequest.fromJson(Map<String, dynamic> json) {
     final item = json['item'];
     return ShopRequest(
